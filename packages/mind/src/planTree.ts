@@ -117,11 +117,17 @@ const squashed = (line: string): string => line.normalize('NFKC').replace(/\s+/g
  * ends and the width of the letters left out, the one line that starts with it or contains it), or says why not. A miss names the node's lines,
  * so that the next try can copy one (a lift that named a line from memory, or from another node's, failed again and again).
  */
-function liftRule(node: PlanNode, id: string, text: string): string | null {
+function liftMatches(node: PlanNode, text: string) {
   const all = [...(node.forbid ?? []), ...(node.caution ?? [])];
   const exact = all.filter(line => line === text), within = all.filter(line => line.includes(text));
   const needle = squashed(text), loose = needle ? all.filter(line => squashed(line).includes(needle) || needle.includes(squashed(line))) : [];
   const gone = exact.length ? exact : within.length === 1 ? within : within.length === 0 && loose.length === 1 ? loose : [];
+  return { all, within, gone };
+}
+/** The lines of a node that a lift of `text` would take off. */
+const ruleLinesOf = (node: PlanNode, text: string): string[] => liftMatches(node, text).gone;
+function liftRule(node: PlanNode, id: string, text: string): string | null {
+  const { all, within, gone } = liftMatches(node, text);
   if (!gone.length) {
     if (within.length > 1) return `${id} に「${text}」を含む行が ${within.length} つある（全文で書く）`;
     const lines = all.map(line => `「${line.slice(0, 40)}」`).join('');
@@ -172,10 +178,29 @@ class PlanEdit {
   readonly nodes = new Map<string, PlanNode>();
   promises: PlanPromise[];
   current: string | null;
+  goal: string | undefined;
   constructor(tree: PlanTree, private readonly context: PlanUpdateContext = {}) {
     for (const node of tree.nodes) this.nodes.set(node.id, { ...node });
     this.promises = tree.promises.map(item => ({ ...item, ledger: [...item.ledger] }));
     this.current = tree.current;
+    this.goal = tree.goal;
+  }
+  /** The edit as it is now, to be put back (`restore`) when the next op does not fit (`PlanUpdateContext.partial`). */
+  snapshot() {
+    return { nodes: [...this.nodes.values()].map(node => ({ ...node })), promises: this.promises.map(item => ({ ...item, ledger: [...item.ledger] })),
+      current: this.current };
+  }
+  restore(saved: ReturnType<PlanEdit['snapshot']>): void {
+    this.nodes.clear();
+    for (const node of saved.nodes) this.nodes.set(node.id, node);
+    this.promises = saved.promises;
+    this.current = saved.current;
+  }
+  /** The tree as the edit stands, on the revision after `base`. */
+  toTree(base: PlanTree): PlanTree {
+    const nodes = orderedPlan([...this.nodes.values()]);
+    return { schema: PLAN_TREE_SCHEMA, revision: base.revision + 1, current: this.current, nodes, promises: this.promises,
+      ...(this.goal ? { goal: this.goal } : {}) };
   }
   /** A promise made or revised (the model writes it; the ledger gets `made` or `revised`). */
   promise(op: PromiseOp): string | null {
@@ -276,7 +301,13 @@ class PlanEdit {
     const target = this.ruleNode(op.id, 'lift');
     if ('problem' in target) return target.problem;
     const text = typeof op.text === 'string' ? op.text.trim() : '';
-    return text ? liftRule(target.node, target.id, text) : 'lift の text が無い';
+    if (!text) return 'lift の text が無い';
+    const problem = liftRule(target.node, target.id, text);
+    if (!problem) return null;
+    // The line is often another node's (a forbid on the parent, named under the child): the next try is told which node holds it.
+    const elsewhere = [...this.nodes.values()].filter(node => node.id !== target.id && ruleLinesOf(node, text).length).map(node => node.id);
+    if (!elsewhere.length) return problem;
+    return `${problem}。同じ文は ${elsewhere.slice(0, 3).join('・')} の行にある（id をその節にして lift する）`;
   }
   drop(id: string): void {
     for (const child of this.children(id)) this.drop(child.id);
@@ -422,20 +453,47 @@ class PlanEdit {
 export function applyPlanUpdate(tree: PlanTree, update: PlanUpdate, context: PlanUpdateContext = {}): PlanUpdateResult {
   const ops = update.ops ?? [];
   if (!Array.isArray(ops) || ops.length > PLAN_LIMITS.ops) return { tree, changed: false, problem: `ops は ${PLAN_LIMITS.ops} 個まで` };
-  const edit = new PlanEdit(tree, context);
-  for (const [index, op] of ops.entries()) {
-    const problem = edit.apply(op);
-    if (problem) return { tree, changed: false, problem: `ops[${index}]: ${problem}` };
+  const goal = typeof update.goal === 'string' ? update.goal.trim() : update.goal;
+  if (typeof goal === 'string' && !isText(goal, PLAN_LIMITS.goal)) {
+    return { tree, changed: false, problem: `goal は ${PLAN_LIMITS.goal}字までの文（消すなら null）` };
   }
+  const edit = new PlanEdit(tree, context);
+  const applied = applyOps(edit, tree, ops, context);
+  if (applied.problem) return { tree, changed: false, problem: applied.problem, ...(applied.rejected.length ? { rejected: applied.rejected } : {}) };
+  const rejected = applied.rejected;
   const current = settleCurrent(edit, update.current);
-  if (current) return { tree, changed: false, problem: current };
-  const nodes = orderedPlan([...edit.nodes.values()]);
-  const next: PlanTree = { schema: PLAN_TREE_SCHEMA, revision: tree.revision + 1, current: edit.current, nodes, promises: edit.promises };
+  if (current && !context.partial) return { tree, changed: false, problem: current };
+  if (current) {
+    rejected.push(current);
+    settleCurrent(edit, undefined);
+  }
+  return finishUpdate(edit, tree, goal, rejected);
+}
+/** The tree an edit came to, when it fits the bounds (`goal`: the owner's sentence when the update gave one), and whether it differs from `tree`. */
+function finishUpdate(edit: PlanEdit, tree: PlanTree, goal: string | null | undefined, rejected: readonly string[]): PlanUpdateResult {
+  if (goal !== undefined) edit.goal = goal || undefined;
+  const next = edit.toTree(tree);
   const problem = planTreeProblem(next);
   if (problem) return { tree, changed: false, problem: PROBLEM_WORDS[problem] ?? problem };
-  const changed = JSON.stringify({ c: tree.current, n: tree.nodes, p: tree.promises }) !== JSON.stringify({ c: next.current, n: next.nodes,
-     p: next.promises });
-  return { tree: changed ? next : tree, changed, problem: null };
+  const changed = JSON.stringify({ c: tree.current, n: tree.nodes, p: tree.promises, g: tree.goal }) !== JSON.stringify({ c: next.current, n: next.nodes,
+     p: next.promises, g: next.goal });
+  return { tree: changed ? next : tree, changed, problem: null, ...(rejected.length ? { rejected } : {}) };
+}
+/**
+ * The ops in order. All or nothing without `partial`: the first op that does not fit is the problem. With it, an op that does not fit (or after which
+ * `check` names a problem) is put back and listed in `rejected`; the problem is only that none was applied.
+ */
+function applyOps(edit: PlanEdit, tree: PlanTree, ops: readonly PlanOp[], context: PlanUpdateContext): { problem: string | null; rejected: string[] } {
+  const rejected: string[] = [];
+  for (const [index, op] of ops.entries()) {
+    const saved = context.partial ? edit.snapshot() : null;
+    const problem = edit.apply(op) ?? (saved && context.check ? context.check(edit.toTree(tree)) : null);
+    if (!problem) continue;
+    if (!saved) return { problem: `ops[${index}]: ${problem}`, rejected };
+    edit.restore(saved);
+    rejected.push(`ops[${index}]: ${problem}`);
+  }
+  return { problem: rejected.length && rejected.length === ops.length ? rejected.join('\n') : null, rejected };
 }
 const PROBLEM_WORDS: Readonly<Record<string, string>> = { PLAN_TOO_MANY: `節は ${PLAN_LIMITS.nodes} 個まで`, PLAN_DEPTH: `深さは ${PLAN_LIMITS.depth} まで`,
   PLAN_PROMISES: '約束の形が合わない' };

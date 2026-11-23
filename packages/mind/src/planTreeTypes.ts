@@ -34,6 +34,7 @@ export const PLAN_LIMITS = Object.freeze({
   next: 3,
   rules: 4,
   rule: 80,
+  goal: 160,
   shownRules: 8,
   promises: 32,
   promiseUse: 40,
@@ -168,6 +169,8 @@ export interface PlanTree {
   current: string | null;
   nodes: readonly PlanNode[];
   promises: readonly PlanPromise[];
+  /** The request as its owner last said it (plan.update `goal`): stronger than the request's first sentence. Absent: the first sentence stands. */
+  goal?: string;
 }
 
 /** A node's fields as an op gives them. */
@@ -224,15 +227,25 @@ export type PlanOp =
 export interface PlanUpdate {
   ops?: readonly PlanOp[];
   current?: string | null;
+  /** The request as its owner now says it (null clears it): kept in the tree and shown in the live plan. */
+  goal?: string | null;
 }
 
 /** When the update is applied (ISO), for the times a promise and a preparation state keep. */
 export interface PlanUpdateContext {
   at?: string;
+  /**
+   * Apply the ops that fit and report the ones that do not (`PlanUpdateResult.rejected`), instead of leaving the tree as it was for one op that
+   * does not fit. `check` judges the tree after each op (a surface's own rule): an op after which it names a problem is one of the rejected.
+   */
+  partial?: boolean;
+  check?(after: PlanTree): string | null;
 }
 
 export interface PlanUpdateResult {
   tree: PlanTree;
   changed: boolean;
   problem: string | null;
+  /** With `partial`: the ops that did not fit, each as `ops[i]: why` (the others were applied). */
+  rejected?: readonly string[];
 }

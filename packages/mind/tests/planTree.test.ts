@@ -108,7 +108,7 @@ describe('plan tree', () => {
   it('the path a decision reads: the parents, the current node with where and doneWhen, the next three leaves', () => {
     const tree = applyPlanUpdate(base(), { current: 'p1.2' }).tree;
     expect(planPath(tree)).toEqual({ done: '0/5', path: ['木と石の道具'], now: 'p1.2 石のツルハシ（済み: stone_pickaxe）',
-      next: ['p2 食料（鉄より前）＠(196,69,237) 村', 'p3 鉄'], blocked: [] });
+      next: ['p2 食料（鉄より前）＠(196,69,237) 村', 'p3 鉄'], blocked: [], ids: 'p1・p1.1・p1.2・p2・p3' });
   });
 
   it('the whole tree as text, the flat copy for plan_json, and the body\'s view', () => {

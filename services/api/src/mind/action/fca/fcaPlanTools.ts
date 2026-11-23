@@ -41,6 +41,9 @@ const promiseFields = {
   instead: { type: 'string', maxLength: 160, description: 'promise: 代わりにこれを満たせば足りる条件（have:crafting_table>=1）' },
   why: { type: 'string', maxLength: PLAN_LIMITS.reason, description: 'release の理由' },
 };
+/** The request as its owner now says it: kept in the plan and shown in the live plan, stronger than the request's first sentence. */
+const goalField = { type: ['string', 'null'], maxLength: PLAN_LIMITS.goal,
+  description: '持ち主が言い直した後の依頼を 1 文で（元の依頼文より強い。消すなら null）。方針が変わった時だけ' };
 const nodeDraft = { type: 'object', additionalProperties: false, required: ['title'], properties: {
   id: { type: 'string', maxLength: 32 }, title: { type: 'string', minLength: 1, maxLength: PLAN_LIMITS.title },
   where: { type: 'string', maxLength: PLAN_LIMITS.text }, doneWhen: { type: 'string', maxLength: PLAN_LIMITS.text }, target: PLAN_TARGET_SCHEMA,
@@ -54,14 +57,15 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
   input: { type: 'object', properties: {}, required: [], additionalProperties: false },
   description: [
     '自分の計画ツリーを直す（節は64まで・深さ4まで）。毎判断の live の plan に、今の節までの道・今・次の3つ・止まっている節が出る。結果は木の全体。',
-    'ops は順に全部当てるか、1つでも合わなければ何も変えない: add（parent・after・title・where・doneWhen・note）、split（id の下に into の節を足す）、',
+    'ops は順に当てる。合わない op はその op だけ却下して理由と直し方を返し、通った op は当たっている（直した op だけ出し直す）: add（parent・after・title・where・doneWhen・note）、split（id の下に into の節を足す）、',
     ("set（id の state=done|blocked|continue|wait・title・where・doneWhen・note・reason）、move（id を parent・after " +
 "へ）、drop（id とその下を消す）。"),
     'current で今の節を決める。今の節を done にして current を書かなければ、次の済んでいない節が今になる。子が全部 done の親は done になる。',
     ('節に target（取る物と数）がある時は、title や doneWhen を変えるなら target も合わせて直す。doneWhen のどの枝（|）にも have:その物>=数 が要り、' +
-'取る物が変わったなら target も新しい物と数に set する。取得目標をやめる時は set で target=null。合わないと ops が全部通らない（理由: 頼みが変わって計画を直す時、doneWhen だけを書き直して同じ所で弾かれ続けたから）。'),
-    ('持ち主が途中で言い直した事（先に・やめて・〜じゃなくて・〜しなくていい）は、元の依頼文より強い。いらなくなった節は drop か set state=blocked（待たせる）・done にし、' +
+'取る物が変わったなら target も新しい物と数に set する。取得目標をやめる時は set で target=null。合わない op は却下される（理由: 頼みが変わって計画を直す時、doneWhen だけを書き直して同じ所で弾かれ続けたから）。'),
+    ('持ち主が途中で言い直した事（先に・やめて・〜じゃなくて・〜しなくていい）は、元の依頼文より強い。いらなくなった節は drop（取得目標のある節を done にすると、現物が無いので却下される）、待たせる節は set state=blocked にし、' +
 '新しい節を add して current にする。元の依頼文を理由に元の節へ戻さない。'),
+    '持ち主の言い直しで依頼そのものが変わった時は goal に新しい依頼を 1 文で書く（live の plan.goal に出て、元の依頼文より優先する）。節の題も set title で直す。id は live の plan.ids（済んでいない節の id）にある物だけ。',
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
     '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
     '頭は使われた量と理由を帳簿にして live に出す。条件の文は have:crafting_table>=1 の形。',
@@ -80,6 +84,7 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
       kind: kindField, prep: prepField, ...promiseFields,
     } } },
     current: { type: ['string', 'null'], maxLength: 32 },
+    goal: goalField,
   } },
 };
 
@@ -116,6 +121,7 @@ export const PLAN_UPDATE_RULES_DEFINITION: FcaToolDefinition = {
       forbid: rules, caution: rules,
     } } },
     current: { type: ['string', 'null'], maxLength: 32 },
+    goal: goalField,
   } },
 };
 
@@ -302,7 +308,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
   const adopt = () => {
     const handed = parts.inbox?.take(parts.taskId, tree);
     if (!handed) return;
-    tree = handed.tree;
+    tree = tree.goal ? { ...handed.tree, goal: tree.goal } : handed.tree;
     changed = true;
     note = handed.note;
     say(`Shannon FCA plan adopted task=${parts.taskId} revision=${tree.revision} nodes=${tree.nodes.length} current=${tree.current ?? '-'}`);
@@ -382,13 +388,14 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       call.signal.throwIfAborted();
       if (call.name !== PLAN_UPDATE_TOOL) throw new Error('FCA_TOOL_NOT_OFFERED');
       const input = call.input && typeof call.input === 'object' && !Array.isArray(call.input) ? call.input as PlanUpdate : null;
-      if (!input || Object.keys(input).some(key => key !== 'ops' && key !== 'current')) {
-        return toolFailure('invalid_input', 'plan.update は ops と current だけを取る。', { retryable: false });
+      if (!input || Object.keys(input).some(key => key !== 'ops' && key !== 'current' && key !== 'goal')) {
+        return toolFailure('invalid_input', 'plan.update は ops と current と goal だけを取る。', { retryable: false });
       }
       adopt();
       const read = readOps(input);
       if ('problem' in read) return toolFailure('invalid_input', `計画は変えていない: ${read.problem}\n${planText(tree)}`, { retryable: false });
-      const result = applyPlanUpdate(tree, read.update, { at: stamp() });
+      // An op that does not fit is turned away with its reason; the ones that fit are applied (one wrong id no longer undoes the rest).
+      const result = applyPlanUpdate(tree, read.update, { at: stamp(), partial: true, check: after => parts.validateUpdate?.(tree, after) ?? null });
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
       const problem = parts.validateUpdate?.(tree, result.tree);
       if (problem) return toolFailure('invalid_input', `計画は変えていない: ${problem}\n${planText(tree)}`, { retryable: false });
@@ -414,7 +421,8 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
 `${tree.current ?? '-'}` +
 ""));
       }
-      return toolOk(result.changed ? planText(tree) : `変化なし\n${planText(tree)}`);
+      const turned = result.rejected?.length ? `一部だけ通した。通らなかった op（これだけ直して出し直す）:\n${result.rejected.join('\n')}\n` : '';
+      return toolOk(`${turned}${result.changed ? planText(tree) : `変化なし\n${planText(tree)}`}`);
     },
   };
   return { tools, port };

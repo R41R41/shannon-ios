@@ -214,7 +214,8 @@ describe('the live state (design 2.2, 2.6): the map first, at most 3,000 tokens'
     expect(Object.keys(live)[0]).toBe('map');
     expect(live.map).toBe(FULL_WORLD.localMap);
     expect(llmcLiveTokens(live) + planTokens).toBeLessThanOrEqual(LLMC_LIVE_TOKENS);
-    expect(planTokens).toBeLessThan(400);
+    // The ids of the nodes not done (`plan.ids`, 2026-11-23) added about 90 tokens to this plan of the dragon, so the bound moved from 400 to 520.
+    expect(planTokens).toBeLessThan(520);
     expect(live.foodPoints).toMatchObject({ total: 85.6 });
     expect(live).not.toHaveProperty('food');
     // Run 41: the hunger bar is `fullness`, apart from the food points she carries; the five minutes' loss goes with the bar.

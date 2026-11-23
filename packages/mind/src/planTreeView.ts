@@ -39,6 +39,10 @@ export interface PlanPathView {
   next: readonly string[];
   blocked: readonly string[];
   rules?: readonly string[];
+  /** The id of every node not done yet (the ones an op may name; an id from an earlier plan is not among them), in the plan's order. */
+  ids: string;
+  /** The request as its owner last said it (plan.update `goal`): stronger than the request's first sentence. */
+  goal?: string;
 }
 
 /** The forbid and caution lines that hold at `now`: its own, then its parents' up to the top. */
@@ -96,6 +100,8 @@ export function planPath(tree: PlanTree): PlanPathView {
       .slice(0, 3)
       .map((node) => `${node.id} ${node.title}${node.reason ? ` — ${node.reason}` : ''}`),
     ...(rules.length ? { rules } : {}),
+    ids: order.filter((node) => node.state !== 'done').map((node) => node.id).join('・'),
+    ...(tree.goal ? { goal: tree.goal } : {}),
   };
 }
 

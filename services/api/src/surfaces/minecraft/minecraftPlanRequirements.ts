@@ -36,7 +36,10 @@ export function targetUpdateProblem(before: PlanTree, after: PlanTree, observati
     if (problem) return problem;
     const changedGoal = JSON.stringify(old?.target) !== JSON.stringify(node.target) || old?.doneWhen !== node.doneWhen;
     if (node.target && node.state === 'done' && (old?.state !== 'done' || changedGoal)
-      && (!facts || acquired(facts.counts, node.target.item) < node.target.count)) return `${node.id}: 取得目標は現在の観測で未達か未確認。達成履歴にする前に現物を確認する`;
+      && (!facts || acquired(facts.counts, node.target.item) < node.target.count)) {
+      return `${node.id}: 取得目標は現在の観測で未達か未確認。done にできるのは現物を持っている節だけ。`
+        + '直し方: しなくていい節は set state=done ではなく drop（id とその下を消す）で外す。待たせる節は state=blocked か wait';
+    }
   }
   return null;
 }

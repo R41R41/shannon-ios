@@ -77,8 +77,8 @@ describe('a later word of the owner is stronger than the first request', () => {
   it('says how to rebuild the plan (blocked for a swap, drop for a node no longer wanted, target with it) and why', () => {
     expect(text).toContain('state=blocked か wait');
     expect(text).toContain('葉・親・兄弟の節');
-    expect(text).toContain('id は live の plan に出ている物だけ');
-    expect(text).toContain('drop か set で state=done');
+    expect(text).toContain('id は live の plan.ids（済んでいない節の id）に出ている物だけ');
+    expect(text).toContain('drop で外し（set state=done にしない');
     expect(text).toContain('title・doneWhen・target を一緒に直す');
     expect(text).toContain('理由: 依頼文は最初の一言');
   });
