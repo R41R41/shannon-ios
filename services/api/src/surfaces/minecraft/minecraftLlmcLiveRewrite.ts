@@ -58,6 +58,20 @@ const parsePos = (text: string): P | null => {
 const rec = (value: unknown): Rec | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Rec : null;
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+/**
+ * 2026-11-23 (judge replay: raw_iron×2 in the pack was counted as two iron, and `make bucket 3` was sent): ore that is not smelted yet says so in its own
+ * line, with the smelted item's count beside it (iron_ingot 0 when none is held). Words only; no `make` is refused.
+ */
+const UNREFINED: ReadonlyArray<readonly [RegExp, string, string]> = [
+  [/^(?:raw_iron|iron_ore|deepslate_iron_ore)$/u, 'iron_ingot', '鉄インゴット'],
+  [/^(?:raw_gold|gold_ore|deepslate_gold_ore)$/u, 'gold_ingot', '金インゴット'],
+  [/^(?:raw_copper|copper_ore|deepslate_copper_ore)$/u, 'copper_ingot', '銅インゴット'],
+];
+function unrefinedNote(name: string, sums: ReadonlyMap<string, number>): string {
+  const kind = UNREFINED.find(([pattern]) => pattern.test(name));
+  return kind ? `（精錬前。${kind[2]}は ${sums.get(kind[1]) ?? 0}。かまどで焼くと使える）` : '';
+}
+
 /** The pack added up by kind (a stack with durability or contents is its own line, as the body writes it). */
 export function mergeInventory(list: readonly string[], notes: RewriteNotes): string[] {
   const sums = new Map<string, number>();
@@ -80,7 +94,7 @@ export function mergeInventory(list: readonly string[], notes: RewriteNotes): st
     sums.set(m[1]!, (sums.get(m[1]!) ?? 0) + Number(m[2]));
     counted.set(m[1]!, (counted.get(m[1]!) ?? 0) + 1);
   }
-  const merged = out.map(item => typeof item === 'string' ? item : `${item.name}×${sums.get(item.name)}`);
+  const merged = out.map(item => typeof item === 'string' ? item : `${item.name}×${sums.get(item.name)}${unrefinedNote(item.name, sums)}`);
   const duplicated = [...counted].filter(([, n]) => n > 1).map(([name]) => name);
   if (duplicated.length) notes.merged.push(`持ち物の同じ物 ${duplicated.join('・')} を合算`);
   return omitted ? [...merged, omitted] : merged;
