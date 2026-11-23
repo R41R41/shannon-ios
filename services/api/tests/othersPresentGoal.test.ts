@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { toLegacyPersona } from './legacyPersona.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -76,7 +77,7 @@ async function ownerStatedGoal() {
   return { store, chat, voice, guest, goal: intent!.desiredOutcome };
 }
 
-const fingerprint = (prompt: string) => createHash('sha256').update(prompt.replace(UUID, 'ID')).digest('hex').slice(0, 16);
+const fingerprint = (prompt: string) => createHash('sha256').update(toLegacyPersona(prompt, true).replace(UUID, 'ID')).digest('hex').slice(0, 16);
 
 /** Every line that carries the intention frame begins with the marker; no line splits them. */
 function expectMarkedFrame(prompt: string) {

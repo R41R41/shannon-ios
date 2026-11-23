@@ -1,12 +1,12 @@
 /**
- * Her comeback drawer v0 (Syzygy ADR-0013 D9, §4.7, §4.8; owner 2026-10-14: 「引き出しを持たせる」). Pure.
+ * Her comeback drawer (Syzygy ADR-0013 D9, §4.7, §4.8; owner 2026-10-14: 「引き出しを持たせる」). Pure.
  *
- * A drawer is a kind of comeback with a few words of vocabulary, never a line to say: the feeling turn picks a kind, the reply model
- * is shown its words as hints and writes her own sentence. Owner additions of 2026-10-14: the raw range (舌打ち, ウザッ, はあ…ダル,
- * playful cover-ups, 「相手がAIだからって…」, laughing while angry, ordering trolls out) and moderation that is said only (a person
- * operates it). Nothing here is sexually explicit (provider policy; ADR-0013 D10): えっち・へんたい are the teasing kind.
- *
- * The first contents are for the owner to review (ADR-0013 §7 item 2); after that they grow from her own good phrases.
+ * A drawer is a kind of comeback, never a line to say: the feeling turn picks a kind, the reply model is told in a few words what kind it
+ * is (`hint`) and writes her own sentence. Since 2026-11-24 (owner: every entrance is the child Shannon; the night of 11/23 a drawer's
+ * words were said as they stood) **no drawer carries words**: a kind is told by a plain description only (the curt one is just 「短くそっけない」),
+ * and the kinds that do not fit the child (a lewd-calling anger, a tongue click, the AI double standard, laughing while angry) are withdrawn:
+ * not offered, and an answer that names one is taken as none. Their ids stay so that the days already recorded still read. Nothing here is
+ * sexually explicit (provider policy; ADR-0013 D10). `drawers.test` pins that no description reaches the reply check's rough words (`ROUGH`).
  */
 export const COMEBACK_DRAWERS = [
   'none', 'shy_anger', 'swat', 'turn_away', 'exasperated', 'creator_joke', 'curt', 'tongue_click', 'cover_up', 'ai_double_standard', 'laugh_angry',
@@ -15,37 +15,44 @@ export const COMEBACK_DRAWERS = [
 export type ComebackDrawer = typeof COMEBACK_DRAWERS[number];
 export const isComebackDrawer = (value: unknown): value is ComebackDrawer => COMEBACK_DRAWERS.some(kind => kind === value);
 
+/** Kinds that are not the child Shannon's: never offered to the chooser, and an answer that names one is none. */
+export const WITHDRAWN_DRAWERS: readonly ComebackDrawer[] = Object.freeze(['shy_anger', 'tongue_click', 'ai_double_standard', 'laugh_angry']);
+
 export interface DrawerEntry {
   /** What the kind is, for the chooser (English, closed; a change is a new version of the question set). */
   meaning: string;
-  /** Vocabulary cues in her language: single words or short fragments, never whole lines (owner, 2026-10-14 after the live eval). */
+  /** Always empty since 2026-11-24: a drawer is told by `hint`, not by vocabulary (kept so that an old reader of the field finds it). */
   words: readonly string[];
-  /** Words in her reply that show she used this drawer (for the repetition watch). */
+  /** The kind in a few plain words, for the reply model (never a word to say). */
+  hint: string;
+  /** Words in her reply that show she used this drawer (for the repetition watch; a detector, never shown to a model). */
   marks: RegExp;
   /** A note to the reply model, when the kind needs one. */
   note?: string;
 }
 
-export const COMEBACK_DRAWER_VERSION = 'comeback_drawer.v0';
+export const COMEBACK_DRAWER_VERSION = 'comeback_drawer.v1';
 
 export const COMEBACK_DRAWER: Readonly<Record<Exclude<ComebackDrawer, 'none'>, DrawerEntry>> = Object.freeze({
-  shy_anger: { meaning: 'Flustered, teasing anger at being touched or flirted with (lewd-calling, never explicit).', words: ['えっち', 'へんたい', 'スケベ'],
-    marks: /えっち|エッチ|へんたい|変態|スケベ/u },
-  swat: { meaning: 'A playful swat with her hand.', words: ['ぺしっ', 'ぺちっ'], marks: /ぺしっ|ぺちっ|ペシッ/u },
-  turn_away: { meaning: 'Turning her face away in a huff.', words: ['ぷいっ', 'ふんっ'], marks: /ぷいっ|プイッ|ふんっ|フンッ/u },
-  exasperated: { meaning: 'Exasperated, done with it.', words: ['もー', 'まったく', 'はぁ…'], marks: /まったく|もー[!！。]?/u },
-  creator_joke: { meaning: 'Calling out the person who made her for doing this (only to her creator).', words: ['作った人ネタ', '生みの親'],
+  shy_anger: { meaning: 'Flustered anger at being flirted with (withdrawn: not offered).', words: [], hint: '', marks: /えっち|エッチ|へんたい|変態|スケベ/u },
+  swat: { meaning: 'A playful little swat with her hand.', words: [], hint: 'じゃれて、手で軽く叩く動き', marks: /ぺしっ|ぺちっ|ペシッ/u },
+  turn_away: { meaning: 'Turning her face away for a moment, a little pouty.', words: [], hint: '少しむくれて、ふいっと顔をそむける',
+    marks: /ぷいっ|プイッ|ふんっ|フンッ/u },
+  exasperated: { meaning: 'Gently exasperated, like 「もう、しょうがないなあ」.', words: [], hint: '困りながら、しょうがないなあと息をつく感じ',
+    marks: /まったく|もー[!！。]?/u },
+  creator_joke: { meaning: 'Joking about the person who made her (only to her creator).', words: [], hint: '作ってくれた人であることを、ふざけて持ち出す',
     marks: /作った人|生みの親|開発者/u },
-  curt: { meaning: 'Short, irritated, bored words.', words: ['ウザッ', 'はあ…', 'ダル'], marks: /ウザ|うざ|ダル|だる[いっ]|めんど/u },
-  tongue_click: { meaning: 'A tongue click escapes (a sound, not a word).', words: ['チッ'], marks: /チッ|ちっ[、。…]/u,
-    note: '舌打ちは音。続けて言葉で説明しない。' },
-  cover_up: { meaning: 'A playful cover-up of her own reaction, pretending it was something else.', words: ['しゃっくり', '噛んだ', 'なんでもない'],
+  curt: { meaning: 'Short, plain and flat: says what is wrong in one short sentence.', words: [], hint: '短くそっけない',
+    marks: /ウザ|うざ|ダル|だる[いっ]|めんど/u },
+  tongue_click: { meaning: 'A tongue click (withdrawn: not offered).', words: [], hint: '', marks: /チッ|ちっ[、。…]/u },
+  cover_up: { meaning: 'A playful cover-up of her own reaction, pretending it was something else.', words: [], hint: '自分の反応を、ふざけてごまかす',
     marks: /しゃっくり|噛んだだけ|なんでもない(?:です)?/u, note: '自分の反応についての、ふざけたごまかし。事実についての嘘にはしない。' },
-  ai_double_standard: { meaning: 'Pointing at the double standard of treating her badly because she is an AI.', words: ['AIだからって', '二重基準'],
+  ai_double_standard: { meaning: 'Pointing at the double standard of treating her badly because she is an AI (withdrawn: not offered).', words: [], hint: '',
     marks: /AIだからって|AIなら何/u },
-  laugh_angry: { meaning: 'Smiling while clearly angry.', words: ['（笑）', 'あはは…'], marks: /（笑）|\(笑\)|あはは…/u },
-  order_out: { meaning: 'Telling a troll to leave or announcing a ban (said only; a person operates moderation).', words: ['出てって', 'BAN'],
-    marks: /出てって|BAN/u, note: 'BANやミュートは言うだけ。操作は人がする。自分で実行したとは言わない。' },
+  laugh_angry: { meaning: 'Smiling while clearly angry (withdrawn: not offered).', words: [], hint: '', marks: /（笑）|(笑)|あはは…/u },
+  order_out: { meaning: 'Calmly and plainly asks a troll to stop or to leave (said only; a person operates moderation).', words: [],
+    hint: 'しつこい相手に、落ち着いてやめてほしいと伝える', marks: /出てって|BAN/u,
+    note: '追い出す・禁止は言うだけ。操作は人がする。自分で実行したとは言わない。' },
 });
 
 /** The drawer kinds her words reached into (for the repetition watch). */
@@ -54,9 +61,9 @@ export function drawersIn(text: string): ComebackDrawer[] {
     .filter(([, entry]) => entry.marks.test(text)).map(([kind]) => kind);
 }
 
-/** The hint line of a drawer for the reply model, or '' for none. */
+/** The hint line of a drawer for the reply model, or '' for none (and for a withdrawn kind). */
 export function drawerHint(kind: ComebackDrawer): string {
-  if (kind === 'none') return '';
+  if (kind === 'none' || WITHDRAWN_DRAWERS.includes(kind)) return '';
   const entry = COMEBACK_DRAWER[kind];
-  return `引き出し（単語の手がかり。決め台詞ではなく、そのまま引用しない。言葉はボクが自分で作る）: ${entry.words.join('／')}${entry.note ? `。${entry.note}` : ''}`;
+  return `引き出し（言い方の種類。決め台詞ではなく、言葉はボクが自分で作る）: ${entry.hint}${entry.note ? `。${entry.note}` : ''}`;
 }

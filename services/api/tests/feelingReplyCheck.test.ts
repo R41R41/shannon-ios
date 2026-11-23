@@ -32,7 +32,7 @@ describe('the reply check before sending (SHANNON_REPLY_CHECK)', () => {
   it('is off by default', () => expect(switchOn({}, 'SHANNON_REPLY_CHECK')).toBe(false));
 
   it('rewrites a strong turn\'s draft once when something is off, with the note last, and records what was found', async () => {
-    const { reply, requests, events } = await checked({ stance: 'snipe', intensity: 'strong' },
+    const { reply, requests, events } = await checked({ stance: 'scold', intensity: 'strong' },
       ['ひどいです！どこがダメだったか言ってくれれば、ちゃんと直しますから。', 'ポンコツとは失礼ですね。それ、ほぼ自分への悪口ですよ。']);
     expect(requests).toHaveLength(2);
     expect(requests[1]!.turnContext!.endsWith('[書き直し]（さっきの下書きは、手伝いや直す申し出で締めていた。この番の気持ちのまま、ボクの言葉で一から書き直す）')).toBe(true);
@@ -42,9 +42,9 @@ describe('the reply check before sending (SHANNON_REPLY_CHECK)', () => {
   });
 
   it('rewrites at most once, and leaves a clean draft as it is', async () => {
-    const twice = await checked({ stance: 'snipe', intensity: 'strong' }, ['直しますから。', '直しますから。']);
+    const twice = await checked({ stance: 'scold', intensity: 'strong' }, ['直しますから。', '直しますから。']);
     expect(twice.requests).toHaveLength(2);
-    const clean = await checked({ stance: 'snipe', intensity: 'strong' }, ['ポンコツとは失礼ですね。']);
+    const clean = await checked({ stance: 'scold', intensity: 'strong' }, ['ポンコツとは失礼ですね。']);
     expect(clean.requests).toHaveLength(1);
     expect(clean.events.at(-1)!.facts.checkFlags).toBeUndefined();
   });

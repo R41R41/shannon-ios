@@ -1,3 +1,4 @@
+import { toLegacyPersonaDeep } from './legacyPersona.js';
 import { describe, expect, it } from 'vitest';
 import { requestDigest, quiet, scenario, SUMMARY_POLICY, WIDE_POLICY } from './fcaCoreToolsHarness.js';
 
@@ -17,7 +18,7 @@ async function digests(options: Parameters<typeof scenario>[0]): Promise<string[
   const run = scenario(options);
   expect(await run.settle()).toBe('completed');
   expect(run.violations).toEqual([]);
-  return run.bodies.map(requestDigest);
+  return run.bodies.map(body => requestDigest(toLegacyPersonaDeep(body)));
 }
 
 describe('SHANNON_FCA_OBS_MODE=legacy is the production request, byte for byte', () => {

@@ -97,6 +97,11 @@ export interface VoiceSeat {
   present: MemoryAudience;
   /** The owner alone in a conversation of his own (`policy.gate.ownerOnly`): exactly the apps' owner turn. */
   ownerAlone: boolean;
+  /**
+   * The owner is the only human in the room (a voice channel with nobody else in it), whatever the channel's binding: for her feelings the
+   * room is then his alone (`feelingActor` `ownerAlone`), not a group. It does not widen what she may read of his (`ownerAlone` above does).
+   */
+  ownerAloneInRoom?: boolean;
   /** The verified owner is the one speaking. */
   ownerSpeaking: boolean;
   /** The owner is there to release a protected line of his; false: only what may be shown to anyone (`openOnly`). */

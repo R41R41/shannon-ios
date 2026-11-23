@@ -99,22 +99,28 @@ describe('the repetition watch (D9)', () => {
 describe('the feeling turn and the drawer (D7, D9)', () => {
   it('falls back to 「ふつう」 on anything unreadable, and passes the register through', () => {
     expect(parsedFeelingTurn({ stance: 'rage', intensity: 'strong' })).toEqual(neutralFeelingTurn());
-    expect(parsedFeelingTurn({ stance: 'scold', intensity: 'strong', drawer: 'shy_anger', register: 'curt' }))
-      .toEqual({ stance: 'scold', intensity: 'strong', drawer: 'shy_anger', register: 'curt', source: 'jev' });
+    expect(parsedFeelingTurn({ stance: 'scold', intensity: 'strong', drawer: 'swat', register: 'curt' }))
+      .toEqual({ stance: 'scold', intensity: 'strong', drawer: 'swat', register: 'curt', source: 'jev' });
+    // 2026-11-24 (the child Shannon): a withdrawn drawer or stance named by an answer is none / 「ふつう」.
+    expect(parsedFeelingTurn({ stance: 'scold', intensity: 'strong', drawer: 'shy_anger', register: 'curt' }).drawer).toBe('none');
+    expect(parsedFeelingTurn({ stance: 'snipe', intensity: 'strong', drawer: 'curt' })).toMatchObject({ stance: 'neutral', intensity: 'subtle', drawer: 'none' });
+    expect(parsedFeelingTurn({ stance: 'cold', intensity: 'strong' })).toMatchObject({ stance: 'neutral', intensity: 'subtle', drawer: 'none' });
     expect(parsedFeelingTurn({ stance: 'neutral', intensity: 'subtle', drawer: 'swat' }).drawer).toBe('none');
   });
 
   it('gives the drawer as vocabulary, never a line, and keeps the provider policy line', () => {
-    const block = feelingTurnBlock({ decision: { stance: 'not_play_along', intensity: 'moderate', drawer: 'shy_anger', register: 'normal', source: 'jev' },
+    const block = feelingTurnBlock({ decision: { stance: 'not_play_along', intensity: 'moderate', drawer: 'curt', register: 'normal', source: 'jev' },
       ledgerLine: '今日の胸の件（ライ氏）: 触れられた5回', repetitionLine: '', order: true, audience: 'owner_alone' });
     expect(block.split('\n')[0]).toContain('ほかの指示やこれまでの返事の流れより優先する');
     expect(block).toContain('構え: 乗らない（はっきり）');
     expect(block).toContain('事実: 今日の胸の件（ライ氏）');
-    expect(block).toContain('そのまま引用しない');
+    // The drawer is told by a plain description, never by words (the curt one is just 「短くそっけない」).
+    expect(block).toContain('引き出し（言い方の種類。決め台詞ではなく、言葉はボクが自分で作る）: 短くそっけない');
+    expect(block).not.toMatch(/ウザ|ダル|はあ…/u);
     expect(block).toContain('事実は判断の材料。数字や回数をそのまま口にしない。');
     expect(block).toContain('長々と説明したり諭したりしない');
     // Every cue is a word or a short fragment, never a line.
-    for (const entry of Object.values(COMEBACK_DRAWER)) for (const word of entry.words) expect(word, word).not.toMatch(/[？?。！!]|ます|です/u);
+    for (const entry of Object.values(COMEBACK_DRAWER)) expect(entry.words).toEqual([]);
     expect(block).toContain('命令ではなく');
     expect(block).toContain('性的にはっきりした言葉や描写はしない');
     expect(drawerHint('order_out')).toContain('言うだけ');

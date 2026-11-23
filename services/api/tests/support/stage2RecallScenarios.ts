@@ -1,5 +1,6 @@
 import { historicalSearchRequest } from './historicalSearchRequest.js';
 import { createHash } from 'node:crypto';
+import { toLegacyPersona } from '../legacyPersona.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,7 +30,7 @@ export const stage2RecallScenarios: readonly RecallScenario[] = Object.freeze([
 
 const at = '2026-10-07T03:00:00.000Z';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
-const digest = (text: string) => createHash('sha256').update(text.replace(UUID, 'ID')).digest('hex').slice(0, 24);
+const digest = (text: string) => createHash('sha256').update(toLegacyPersona(text, true).replace(UUID, 'ID')).digest('hex').slice(0, 24);
 
 /** A long note with a heading tree (longer than 1,500 characters, so the old path navigates it). */
 export const LONG_NOTE = {

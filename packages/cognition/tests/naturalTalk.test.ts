@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHARACTER_REGIONS, FEELING_ORDER_LINE, NATURAL_ORDER_LINE, NATURAL_PLAY_LINE, NATURAL_SHORT_LINE, checkReply, cuesOfWords, feelingTurnBlock,
   neutralFeelingTurn, regionDistance, rewriteFlags, rewriteNote, sameStanceFacts, selectPersona, stancesFor, type ReplyCheckContext,
-  NATURAL_TONE_LINE, PERSONA_HEADER, REGION_EXCHANGES, REGION_TONE_LINES, characterCoreBlock, characterCoreForSpace, characterCoreHashInput, personaBlock,
+  NATURAL_TONE_LINE, PERSONA_HEADER, REGION_EXCHANGES, REGION_TONE_LINES, characterCoreBlock, characterCoreForSpace, characterCoreHashInput, legacyCharacterCoreForSpace, personaBlock,
 } from '../src/index.js';
 
 /** Owner 2026-10-20 (`SHANNON_NATURAL_TALK`): 「全然思った通りに乗ってくれない…クリーンすぎて人間らしくない」. */
@@ -72,9 +72,9 @@ describe('her natural talk (pure parts)', () => {
     expect(rewriteNote(['repeated_phrase'], true)).toContain('新しい注意やお小言は足さない');
   });
 
-  it('with it, her core is v3-natural: v3-space with her tone line, approved, its hash pinned', () => {
-    const space = characterCoreForSpace();
-    const natural = characterCoreForSpace(true);
+  it('the old v3-natural (v3-space with its tone line) is kept with its hash pinned; no entrance reads it since 2026-11-24', () => {
+    const space = legacyCharacterCoreForSpace();
+    const natural = legacyCharacterCoreForSpace(true);
     expect(space.version).toBe('v3-space');
     expect(natural.version).toBe('v3-natural');
     expect(natural.status).toBe('approved');
@@ -91,7 +91,8 @@ describe('her natural talk (pure parts)', () => {
     expect(off).not.toContain('ライ氏：');
     const on = personaBlock({ primary: 'imp', secondary: 'flustered' }, 0, true);
     expect(on).toContain(PERSONA_HEADER);
-    expect(on).toContain(`- ${REGION_TONE_LINES.imp}`);
+    // The child speaks plain 「だよ」 in every region: no region carries a tone line (2026-11-24).
+    expect(Object.keys(REGION_TONE_LINES)).toEqual([]);
     expect(on).toContain('掛け合いの手ざわり: 「ライ氏：ささやき声で喋れる？／ボク：（ひそひそ）');
     expect(on).not.toContain('声の手ざわり:');
     expect(on).toMatch(/少しまざる: 照れ・てんぱり.*「ライ氏：/u);

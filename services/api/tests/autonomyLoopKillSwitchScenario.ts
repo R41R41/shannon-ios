@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { shannonTemperament } from '@shannon/cognition';
 import { join } from 'node:path';
+import { toLegacyPersona } from './legacyPersona.js';
 import type { AutonomyRoomLooks } from '../src/mind/action/ownTime/autonomyLoopLookStep.js';
 import { followUpPrompt, rethinkExtras } from '../src/mind/action/ownTime/autonomyLoopObservePrompts.js';
 import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, roomLookNotePrompt, thinkingPrompt } from '../src/mind/action/ownTime/autonomyLoopPrompts.js';
@@ -37,7 +38,7 @@ export function withoutTemperament(text: string): string {
 }
 
 export function digest(text: string): string {
-  return createHash('sha256').update(withoutTemperament(text).replace(UUID, 'ID')).digest('hex').slice(0, 16);
+  return createHash('sha256').update(toLegacyPersona(withoutTemperament(text)).replace(UUID, 'ID')).digest('hex').slice(0, 16);
 }
 
 export interface ScenarioCall { kind: string; digest: string }

@@ -72,6 +72,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * provider requests carry that schema.
  * The same two were changed by hand again on 2026-11-23 for a change that is not stage 3's (the owner decides the order of the list: the words of the
  * request guide about 先に and a repeat, and the placement field's description): the first and third provider requests carry them.
+ * One digest of `reach-out` (autonomy_loop_steps) was changed by hand on 2026-11-24 for a change that is not stage 3's (owner: every entrance is the
+ * child Shannon): the stored step keeps the reworded fixed phrase of the autonomy loop.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

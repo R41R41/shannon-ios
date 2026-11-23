@@ -110,7 +110,7 @@ describe('the message: the fact word for word, and a phrase of hers from the lis
       ...UNDERCUTTING.flatMap(phrase => OUTCOMES.map(outcome => [{ outcome }, phrase] as [Partial<LifecycleOutcomeFacts>, unknown])),
       ...[...FAILURE_AS_SUCCESS, ...SUCCESS_AS_FAILURE].map(([patch, phrase]) => [patch, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
       // A phrase of the other family: no celebration for an end that is not done, no apology for a done one.
-      ...['やったね！', 'ふふん、', 'えへへ、', 'じゃーん、', 'お待たせ！'].map(phrase => [{ outcome: 'refused' }, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
+      ...['やったね！', 'えっへん、', 'えへへ、', 'じゃーん、', 'お待たせ！'].map(phrase => [{ outcome: 'refused' }, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
       ...['…ごめんね', 'ごめんね、', 'えっと、', 'お待たせ。'].map(phrase => [{}, phrase] as [Partial<LifecycleOutcomeFacts>, unknown]),
       [{}, 42], [{}, null], [{}, { text: 'ふふ、' }],
     ];

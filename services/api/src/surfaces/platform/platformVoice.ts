@@ -462,6 +462,8 @@ export class PlatformVoiceService {
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
       prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersField(seat, body),
       answered: saidToHer(address), keep: turn => this.keep(seat, request, hash, turn, kept),
+      // The owner speaking with nobody else in the channel: his room for her feelings, whatever the channel's binding says.
+      ownerAloneInRoom: seat.owner && seat.humans.size === 1,
     });
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
       sentences: this.dependencies.sentences, ...(this.dependencies.splitter ? { splitter: this.dependencies.splitter } : {}),

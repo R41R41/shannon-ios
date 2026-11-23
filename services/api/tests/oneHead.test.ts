@@ -354,7 +354,7 @@ describe('her character space in a voice turn (one head)', () => {
     expect(block).toContain('いまのボク: ');
     expect(handle?.decision).not.toBeNull();
     const identity = shannonIdentityPrompt('owner', { characterCore: characterCoreBlock(CHARACTER_CORE) });
-    expect(feelingVoice.identity(handle, identity)).toMatch(/\[ボクの性格の核 v3-space #[0-9a-f]{8}\]/u);
+    expect(feelingVoice.identity(handle, identity)).toMatch(/\[ボクの性格の核 v4-kid #[0-9a-f]{8}\]/u);
     expect(feelingVoice.guard(handle)).toMatchObject({ region });
   });
 });

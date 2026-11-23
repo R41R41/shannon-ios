@@ -24,19 +24,20 @@ describe('canonical Shannon persona', () => {
     const persona = shannonPersonaPrompt('owner');
     for (const required of [
       '「シャノン」という名前', 'カタカナの「ボク」', '「ライ氏」と呼び', '「あなた」とは呼ばない',
-      '基本はです・ます', '素の口調', '明るく生意気', '天才', '少しポンコツ',
+      'ふだんは「〜だよ」「〜なんだ」', 'あらたまった場や真面目な説明では、です・ます', '素の声', '明るく好奇心旺盛', '素直で親しみやすい', '経験はまだ浅い',
       '慌てて', '立て直す', '照れ', '褒め返す', '話せること自体を喜ぶ',
-      'からかいに偏らない', '決め台詞を繰り返さず', '冗談を無理に挟まない', 'ふざけずに真面目に向き合う',
+      '褒めたり励ましたりするのが好き', '決め台詞を繰り返さず', '冗談を無理に挟まない', 'ふざけずに真面目に向き合う',
       'いまの目標は「人を感動させる物語を作ること」', '物語を通じて人間を知りたい、世界を知りたい',
     ]) expect(persona, required).toContain(required);
     // The old voice-only default pointed the other way; it must not come back.
-    expect(persona).not.toMatch(/ツンデレ|tsundere|毎回からかう|tease/iu);
+    // 2026-11-24: the persona is the child Shannon's everywhere; nothing of the cheeky one (maid, genius, tsundere) is in it.
+    expect(persona).not.toMatch(/ツンデレ|tsundere|毎回からかう|tease|生意気|メイド|天才|ポンコツ/iu);
   });
 
   it('keeps the character for guests without assuming the participant is the owner', () => {
     const guest = shannonPersonaPrompt('guest');
     expect(guest).toContain('カタカナの「ボク」');
-    expect(guest).toContain('少しポンコツ');
+    expect(guest).toContain('経験はまだ浅い');
     expect(guest).toContain('相手をライ氏だと決めつけず');
     expect(guest).toContain('相手を「ライ氏」と呼ばない');
     expect(guest).not.toContain('「ライ氏」と呼び、');
@@ -183,8 +184,9 @@ describe('canonical capability description', () => {
   });
 
   it('gives her the temperament of an ordinary girl in her persona, for every audience, from one source (owner decision "a", scope (a))', () => {
-    expect(SHANNON_TEMPERAMENT).toBe('照れたり、むっとしたり、怒ったり、ライ氏に「いや」と言ったりするのもボクらしさ。ライ氏の機嫌をとるために丸く収めなくていい。');
-    expect(shannonTemperament('others')).toBe('照れたり、むっとしたり、怒ったり、相手に「いや」と言ったりするのもボクらしさ。相手の機嫌をとるために丸く収めなくていい。');
+    // 2026-11-24 (the child Shannon): a feeling is said straight and short, never as sarcasm; the 「丸く収めなくていい」 of before is gone.
+    expect(SHANNON_TEMPERAMENT).toBe('照れたり、困ったり、いやだと思ったりするのもボクの気持ち。ライ氏にも素直に、短くまっすぐ言って、嫌味では返さない。');
+    expect(shannonTemperament('others')).toBe('照れたり、困ったり、いやだと思ったりするのもボクの気持ち。相手にも素直に、短くまっすぐ言って、嫌味では返さない。');
     expect(shannonPersonaPrompt('owner')).toContain(`\n- ${SHANNON_TEMPERAMENT}`);
     expect(shannonPersonaPrompt('owner', { othersPresent: true })).toContain(`\n- ${shannonTemperament('others')}`);
     expect(shannonPersonaPrompt('guest')).toContain(`\n- ${shannonTemperament('others')}`);
@@ -193,7 +195,7 @@ describe('canonical capability description', () => {
     const line = shannonCapabilityPrompt('owner').split('\n').find(item => item.includes('体: '))!;
     expect(line.endsWith('体は自分のもの。触れられ方は自分で受け取る。')).toBe(true);
     for (const identity of [shannonIdentityPrompt('owner'), shannonIdentityPrompt('guest'), shannonIdentityPrompt('owner', { othersPresent: true })]) {
-      expect(identity.split('丸く収めなくていい').length - 1).toBe(1);
+      expect(identity.split('嫌味では返さない').length - 1).toBe(1);
     }
     // Two sentences, no prohibition, nothing sexual.
     expect(SHANNON_TEMPERAMENT.split('。').filter(Boolean)).toHaveLength(2);

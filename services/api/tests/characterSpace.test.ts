@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import {
-  AFFECTION_GUARD_LINE, CHARACTER_CORE, CHARACTER_REGIONS, PERSONA_HEADER, characterCoreBlock, createInitialCompanionState, shannonIdentityPrompt,
+  AFFECTION_GUARD_LINE, CHARACTER_CORE, CHARACTER_CORE_V2, CHARACTER_REGIONS, PERSONA_HEADER, characterCoreBlock, createInitialCompanionState, shannonIdentityPrompt,
   type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { SWITCHES, switchOn } from '@shannon/switches';
@@ -70,14 +70,14 @@ describe('her character space in a text turn', () => {
     const { port, jev } = composed({ max: false });
     const { handle, block, route } = await say(port, 'さすがシャノン、天才だね');
     expect(handle?.lines?.space?.selection.primary).toBe('smug');
-    expect(block).toContain('いまのボク: ドヤ顔（得意げ）');
+    expect(block).toContain('いまのボク: えっへん（得意げ）');
     expect(block).toContain(AFFECTION_GUARD_LINE);
     expect(block).toContain('[ライ氏とのこと]');
     expect(jev.states[0]).toMatchObject({ shannon_feeling: { persona: 'smug' } });
     expect(JSON.stringify(jev.questions[0])).toContain(CHARACTER_REGIONS.smug.lean.slice(0, 40));
     const staged = feelingText.staged(handle, v2Layered());
-    expect(staged.systemPrompt).toMatch(/\[ボクの性格の核 v3-space #[0-9a-f]{8}\]/u);
-    expect(staged.systemPrompt).not.toContain(characterCoreBlock(CHARACTER_CORE));
+    expect(staged.systemPrompt).toMatch(/\[ボクの性格の核 v4-kid #[0-9a-f]{8}\]/u);
+    expect(staged.systemPrompt).not.toContain(characterCoreBlock(CHARACTER_CORE_V2));
     expect(route.feelingStrong).toBe(true);
   });
 
@@ -98,7 +98,7 @@ describe('her character space in a text turn', () => {
     const { handle, block, route } = await say(port, '何してた？');
     expect(handle?.lines?.space?.selection.primary).toBe('devoted');
     expect(handle?.decision?.stance).toBe('affectionate');
-    expect(block).toContain('いまのボク: 本気（心底惚れている）');
+    expect(block).toContain('いまのボク: ずっといっしょ（心から慕う）');
     expect(route.feelingCheck).toMatchObject({ region: 'devoted' });
   });
 

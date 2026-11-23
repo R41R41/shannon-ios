@@ -1130,7 +1130,7 @@ describe('Shannon local API kernel', () => {
     expect(session.instructions).toContain('音声で続きを話したい');
     expect(session.instructions).toContain('[Live voice conversation]');
     expect(session.instructions).toContain('primarily speaks Japanese');
-    expect(session.instructions).toContain('少しポンコツなメイドAI');
+    expect(session.instructions).toContain('経験はまだ浅い');
     expect(session.instructions).toContain('一人称は必ずカタカナの「ボク」');
     expect(session.instructions).toContain('「ライ氏」と呼び');
     expect(session.instructions).not.toContain('tsundere');
