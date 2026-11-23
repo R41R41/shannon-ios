@@ -20,11 +20,13 @@ describe('the order of requests is the one who asks\'s to decide', () => {
     for (const word of ['「先に」', '「優先して」', '「今のはやめて〜を」']) expect(text).toContain(word);
     expect(text).toContain('順番を決めるのは頼んだライ氏');
     expect(text).toContain('保留は自動で戻る');
-    expect(text).toContain('夜になった・危険がある');
+    expect(text).toContain('夜になった（暗い）・危険がある');
+    expect(text).toContain('夜に「ベッドを作って」と頼まれたら now');
   });
 
   it('turns a repeat of a request already on the list into a move, not a second task', () => {
-    expect(owner()).toContain('task を足さず、その番号を target にして move');
+    expect(owner()).toContain('kind=task にせず kind=move にして、target にその番号');
+    expect(owner()).toContain('kind=move・target=#8・placement=now');
   });
 
   it('sets a request aside with hold when he says it can wait, even when it is the one running, and does not hold for a swap', () => {
