@@ -97,6 +97,7 @@ describe('the words for the grass', () => {
   const knowledge = MATERIAL_ACQUISITION_LINES.join('\n');
   it('the request knowledge says: the `,` only, its layer y as it is, the `:` gives no seeds, many cells at once', () => {
     expect(knowledge).toContain('「:」は地面そのもの');
+    expect(knowledge).toContain('「草（種を取る用）」の行');
     expect(knowledge).toContain('見出し y=N をそのまま書く');
     expect(knowledge).toContain('「,」を 10 マスほど選んで 1 手で壊す');
     expect(knowledge).not.toContain('草のマスは地面ブロックの 1 つ上（y が 1 つ違うと');
