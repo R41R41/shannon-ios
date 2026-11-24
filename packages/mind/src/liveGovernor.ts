@@ -1,6 +1,7 @@
 import { novelty } from './salience.js';
 import {
-  LIVE_COMMENTARY_V1, type LiveCommentaryLimits, itemWords, liveLifetimeSeconds, liveOwnSpacing, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
+  LIVE_COMMENTARY_V1, LIVE_MOUTH_PER_MINUTE, LIVE_REACTION_EXTRA_PER_MINUTE, type LiveCommentaryLimits, type LiveGroup, itemWords, liveGroupOf, liveIsReaction,
+  liveLifetimeSeconds, liveOwnSpacing, liveSalience, liveTopicOf, type LiveMoment, type LiveMomentKind, type LiveScalar,
 } from './liveCommentary.js';
 
 /**
@@ -25,14 +26,14 @@ export interface LiveRoom {
   danger?: boolean;
 }
 
-interface Told { kind: LiveMomentKind; topic: string; at: number; text: string }
+interface Told { kind: LiveMomentKind; topic: string; group: LiveGroup; at: number; text: string }
 
 const text = (value: LiveScalar | undefined): string => (value === undefined ? '' : String(value)).slice(0, 60);
 const DIMENSIONS: Readonly<Record<string, string>> = { the_nether: 'ネザー', the_end: 'ジ・エンド', overworld: 'オーバーワールド' };
 
 type FactWriter = (facts: LiveMoment['facts']) => string;
 const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
-  died: f => `体が倒れた（原因: ${text(f.cause) || '不明'}）。`,
+  died: f => `体が倒れた（原因: ${text(f.cause) || '不明'}${text(f.from) ? `。近くに${text(f.from)}がいた` : ''}）。`,
   near_death: f => `体力が20のうち${text(f.health)}まで減った（${text(f.from) ? `${text(f.from)}に襲われている` : '危ない状態'}）。`,
   diamond_found: f => (f.carried === true ? `ダイヤモンドを手に入れた（${text(f.count)}個）。` : `ダイヤモンドの鉱石を見つけた（${text(f.count)}か所）。`),
   armor_complete: () => '鉄以上の防具が頭から足までそろい、着ている。',
@@ -58,6 +59,15 @@ const FACT_LINES: Readonly<Record<LiveMomentKind, FactWriter>> = Object.freeze({
   material_got: f => `${itemWords(text(f.item))}が手に入った（いま${text(f.count)}個${text(f.need) ? `、要るのは${text(f.need)}個` : ''}）。`,
   thinking: f => `いまの手のねらい: ${text(f.why)}`,
   task_done: f => `頼まれた作業「${text(f.goal) || 'いまの依頼'}」が終わった。`,
+  attacked: f => `${text(f.from) ? `${text(f.from)}${Number(f.count) > 1 ? `たち（${text(f.count)}体）` : ''}に` : '敵に'}襲われはじめた（体力が20のうち${text(f.health)}）。`,
+  scared: f => `${text(f.from) || 'クリーパー'}がすぐそばにいる（${text(f.distance)}mほど${f.lit === true ? '、火がついている' : ''}）。`,
+  surprised: f => `急にダメージを受けて、体力が${text(f.amount)}ほど一気に減った（体力は20のうち${text(f.health)}）。`,
+  got_away: f => `襲ってきた敵から離れて、もう近くにはいない（体力は20のうち${text(f.health)}）。`,
+  killed: f => `近くにいた${text(f.name) || '敵'}がいなくなった（倒したようだ）。`,
+  respawned: () => '倒れたあと、生き返った。',
+  scenery: f => `いる所の景色が変わった（${text(f.place)}に入った）。`,
+  player_near: f => `人が近くに来た（${text(f.distance)}mほど）。`,
+  working: f => `いま「${text(f.doing) || '作業'}」の途中で、${text(f.seconds)}秒ほど話していない。`,
 });
 
 /**
@@ -111,16 +121,19 @@ export class LiveGovernor {
   /** What her own earlier words say: the minute's budget, the gap, the same topic and the same kind. */
   private spacingHold(moment: LiveMoment, now: number, salience: number): LiveHold | null {
     const { limits } = this;
-    const urgent = salience >= limits.urgent;
+    // A reaction to what is happening now (a hit, a scare, getting away) is told in the urgent gap: a scream that waits twelve seconds is not said.
+    const urgent = salience >= limits.urgent || liveIsReaction(moment.kind);
     const within = (seconds: number) => this.told.filter(item => now - item.at < seconds * 1000);
-    // The end of a request is the word she must say: the budget of chatter does not hold it back (the gap still does).
-    if (moment.kind !== 'task_done' && (within(60).length >= limits.perMinute || within(600).length >= limits.perTenMinutes)) return 'rate';
+    // The end of a request is the word she must say: the budget of chatter does not hold it back (the gap still does). A reaction has a
+    // few words more in the minute than the ordinary talk (a fight is louder than a flat job), up to what the body's mouth takes.
+    const minute = liveIsReaction(moment.kind) ? Math.min(LIVE_MOUTH_PER_MINUTE, limits.perMinute + LIVE_REACTION_EXTRA_PER_MINUTE) : limits.perMinute;
+    if (moment.kind !== 'task_done' && (within(60).length >= minute || within(600).length >= limits.perTenMinutes)) return 'rate';
     const last = this.told.at(-1);
     if (last && (now - last.at) / 1000 < limits.gapSeconds[urgent ? 'urgent' : 'ordinary']) return 'gap';
     const own = liveOwnSpacing(moment.kind);
     if (!urgent && within(own.topicSeconds ?? limits.topicSeconds).some(item => item.topic === liveTopicOf(moment.kind))) return 'topic';
-    const life = moment.kind === 'died' || moment.kind === 'near_death';
-    return within(life ? 30 : own.kindSeconds ?? limits.kindSeconds).some(item => item.kind === moment.kind) ? 'kind' : null;
+    // Each death is its own word (a second one within half a minute of the first is told too); a near death is not told again within 30 s.
+    return within(own.kindSeconds ?? limits.kindSeconds).some(item => item.kind === moment.kind) ? 'kind' : null;
   }
 
   /** The moment will not be weighed again (it was told, or it went stale and was dropped). */
@@ -133,15 +146,32 @@ export class LiveGovernor {
   delivered(moment: LiveMoment, words: string, at: number): void {
     this.spend(moment);
     this.kinds.add(moment.kind);
-    this.told.push({ kind: moment.kind, topic: liveTopicOf(moment.kind), at, text: words });
+    this.told.push({ kind: moment.kind, topic: liveTopicOf(moment.kind), group: liveGroupOf(moment.kind), at, text: words });
     if (this.told.length > 64) this.told.shift();
   }
+
+  /** When she last told a line (milliseconds since the epoch), or null when she has told none in this run. */
+  lastToldAt(): number | null { return this.told.at(-1)?.at ?? null; }
 
   /** The last lines she told, newest last (for the model: not to say it again). */
   recentWords(count = this.limits.remembered): string[] { return this.told.slice(-count).map(item => item.text); }
 
-  /** Whether a written line is unlike her recent ones. */
-  fresh(words: string): boolean { return novelty(words, this.recentWords()) >= this.limits.noveltyFloor; }
+  /**
+   * The last lines she told of one group (a fight, a find…), newest last, from the last `withinSeconds` seconds: what a line of that group
+   * is asked not to repeat. A line of another group (the bed she made twenty minutes ago) is not shown to a line about a hit.
+   */
+  recentOf(group: LiveGroup, now: number, count = 4, withinSeconds = 300): string[] {
+    return this.told.filter(item => item.group === group && now - item.at < withinSeconds * 1000).slice(-count).map(item => item.text);
+  }
+
+  /**
+   * Whether a written line is unlike her recent ones: with a group, unlike the last ones of that group (a stretched cry is not a repeat of
+   * a line about a bed); without, unlike the last lines of any. `floor`: the least unlikeness (default the limits' own).
+   */
+  fresh(words: string, group?: LiveGroup, floor = this.limits.noveltyFloor): boolean {
+    const against = group ? this.told.filter(item => item.group === group).slice(-this.limits.remembered).map(item => item.text) : this.recentWords();
+    return novelty(words, against) >= floor;
+  }
 
   /** Counts for the journal, closed values only. */
   stats(now: number): { told: number; lastMinute: number; last10Minutes: number } {

@@ -2,6 +2,7 @@ import type { LiveMoment, LiveScalar } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts, countMatching, type ItemCounts } from './minecraftItems.js';
 import { fullArmor } from './minecraftStage.js';
+import { mobWords } from './minecraftLiveWords.js';
 
 /**
  * The moments worth a word, read from her body's frames (session dc-live; `SHANNON_MINECRAFT_LIVE`). A frame already carries all of it
@@ -83,11 +84,48 @@ export function bodyInDanger(observation: BodyObservation): boolean {
   return observation.facts.alive === true && ((health !== null && health > 0 && health <= 8) || nearestThreat(world, 5) !== null);
 }
 
+/** A hostile near her in a frame: its game name, how far, whether it can get to her, whether it is a creeper with its fuse lit, and its id when the body names one. */
+interface Threat { name: string; distance: number; reach: boolean; lit: boolean; id: string }
+
 interface Reading {
   alive: boolean; health: number | null; food: number | null; dimension: LiveDimension | null; tick: number | null; at: number;
   counts: ItemCounts; structures: Map<string, number | null>; diamondOre: number; lavaEscapes: number; blaze: boolean; dragon: boolean;
   crystals: number | null; armor: boolean; lavaDistance: number | null;
+  threats: Threat[]; players: number[]; place: string;
 }
+
+/** The hostiles of a frame within 24 m, the nearest first (the body's own threats list: a hostile with rock all round it has `reach` false). */
+function readThreats(world: Record<string, unknown>): Threat[] {
+  return list(world.nearbyThreats).flatMap(threat => {
+    const distance = finite(threat.distance);
+    return distance !== null && distance <= 24 && typeof threat.name === 'string' && NAME.test(threat.name)
+      ? [{ name: threat.name, distance, reach: threat.canReachMe !== false, lit: threat.ignited === true,
+        id: threat.id === undefined || threat.id === null ? '' : String(threat.id).slice(0, 24) }] : [];
+  }).sort((a, b) => a.distance - b.distance);
+}
+
+/** The hostiles that hurt from a distance (any within the 24 m the frame reads). */
+const SHOOTERS = /^(?:skeleton|stray|bogged|pillager|blaze|ghast|witch|breeze|wither_skeleton)$/u;
+
+/** The distances of the other people in the frame (the entities of kind `player`): never their names. */
+function readPlayers(world: Record<string, unknown>): number[] {
+  return list(world.nearbyEntities).flatMap(entity => {
+    const distance = finite(entity.distance);
+    return entity.kind === 'player' && distance !== null && distance <= 48 ? [distance] : [];
+  }).sort((a, b) => a - b);
+}
+
+/** The biome's name in her words, for the biomes that have a plain one; '' for any other (a view is told only when it can be named). */
+const PLACES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/cherry/u, '桜の林'], [/dark_forest/u, '暗い森'], [/bamboo/u, '竹林'], [/jungle/u, 'ジャングル'], [/taiga/u, 'タイガの森'], [/birch|forest/u, '森'],
+  [/swamp|mangrove/u, '沼地'], [/desert/u, '砂漠'], [/badlands|mesa/u, '赤い荒野'], [/savanna/u, 'サバンナ'], [/snowy|ice|frozen|grove|peaks/u, '雪の世界'],
+  [/mushroom/u, 'キノコの島'], [/meadow/u, '花の草原'], [/beach|shore/u, '浜辺'], [/river/u, '川'], [/ocean/u, '海'], [/plains/u, '広い平原'],
+  [/dripstone|lush|deep_dark|cave/u, '洞窟'], [/mountain|hills|slopes/u, '山'],
+];
+const placeWords = (biome: unknown): string => {
+  const id = typeof biome === 'string' ? biome.toLowerCase().replace(/^minecraft:/u, '').replace(/\s+/gu, '_') : '';
+  return PLACES.find(([pattern]) => pattern.test(id))?.[1] ?? '';
+};
 
 function read(observation: BodyObservation, at: number): Reading {
   const world = record(observation.state.world) ?? {}, counts = carriedItemCounts(world, observation.facts);
@@ -98,7 +136,8 @@ function read(observation: BodyObservation, at: number): Reading {
   return { alive: observation.facts.alive === true, health: finite(world.health), food: finite(world.food),
     dimension: dimensionOfWorld(world, observation.facts), tick: dayTick(world), at, counts, structures: mapStructures(world.mapSummary),
     diamondOre: mapDiamondCount(world.mapSummary), lavaEscapes: lava, blaze: named('blaze', 32).length > 0, dragon: named('ender_dragon', 128).length > 0,
-    crystals: crystals > 0 ? crystals : null, armor: fullArmor(counts), lavaDistance: mapLavaDistance(world.mapSummary) };
+    crystals: crystals > 0 ? crystals : null, armor: fullArmor(counts), lavaDistance: mapLavaDistance(world.mapSummary),
+    threats: readThreats(world), players: readPlayers(world), place: placeWords(world.biome) };
 }
 
 /**
@@ -139,7 +178,10 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
   const told = { items: new Set<string>(), tools: new Set<string>(), structures: new Set<string>(), diamondOre: 0, armor: false,
     wanted: new Set<string>() };
   // Edges that re-arm: the near death after her health recovers, the blaze and the dragon after they were gone.
-  const armed = { life: true, hunger: true, blaze: true, dragon: true, lava: true };
+  const armed = { life: true, hunger: true, blaze: true, dragon: true, lava: true, attack: true, scare: true };
+  // The fight as it goes: when she was last hurt by a hostile or had one near (the calm re-arms the hit), whether a fight is on (so that
+  // getting away is told once), when the nearest hostile left her, and when another person was last near (a person coming back is news).
+  const fight = { calmSince: null as number | null, on: false, clearSince: null as number | null, playerSeen: null as number | null };
   let serial = 0;
   const make = (kind: LiveMoment['kind'], at: number, facts: Facts, key?: string): LiveMoment => ({ kind, key: key ?? `${kind}:${++serial}`, at, facts });
 
@@ -148,16 +190,81 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
     if (prev.alive && !now.alive) {
       const last = list(world.deaths).at(-1), cause = deathCauseWords(typeof last?.cause === 'string' && /^[a-z_:]{1,40}$/u.test(last.cause) ? last.cause : '');
       armed.life = true;
-      return [make('died', at, { cause })];
+      fight.on = false;
+      const from = prev.threats.find(threat => threat.distance <= 12);
+      return [make('died', at, { cause, ...(from ? { from: mobWords(from.name) } : {}) })];
     }
-    return now.alive ? [...health(now, prev, world, at), ...hunger(now, prev, at)] : [];
+    if (!prev.alive && now.alive) return [make('respawned', at, {})];
+    return now.alive ? [...health(now, prev, world, at), ...hunger(now, prev, at), ...fights(now, prev, at)] : [];
+  }
+
+  /**
+   * What happens to her in a fight, from one frame to the next (the frame already carries it: her health, the hostiles that can reach her,
+   * where the people are): the first hit of a hostile (told at once, and not again until it has been calm for twenty seconds), a creeper
+   * at her side, a blow with no hostile near (a fall, a fire), getting away (the hostiles have been gone for eight seconds), and a hostile
+   * that was at her and is gone (told only as "gone, it seems": the frame cannot tell a kill from a retreat).
+   */
+  function fights(now: Reading, prev: Reading, at: number): LiveMoment[] {
+    const out: LiveMoment[] = [];
+    const lost = now.health !== null && prev.health !== null ? prev.health - now.health : 0;
+    const close = now.threats.filter(threat => threat.reach && threat.distance <= 6);
+    // A hit from a shooter far off (an arrow, a fireball) is a hit from a hostile too: what hurts her need not be within reach of a sword.
+    const hurtFrom = close.length ? close : now.threats.filter(threat => threat.reach && SHOOTERS.test(threat.name));
+    const hurtByMob = lost >= 1 && hurtFrom.length > 0;
+    if (hurtByMob && armed.attack) {
+      armed.attack = false;
+      fight.on = true;
+      const first = hurtFrom[0]!;
+      out.push(make('attacked', at, { from: mobWords(first.name), count: hurtFrom.length, health: Math.round(now.health ?? 0) }));
+    }
+    if (hurtByMob || close.length > 0) fight.calmSince = null;
+    else if (fight.calmSince === null) fight.calmSince = at;
+    if (!armed.attack && fight.calmSince !== null && at - fight.calmSince >= 20_000) armed.attack = true;
+    // A blow of five or more at once with no hostile at her: a fall, a fire, an arrow from far.
+    if (lost >= 5 && hurtFrom.length === 0) out.push(make('surprised', at, { amount: Math.round(lost), health: Math.round(now.health ?? 0) }));
+    const creeper = now.threats.find(threat => threat.name === 'creeper' && threat.reach && (threat.distance <= 3.5 || (threat.lit && threat.distance <= 6)));
+    if (creeper && armed.scare) {
+      armed.scare = false;
+      out.push(make('scared', at, { from: mobWords('creeper'), distance: Math.round(creeper.distance), lit: creeper.lit }));
+    } else if (!now.threats.some(threat => threat.name === 'creeper' && threat.distance <= 8)) armed.scare = true;
+    // A hostile that stood at her (within 5 m) and is no longer in the frame at all.
+    for (const threat of prev.threats) {
+      // A creeper that is gone blew up or ran off: that is not a kill.
+      if (threat.distance > 5 || !threat.reach || lost >= 1 || threat.name === 'creeper') continue;
+      const same = (other: Threat) => (threat.id && other.id ? other.id === threat.id : other.name === threat.name);
+      const stillAround = now.threats.filter(same).length >= prev.threats.filter(same).length;
+      if (!stillAround) {
+        out.push(make('killed', at, { name: mobWords(threat.name) }, `killed:${threat.id || threat.name}:${Math.round(at / 1000)}`));
+        break;
+      }
+    }
+    // Getting away: the fight was on, and nothing that can reach her has been within eight metres for eight seconds.
+    const near = now.threats.some(threat => threat.reach && threat.distance <= 8);
+    if (near) fight.clearSince = null;
+    else if (fight.clearSince === null) fight.clearSince = at;
+    if (fight.on && fight.clearSince !== null && at - fight.clearSince >= 8_000 && (now.health ?? 0) > 0) {
+      fight.on = false;
+      out.push(make('got_away', at, { health: Math.round(now.health ?? 0) }));
+    }
+    return out;
+  }
+
+  /** The view changing (a biome she can name) and another person coming near after a while without one. */
+  function company(now: Reading, prev: Reading, at: number): LiveMoment[] {
+    const out: LiveMoment[] = [];
+    if (now.place && prev.place && now.place !== prev.place && now.dimension === 'overworld') out.push(make('scenery', at, { place: now.place }));
+    const near = now.players.find(distance => distance <= 12);
+    if (near !== undefined && (fight.playerSeen === null || at - fight.playerSeen >= 45_000)) out.push(make('player_near', at, { distance: Math.round(near) }));
+    if (now.players.some(distance => distance <= 24)) fight.playerSeen = at;
+    return out;
   }
 
   function health(now: Reading, prev: Reading, world: Record<string, unknown>, at: number): LiveMoment[] {
     if (now.health === null) return [];
     if (armed.life && now.health <= 6 && (prev.health ?? 20) > 6) {
       armed.life = false;
-      return [make('near_death', at, { health: Math.round(now.health), from: nearestThreat(world, 12)?.name ?? '' })];
+      const from = nearestThreat(world, 12)?.name;
+      return [make('near_death', at, { health: Math.round(now.health), from: from ? mobWords(from) : '' })];
     }
     if (now.health >= 12) armed.life = true;
     return [];
@@ -284,9 +391,10 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
       const now = read(observation, at), prev = before;
       before = now;
       if (!prev && now.lavaDistance !== null && now.lavaDistance <= LAVA_NEAR) armed.lava = false;
+      if (!prev && now.players.some(distance => distance <= 24)) fight.playerSeen ??= at;
       if (!prev || !observation.connected) return [];
       return [...life(now, prev, observation, at), ...clock(now, prev, at), ...places(now, prev, at), ...belongings(now, prev, at),
-        ...surroundings(now, prev, at)];
+        ...surroundings(now, prev, at), ...company(now, prev, at)];
     },
     reset() { before = null; },
     forgetWanted() { told.wanted.clear(); },

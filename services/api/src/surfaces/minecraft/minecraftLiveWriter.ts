@@ -34,7 +34,11 @@ export interface LiveWriterInput {
   speech?: SpeechMode;
 }
 
-export function liveWriterPrompt(input: LiveWriterInput): { system: string; message: string } {
+/**
+ * `system` is the whole prompt (what a conversation turn takes); `head` is the same without the facts of the moment and `facts` is those
+ * (`[いま起きたこと]`): a light request puts the facts in the user's turn, where a model reads what happened and not the work she is at.
+ */
+export function liveWriterPrompt(input: LiveWriterInput): { system: string; message: string; head: string; facts: string } {
   // The end of a request is asked of the call's room only: a stream's room is many people who gave her nothing to do.
   const stream = input.place === 'stream', ended = input.main.kind === 'task_done' && !stream;
   const limit = input.voice ? LIVE_LINE_LIMITS[ended ? 'doneVoiceCharacters' : 'voiceCharacters'] : LIVE_LINE_LIMITS[ended ? 'doneTextCharacters' : 'textCharacters'];
@@ -72,15 +76,16 @@ export function liveWriterPrompt(input: LiveWriterInput): { system: string; mess
     '- 終わった作業が「置く」「渡す」「持っていく」だった時は、置き場所も渡す相手も人がもう決めて、そのとおりにした。だから置き場所や渡し方はもう聞かない。置いた・渡したことを言って、次にどうするかだけ聞く。形の例：「置いたよ！ほかにやることある？」。なぜ: 人が決めたことをまた聞くと、話を聞いていなかったように聞こえる。',
     '- 聞くのは1つだけ。言い訳や作業のふり返りは長く話さない。',
   ] : [];
-  const system = [input.identity, input.persona, rules.join('\n'), done.join('\n'), kindBlock(input, stream), input.body,
-    toldBlock(input),
-    ['[いま起きたこと]', `- ${liveFactLine(input.main)}`,
-      ...(input.also.length ? ['[ほかにあったこと（ついでに触れてもよい）]', ...input.also.map(moment => `- ${liveFactLine(moment)}`)] : [])].join('\n'),
-  ].filter(Boolean).join('\n\n');
-  // The turn's own words say what this line is: the end of a request is a different line (what was made, then the question), and a model reads
-  // the last thing it is asked most.
-  return { system, message: ended
-    ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方。置く・渡す依頼だったなら、置いた・渡したことを言って、ほかにやることを）を聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）' };
+  const head = [input.identity, input.persona, rules.join('\n'), done.join('\n'), kindBlock(input, stream), input.body, toldBlock(input)].filter(Boolean).join('\n\n');
+  const facts = ['[いま起きたこと]', `- ${liveFactLine(input.main)}`,
+    ...(input.also.length ? ['[ほかにあったこと（ついでに触れてもよい）]', ...input.also.map(moment => `- ${liveFactLine(moment)}`)] : [])].join('\n');
+  const system = [head, facts].join('\n\n');
+  // A model reads the last thing it is asked most, so the turn's own words say what this line is.
+  // (The end of a request: what was made, then the question; being stuck: what is wrong, then the question; else the word of the moment.)
+  const message = ended
+    ? '（依頼が終わった一言を、できたことと、次にどうするか（作った物なら置き場所か渡し方。置く・渡す依頼だったなら、置いた・渡したことを言って、ほかにやることを）を聞く問いで終えて、本文だけで）'
+    : input.main.kind === 'stuck' && !stream ? '（進まなくて困っている一言を、どうしたらいいかを聞く問いで終えて、本文だけで）' : '（実況の一言を、本文だけで）';
+  return { system, message, head, facts };
 }
 
 /**
@@ -103,7 +108,9 @@ function kindBlock(input: LiveWriterInput, stream: boolean): string {
       '- 言うのは、下の「いま起きたこと」にある危なさ（体力・襲ってきた物・倒れた原因）だけ。原因が「不明」の時は、原因を言い当てずに気持ちだけを言う。なぜ: 見ていない敵の名前を言うと、聞いている人に嘘を教えることになる。襲ってきた物の名前は、日本語のふだんの呼び方で言う。',
       '- 言い方の形は、毎回かえる。そのとき一番強く思ったこと（こわい・いたい・びっくり・くやしい）を、出だしの言葉からかえて、「さっき言ったこと」とは違う言い方で言う。体力の数を読み上げたり、「立て直さなきゃ」「距離を取ろう」に決まった形にしたりしない。なぜ: 危ない時ほど同じ型が続くと、台詞を再生しているように聞こえる。');
   }
-  if (input.speech && input.speech !== 'chatty') {
+  // Only what is a word to a person (the end of a request, being stuck) is held to "not a monologue": the voice of what happens to her is not a
+  // monologue of her work, so a find or a view is not told to leave her feelings out.
+  if (input.speech && input.speech !== 'chatty' && (kind === 'task_done' || kind === 'stuck')) {
     lines.push(`[いまの話し方: ${input.speech === 'needed' ? '必要な時だけ話す' : '話さない（文字で出る）'}]`,
       'この一言は、ふだんの独り言ではない。人に知らせる・聞くための一言だけ。感想や、作業の実況のような話はしない。',
       `- なぜ: ${SHANNON_OWNER_NAME}が、独り言は要らない、必要な時だけ話してほしいと選んだ。だから、人に知らせることか聞くことがある時だけ口を開く。`);
@@ -122,9 +129,9 @@ function toldBlock(input: LiveWriterInput): string {
 /** A line of danger or of a fall is asked to be 10-20 characters; past this many only its first sentence is said. */
 export const DANGER_LINE_CHARACTERS = 24;
 
-const FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;
-const LABEL = /^(?:ボク|シャノン|Shannon)\s*[:：]\s*/u;
-const QUOTES = /^[「『"“'‘]+|[」』"”'’]+$/gu;
+export const LIVE_LINE_FORBIDDEN = /https?:\/\/|<@|@everyone|@here|```|^#+\s|\b(?:mc|minecraft)\.[a-z-]+|-?\d{1,5}\s*,\s*-?\d{1,4}\s*,\s*-?\d{1,5}/iu;
+export const LIVE_LINE_LABEL = /^(?:ボク|シャノン|Shannon)\s*[:：]\s*/u;
+export const LIVE_LINE_QUOTES = /^[「『"“'‘]+|[」』"”'’]+$/gu;
 
 /**
  * The model's answer as the one line to say, or null when it is not one: empty, a list or a link, a coordinate or a tool's name, or longer
@@ -133,8 +140,8 @@ const QUOTES = /^[「『"“'‘]+|[」』"”'’]+$/gu;
 export function cleanLiveLine(raw: string, options: { voice: boolean; done?: boolean; danger?: boolean }): string | null {
   const limit = options.voice ? LIVE_LINE_LIMITS[options.done ? 'doneVoiceCharacters' : 'voiceCharacters'] : LIVE_LINE_LIMITS[options.done ? 'doneTextCharacters' : 'textCharacters'];
   const first = raw.split(/\r?\n/u).map(line => line.trim()).find(Boolean) ?? '';
-  const line = first.replace(LABEL, '').replace(QUOTES, '').replace(/\s+/gu, ' ').trim();
-  if (!line || FORBIDDEN.test(line) || /^[-*・•]\s/u.test(line)) return null;
+  const line = first.replace(LIVE_LINE_LABEL, '').replace(LIVE_LINE_QUOTES, '').replace(/\s+/gu, ' ').trim();
+  if (!line || LIVE_LINE_FORBIDDEN.test(line) || /^[-*・•]\s/u.test(line)) return null;
   // A line of danger is a word, not a talk: past a few more characters than asked for, only its first sentence is said (the rest comes after the danger).
   if (options.danger && Array.from(line).length > DANGER_LINE_CHARACTERS) {
     const sentence = line.match(/^.*?[。！？!?…]/u)?.[0]?.trim();

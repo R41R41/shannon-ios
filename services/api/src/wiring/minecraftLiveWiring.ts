@@ -13,6 +13,8 @@ import { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
 import { LiveCommentary } from '../surfaces/minecraft/minecraftLiveCommentary.js';
 import { LiveSpeechOutbox } from '../surfaces/minecraft/minecraftLiveSpeech.js';
 import { cleanLiveLine, liveWriterPrompt } from '../surfaces/minecraft/minecraftLiveWriter.js';
+import { SCENE_KINDS, cleanSceneLine, sceneLinePrompt } from '../surfaces/minecraft/minecraftSceneLine.js';
+import type { LiveLineWriter } from '../infra/models/liveLineModel.js';
 
 /**
  * Her Minecraft body's view for the conversations, and her live commentary (session dc-live). Two switches, both off unless said on:
@@ -43,6 +45,8 @@ export interface CommentaryParts {
   scopeKey: string;
   /** The model that writes her line: a fast one (the auxiliary chat model). */
   model: ShannonChatModel;
+  /** The light request her line is asked through (one short Haiku call). Absent: the line is asked through the conversation turn of `model`, as it was. */
+  lineWriter?: LiveLineWriter | null;
   innerNote?: InnerNotePort | null;
   feeling?: FeelingPort | null;
   /** Her state (the snapshot her character space reads) and her conversations (where a text line is kept): the one store. */
@@ -109,9 +113,21 @@ function createCommentary(live: MinecraftLive, outbox: LiveSpeechOutbox, parts: 
     governor: new LiveGovernor(base), limits: base,
     doneFallback: 'できたよ！どこに置けばいい？渡せばいいかな？',
     async write(request) {
-      const { system, message } = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });
-      const result = await parts.model.generate({ scopeKey: parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true });
-      return cleanLiveLine(result.reply, { voice: request.voice, done: request.main.kind === 'task_done', danger: request.main.kind === 'near_death' || request.main.kind === 'died' });
+      // The line is asked of the light request when there is one (its rules and the facts only); else through the conversation turn, as before.
+      const ask = async (system: string, message: string): Promise<string | null> => parts.lineWriter
+        ? parts.lineWriter.complete({ scopeKey: parts.scopeKey, system, message })
+        : (await parts.model.generate({ scopeKey: parts.scopeKey, systemPrompt: system, history: [], message, skipThinking: true })).reply;
+      // What happens to her (a hit, getting away, a fall, a view…) is a voice of the scene, written from the scene and not from her work.
+      if (SCENE_KINDS.has(request.main.kind)) {
+        const { system, message } = sceneLinePrompt({ identity: identity(), persona: persona(), scene: live.scene(), main: request.main, also: request.also,
+          recentSame: request.recentSame, voice: request.voice });
+        const raw = await ask(system, message);
+        return raw === null ? null : cleanSceneLine(raw, { voice: request.voice, kind: request.main.kind });
+      }
+      const written = liveWriterPrompt({ identity: identity(), persona: persona(), body: live.block({ alone: false, participants: true }), ...request });
+      // The light request is given what happened in the user's turn (after the rules and the body), the conversation turn the whole prompt as it was.
+      const raw = parts.lineWriter ? await ask(written.head, `${written.facts}\n\n${written.message}`) : await ask(written.system, written.message);
+      return raw === null ? null : cleanLiveLine(raw, { voice: request.voice, done: request.main.kind === 'task_done' });
     },
     delivered(told) {
       log(`Shannon Minecraft live delivered id=${told.id} kind=${told.moment.kind} outcome=${told.outcome} length=${told.text.length}`);

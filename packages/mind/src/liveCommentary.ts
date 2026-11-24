@@ -55,6 +55,9 @@ export const LIVE_MOMENT_KINDS = Object.freeze([
   'lava_escape', 'lava_near', 'structure_found', 'blaze_seen', 'item_got', 'dragon_stage', 'milestone_passed', 'milestone_late', 'hungry', 'stuck',
   // Her work as she does it: the plan she keeps, what a step needs, what she thinks as she acts, and the request ending.
   'plan_changed', 'plan_step', 'material_needed', 'material_got', 'thinking', 'task_done',
+  // What happens to her and around her, as it happens: the fight (a hit, a scare, a shock, getting away, winning), coming back, the view,
+  // people near, and her work said when she has been quiet for a while.
+  'attacked', 'scared', 'surprised', 'got_away', 'killed', 'respawned', 'scenery', 'player_near', 'working',
 ] as const);
 export type LiveMomentKind = typeof LIVE_MOMENT_KINDS[number];
 
@@ -69,9 +72,22 @@ export interface LiveMoment {
   facts: Readonly<Record<string, LiveScalar>>;
 }
 
+/**
+ * The six groups a moment belongs to (what sort of thing is happening to her): danger, the fight and its end, finds and views, her body and
+ * the time of day, her work, and people near. A group is how the commentary asks for what she has said lately of the same sort of thing.
+ */
+export type LiveGroup = 'danger' | 'fight' | 'find' | 'body' | 'work' | 'people';
+
 interface KindRow {
   /** The weight of the kind alone, in [0, 1]. */
   weight: number;
+  /** The sort of thing it is (see `LiveGroup`). */
+  group: LiveGroup;
+  /**
+   * A voice that is a reaction to what is happening now (a hit, a fall, a win): it uses the short urgent gap, it has a few words more in
+   * the minute than the ordinary talk (`LIVE_REACTION_EXTRA_PER_MINUTE`), and it is not said once the moment is over.
+   */
+  reaction?: true;
   /** What it is about: two moments of one topic are not spoken of within `topicSeconds`. */
   topic: string;
   /** How long the moment stays worth a word, in seconds. */
@@ -82,35 +98,61 @@ interface KindRow {
 }
 
 const KINDS: Readonly<Record<LiveMomentKind, KindRow>> = Object.freeze({
-  died: { weight: 1, topic: 'life', lifetime: 45 },
-  near_death: { weight: 0.9, topic: 'life', lifetime: 20 },
-  diamond_found: { weight: 0.82, topic: 'diamond', lifetime: 60 },
-  armor_complete: { weight: 0.78, topic: 'armor', lifetime: 60 },
-  tool_made: { weight: 0.5, topic: 'tools', lifetime: 60 },
-  dimension_entered: { weight: 0.93, topic: 'dimension', lifetime: 60 },
-  night_fell: { weight: 0.45, topic: 'time', lifetime: 40 },
-  morning: { weight: 0.35, topic: 'time', lifetime: 40 },
-  slept: { weight: 0.6, topic: 'time', lifetime: 40 },
-  lava_escape: { weight: 0.7, topic: 'hazard', lifetime: 20 },
-  lava_near: { weight: 0.55, topic: 'hazard', lifetime: 25 },
-  structure_found: { weight: 0.6, topic: 'structure', lifetime: 60 },
-  blaze_seen: { weight: 0.65, topic: 'mob', lifetime: 30 },
-  item_got: { weight: 0.55, topic: 'item', lifetime: 60 },
-  dragon_stage: { weight: 0.88, topic: 'dragon', lifetime: 40 },
-  milestone_passed: { weight: 0.5, topic: 'progress', lifetime: 60 },
-  milestone_late: { weight: 0.5, topic: 'progress', lifetime: 90 },
-  hungry: { weight: 0.4, topic: 'body', lifetime: 45 },
-  stuck: { weight: 0.4, topic: 'progress', lifetime: 40 },
+  died: { weight: 1, group: 'danger', reaction: true, topic: 'life', lifetime: 45, kindSeconds: 10 },
+  near_death: { weight: 0.9, group: 'danger', reaction: true, topic: 'life', lifetime: 20, kindSeconds: 30 },
+  diamond_found: { weight: 0.82, group: 'find', topic: 'diamond', lifetime: 60 },
+  armor_complete: { weight: 0.78, group: 'find', topic: 'armor', lifetime: 60 },
+  tool_made: { weight: 0.5, group: 'find', topic: 'tools', lifetime: 60 },
+  dimension_entered: { weight: 0.93, group: 'find', topic: 'dimension', lifetime: 60 },
+  night_fell: { weight: 0.6, group: 'body', topic: 'time', lifetime: 40 },
+  morning: { weight: 0.58, group: 'body', topic: 'time', lifetime: 40 },
+  slept: { weight: 0.6, group: 'body', topic: 'time', lifetime: 40 },
+  lava_escape: { weight: 0.75, group: 'fight', reaction: true, topic: 'hazard', lifetime: 20 },
+  lava_near: { weight: 0.55, group: 'danger', topic: 'hazard', lifetime: 25 },
+  structure_found: { weight: 0.6, group: 'find', topic: 'structure', lifetime: 60 },
+  blaze_seen: { weight: 0.65, group: 'danger', topic: 'mob', lifetime: 30 },
+  item_got: { weight: 0.55, group: 'find', topic: 'item', lifetime: 60 },
+  dragon_stage: { weight: 0.88, group: 'find', topic: 'dragon', lifetime: 40 },
+  milestone_passed: { weight: 0.5, group: 'work', topic: 'progress', lifetime: 60 },
+  milestone_late: { weight: 0.5, group: 'work', topic: 'progress', lifetime: 90 },
+  hungry: { weight: 0.58, group: 'body', topic: 'body', lifetime: 45 },
+  stuck: { weight: 0.6, group: 'work', topic: 'progress', lifetime: 40 },
   // Her work, said as it goes. They come often and each is short-lived: a thought about a step that is over is not said.
-  plan_changed: { weight: 0.62, topic: 'plan', lifetime: 20, topicSeconds: 20, kindSeconds: 30 },
-  plan_step: { weight: 0.58, topic: 'plan', lifetime: 15, topicSeconds: 20, kindSeconds: 30 },
-  material_needed: { weight: 0.6, topic: 'material', lifetime: 20, topicSeconds: 25, kindSeconds: 20 },
-  material_got: { weight: 0.66, topic: 'material', lifetime: 15, topicSeconds: 25, kindSeconds: 20 },
-  thinking: { weight: 0.56, topic: 'thought', lifetime: 15, topicSeconds: 30, kindSeconds: 30 },
+  plan_changed: { weight: 0.62, group: 'work', topic: 'plan', lifetime: 20, topicSeconds: 20, kindSeconds: 30 },
+  plan_step: { weight: 0.58, group: 'work', topic: 'plan', lifetime: 15, topicSeconds: 20, kindSeconds: 30 },
+  material_needed: { weight: 0.6, group: 'work', topic: 'material', lifetime: 20, topicSeconds: 25, kindSeconds: 20 },
+  material_got: { weight: 0.66, group: 'work', topic: 'material', lifetime: 15, topicSeconds: 25, kindSeconds: 20 },
+  thinking: { weight: 0.56, group: 'work', topic: 'thought', lifetime: 15, topicSeconds: 30, kindSeconds: 30 },
   // The request ending is the loudest word of her work: urgent, so it breaks the quiet after someone's words and the spacing. Two short
   // requests can end a minute apart and each end is its own word, so the same-kind spacing is only a few seconds.
-  task_done: { weight: 0.92, topic: 'done', lifetime: 90, kindSeconds: 5 },
+  task_done: { weight: 0.92, group: 'work', topic: 'done', lifetime: 90, kindSeconds: 5 },
+  // What happens to her as it happens. Each is short-lived (a scream that comes late is not said) and has its own kind, so a hit, a scare and
+  // a shock do not hold each other back; the same kind is spaced, so that one fight does not say the same thing every second.
+  attacked: { weight: 0.8, group: 'danger', reaction: true, topic: 'fight', lifetime: 10, topicSeconds: 6, kindSeconds: 20 },
+  scared: { weight: 0.75, group: 'danger', reaction: true, topic: 'scare', lifetime: 8, topicSeconds: 6, kindSeconds: 25 },
+  surprised: { weight: 0.76, group: 'danger', reaction: true, topic: 'shock', lifetime: 8, topicSeconds: 6, kindSeconds: 15 },
+  got_away: { weight: 0.77, group: 'fight', reaction: true, topic: 'relief', lifetime: 15, topicSeconds: 6, kindSeconds: 20 },
+  killed: { weight: 0.72, group: 'fight', reaction: true, topic: 'win', lifetime: 12, topicSeconds: 6, kindSeconds: 20 },
+  respawned: { weight: 0.85, group: 'fight', reaction: true, topic: 'revive', lifetime: 15, topicSeconds: 6, kindSeconds: 15 },
+  scenery: { weight: 0.5, group: 'find', topic: 'view', lifetime: 25, topicSeconds: 60, kindSeconds: 150 },
+  player_near: { weight: 0.62, group: 'people', topic: 'people', lifetime: 15, topicSeconds: 30, kindSeconds: 90 },
+  // She has been quiet for a while at her work: what she is doing now, said (the commentary makes it; see `LIVE_QUIET_SECONDS`).
+  working: { weight: 0.6, group: 'work', topic: 'thought', lifetime: 20, topicSeconds: 15, kindSeconds: 20 },
 });
+
+export const liveGroupOf = (kind: LiveMomentKind): LiveGroup => KINDS[kind].group;
+/** A reaction to what is happening now (see `KindRow.reaction`). */
+export const liveIsReaction = (kind: LiveMomentKind): boolean => KINDS[kind].reaction === true;
+/** The words of a reaction above the ordinary talk in a minute (the body's mouth holds six a minute in all). */
+export const LIVE_REACTION_EXTRA_PER_MINUTE = 2;
+/** The most words in a minute the body's mouth takes (`voiceMouthCore.ts`). */
+export const LIVE_MOUTH_PER_MINUTE = 6;
+/**
+ * She is not quiet for long while she works in a call: past this many seconds without a word of hers the commentary asks for a word of what
+ * she is doing (`working`), and the quiet is meant to stay under `LIVE_QUIET_LIMIT_SECONDS`.
+ */
+export const LIVE_QUIET_SECONDS = 22;
+export const LIVE_QUIET_LIMIT_SECONDS = 40;
 
 export const liveTopicOf = (kind: LiveMomentKind): string => KINDS[kind].topic;
 export const liveLifetimeSeconds = (kind: LiveMomentKind): number => KINDS[kind].lifetime;
@@ -151,9 +193,17 @@ export const SPEECH_RATES = Object.freeze(['low', 'normal', 'high'] as const);
 export type SpeechRate = typeof SPEECH_RATES[number];
 /**
  * The moments she still says when she is not chatty: the end of a request (and the question that goes with it), being stuck (asking for
- * help), and danger. The body holds the same list (`services/common/speechMode.ts`); change neither alone.
+ * help), danger, and the voice of what happens to her and around her. What stays unsaid is her monologue of the work (a step, a plan, a
+ * material, a thought, a stage of the run, and the words she says for being quiet). The body holds the same list
+ * (`services/common/speechMode.ts`); change neither alone.
  */
-export const SPEECH_NEEDED_KINDS: readonly LiveMomentKind[] = Object.freeze(['task_done', 'stuck', 'near_death', 'died'] as const);
+export const SPEECH_NEEDED_KINDS: readonly LiveMomentKind[] = Object.freeze([
+  'task_done', 'stuck', 'near_death', 'died',
+  // The voice of what happens to her (a hit, a scare, getting away, winning, coming back, a find, the view, someone near, hunger, night and
+  // morning) is not a monologue of her work: it is the sound of her being there, so it is said when she speaks only when needed too.
+  'attacked', 'scared', 'surprised', 'got_away', 'killed', 'respawned', 'scenery', 'player_near', 'hungry', 'night_fell', 'morning', 'slept',
+  'diamond_found', 'armor_complete', 'tool_made', 'dimension_entered', 'structure_found', 'item_got', 'dragon_stage', 'blaze_seen', 'lava_escape', 'lava_near',
+] as const);
 export const isSpeechMode = (value: unknown): value is SpeechMode => (SPEECH_MODES as readonly unknown[]).includes(value);
 export const isSpeechRate = (value: unknown): value is SpeechRate => (SPEECH_RATES as readonly unknown[]).includes(value);
 
