@@ -64,7 +64,7 @@ function farLine(far: readonly Enemy[], self: P): string[] {
   if (!first) return [];
   const dy = first.pos ? first.pos.y - self.y : 0;
   const how = [...dy ? [`${dy > 0 ? '上' : '下'} ${Math.abs(dy)}`] : [], ...first.reach ? [REACH_SHORT[first.reach]] : []];
-  // Each kind says its height against her feet (11/25: 「skeleton 6」 with only the nearest enemy's height was read as six skeletons on the surface; they were 47 to 56 blocks down).
+  // Each kind says its height against her feet (「skeleton 6」 with only the nearest enemy's height was read as six skeletons on the surface; they were 47 to 56 blocks down).
   const kinds = new Map<string, { count: number; dys: number[] }>();
   for (const e of far) {
     const kind = `${e.name}${isShooter(e) ? `（${SHOOTER_WORD}）` : ''}`;

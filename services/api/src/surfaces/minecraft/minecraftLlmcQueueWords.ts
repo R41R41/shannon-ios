@@ -188,7 +188,7 @@ export function underAttack(frame: BodyObservation | null): boolean {
   return near || (typeof health === 'number' && health <= 12);
 }
 
-/** Items taken off the queue in the last `DROPPED_LATELY_MS` (a stop of the one before them): said again in the live state, since a decision asked just before the stop was made without it (11/25: nine decisions in 27 s waited for an item that had already failed). */
+/** Items taken off the queue in the last `DROPPED_LATELY_MS` (a stop of the one before them): said again in the live state, since a decision asked just before the stop was made without it (nine decisions in 27 s waited for an item that had already failed). */
 export const DROPPED_LATELY_MS = 30_000;
 export function droppedLine(why: readonly string[]): string | null {
   return why.length ? `直近 ${DROPPED_LATELY_MS / 1000} 秒に列から外れた項目（体は動いていない）: ${why.slice(-3).join('／')}。待たずに、止まった理由を読んで次の手を出す` : null;

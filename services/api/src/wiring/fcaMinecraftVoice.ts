@@ -111,7 +111,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       if (bodies.length !== 1) return refuse('body_unavailable', intent.kind);
       if (!input.experienceId) return refuse('no_turn', intent.kind);
       if (!parts.sourceVisible(input.experienceId)) {
-        // 11/25: every spoken request was refused once as `turn_not_visible` and taken on the retry with a record, with no line to say why.
+        // Every spoken request was refused once as `turn_not_visible` and taken on the retry with a record, with no line to say why.
         if (parts.sourceWhy) {
           let why = 'unknown';
           try { why = parts.sourceWhy(input.experienceId); } catch { /* the line is only for the journal */ }

@@ -5,9 +5,9 @@ import { offer, type OnceFact } from './minecraftLlmcOnceFacts.js';
 /**
  * Two changes the model did not see coming, said once as facts (nothing is held or forced; what to do with them is the decision's):
  *
- * - The clock jumped (11/25: a night was skipped by a bed, then a person set the time to night; the plan made 70 s after it dug down into a cave as if it were day, and the
+ * - The clock jumped (a night was skipped by a bed, then a person set the time to night; the plan made 70 s after it dug down into a cave as if it were day, and the
  *   skipped night was never mentioned). The game's clock runs 20 ticks a second; a reading that moved more than 1,500 ticks beyond that, from one frame to the next, is a jump.
- * - A respawn (11/25: 2 s after dying with an empty pack, in the dark with two zombies and a spider within 5 m, a go to the place of the death 77 m away was sent, and she died
+ * - A respawn (2 s after dying with an empty pack, in the dark with two zombies and a spider within 5 m, a go to the place of the death 77 m away was sent, and she died
  *   again 30 s after the respawn). The input said the death's place and the empty pack in separate lines; one line puts together what a respawn is: nothing in the pack, what stands
  *   around, the hour, and how far the drops are.
  */
