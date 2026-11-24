@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts, wornItems } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
+import { cookingOf } from './minecraftConditions.js';
 import { SHOOTER_KINDS } from './minecraftLlmcReachWords.js';
 import type { PlanFacts } from './minecraftPlanFacts.js';
 
@@ -67,6 +68,24 @@ function weaponOf(counts: ReadonlyMap<string, number>): string | null {
   const best = blades.sort((a, b) => ORDER.indexOf(a.split('_')[0]!) - ORDER.indexOf(b.split('_')[0]!))[0];
   return best ? `${best.endsWith('sword') ? '剣' : '斧'} ${MATERIAL[best.split('_')[0]!] ?? ''}` : null;
 }
+/** The iron an iron sword takes (2), and the raw iron she carries counts as iron once smelted. */
+const SWORD_IRON = 2;
+/**
+ * 11/25 (a request to fight: the sword stayed stone and the meat raw while 2 iron stood in the pack, ten minutes before the first fight): what is between her and an iron
+ * sword, as a fact (「鉄の剣まであと鉄 N」), said while the sword she holds is not iron or better. Nothing is said of a sword she has.
+ */
+export function swordGap(counts: ReadonlyMap<string, number>, weapon: string | null): string {
+  if (weapon && /^剣 (?:鉄|ダイヤ|ネザライト)/u.test(weapon)) return '';
+  const ingots = counts.get('iron_ingot') ?? 0, raw = (counts.get('raw_iron') ?? 0) + (counts.get('iron_ore') ?? 0) + (counts.get('deepslate_iron_ore') ?? 0);
+  const lack = Math.max(0, SWORD_IRON - ingots - raw);
+  return lack > 0 ? `（鉄の剣まであと鉄 ${lack}）` : ingots >= SWORD_IRON ? '（鉄の剣は今作れる）' : `（鉄の剣は鉄 ${SWORD_IRON} で作れる・生の鉄は焼く）`;
+}
+/** The food points if the raw meat she carries were cooked, beside the points she has (「焼けば 62 点・40 秒」); empty when she carries none. */
+export function cookedWords(counts: ReadonlyMap<string, number>, food: number): string {
+  const cook = cookingOf(counts);
+  return cook ? `（焼けば ${Math.round((food + cook.gain) * 10) / 10} 点・${cook.seconds} 秒）` : '';
+}
+
 /** The gear line: weapon, armour, shield, food points, and what that comes to. Null when no hostile is listed. */
 export function gearLine(observation: BodyObservation | null, world: Record<string, unknown>): string | null {
   if (!hostilesOf(world).length) return null;
@@ -76,8 +95,8 @@ export function gearLine(observation: BodyObservation | null, world: Record<stri
   const held = worn.includes('shield'), shield = held ? '構えている' : (counts.get('shield') ?? 0) > 0 ? '持っているが構えていない' : 'なし';
   const health = finite(world.health), fit = !!weapon && (held || iron >= 3) && (health === null || health >= FIGHT_HEALTH);
   const verdict = !weapon ? WORD_NO_WEAPON : fit ? '→ 射手 1 体へ詰める目安に届く' : WORD_SHORT;
-  const food = Math.round(carriedFood(world, observation?.facts ?? {}).points);
-  return `戦う装備: ${weapon ?? '武器 なし'}・防具 ${pieces.join('・') || 'なし'}（${pieces.length}/4）・盾 ${shield}・食べ物 ${food} 点 ${verdict}`;
+  const exact = carriedFood(world, observation?.facts ?? {}).points, food = Math.round(exact);
+  return `戦う装備: ${weapon ?? '武器 なし'}${swordGap(counts, weapon)}・防具 ${pieces.join('・') || 'なし'}（${pieces.length}/4）・盾 ${shield}・食べ物 ${food} 点${cookedWords(counts, exact)} ${verdict}`;
 }
 
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */

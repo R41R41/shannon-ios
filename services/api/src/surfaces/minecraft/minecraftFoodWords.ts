@@ -8,9 +8,17 @@ const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 /** One food that fills a gap of points (the smallest that does, of foods a village or a hunt gives; the pack's own food is already counted). */
 const FILLERS: ReadonlyArray<readonly [string, number]> = [['potato', 1.6], ['sweet_berries', 2.4], ['apple', 6.4], ['bread', 11], ['cooked_beef', 20.8]];
-export function foodFill(gap: number): string {
+/** A gap this small (an apple's worth) is filled by any one food: the meat is named only for a larger one. */
+const TRIVIAL_GAP = 6.4;
+/** What cooking the raw meat she carries would add (`cookingOf`): the points gained and the seconds in one furnace. */
+export interface CookingGain { gain: number; seconds: number }
+export function foodFill(gap: number, cook?: CookingGain | null): string {
+  // 11/25 (a request to fight: 12.8 points carried as raw mutton, 62 if cooked, and the line said bread 3): the meat she carries comes first, since cooking it
+  // costs 10 seconds a piece in a furnace and needs no hunt.
+  if (cook && gap > TRIVIAL_GAP && cook.gain >= gap - 1e-9) return `持っている生肉を焼く（+${round1(cook.gain)} 点・かまど 1 基で ${cook.seconds} 秒）`;
   const one = FILLERS.find(([, points]) => points >= gap - 1e-9);
-  return one ? `${one[0]} 1 個` : `bread ${Math.ceil(gap / 11 - 1e-9)} 個`;
+  const rest = one ? `${one[0]} 1 個` : `bread ${Math.ceil(gap / 11 - 1e-9)} 個`;
+  return cook && gap > TRIVIAL_GAP && cook.gain > 0 ? `持っている生肉を焼いて +${round1(cook.gain)} 点（${cook.seconds} 秒）、足りない分は ${rest}` : rest;
 }
 
 /**
@@ -34,7 +42,7 @@ export function villageHayWords(hay: number | null | undefined): string {
 }
 
 /** The food points as every line says them: 「食料 39.6 点」, or against a need 「食料 39.6/40 点（あと 0.4 点: potato 1 個）」; the village's hay (when near) after the safe amount. */
-export function foodPointsWords(food: number, need?: number, hay?: number | null): string {
+export function foodPointsWords(food: number, need?: number, hay?: number | null, cook?: CookingGain | null): string {
   const have = round1(food);
   if (need === undefined) return `食料 ${have} 点`;
   if (have >= need) {
@@ -44,5 +52,5 @@ export function foodPointsWords(food: number, need?: number, hay?: number | null
     return `食料 ${have}/${need} 点・安心 ${comfort} 点まであと ${round1(comfort - have)} 点${hayWords ? `（${hayWords}）` : ''}`;
   }
   const gap = round1(need - have);
-  return `食料 ${have}/${need} 点（あと ${gap} 点: ${foodFill(gap)}）`;
+  return `食料 ${have}/${need} 点（あと ${gap} 点: ${foodFill(gap, cook)}）`;
 }

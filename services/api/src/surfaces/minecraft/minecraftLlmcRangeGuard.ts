@@ -84,7 +84,7 @@ function mineProblem(hand: Rec): Found {
 function smeltProblem(hand: Rec): Found {
   const kinds = Array.isArray(hand.items) ? hand.items.length : 0;
   return typeof hand.furnaces === 'number' && hand.furnaces < kinds
-    ? reason('furnaces', `furnaces は入れる物の種類数（${kinds}）以上。1 基に入るのは 1 種類で、足りなければ体は何も入れない`) : null;
+    ? reason('furnaces', `furnaces は入れる物の種類数（${kinds}）以上。1 基に入るのは 1 種類で、足りなければ体は何も入れない。鉄と肉のように種類が違う物は、furnaces を種類数以上にして 1 つの手で入れるか、種類ごとに別の smelt に分ける（片方を手から落とさない。肉は焼くと点が約 5 倍になり、鉄の精錬と並べて進められる）`) : null;
 }
 function fightProblem(hand: Rec, world: Rec): Found {
   const target = String(hand.target ?? '');

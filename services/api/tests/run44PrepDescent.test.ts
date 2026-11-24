@@ -55,7 +55,7 @@ describe('run 43 and run 44: she goes down without the preparation (the head say
     expect(JSON.stringify(seen?.update ?? {})).not.toMatch(/準備を省いた|"prep"/u);
     const facts = prepUnmetFacts(run43Tree(), doneFacts(at(14, RUN43_DOWN))!);
     expect(facts.map(item => item.key)).toEqual(['prep_unmet:p3']);
-    expect(facts[0]!.text).toMatch(/^準備の節 p3（済む条件: .*）は満たしていない（食料 28\.6\/40 点（あと 11\.4 点: [a-z_]+ \d+ 個））が、y=14 まで下りている$/u);
+    expect(facts[0]!.text).toMatch(/^準備の節 p3（済む条件: .*）は満たしていない（食料 28\.6\/40 点（あと 11\.4 点: (?:[a-z_]+ \d+ 個|持っている生肉を焼く（\+18\.8 点・かまど 1 基で 20 秒）)））が、y=14 まで下りている$/u);
   });
 
   it('run 44: the unmet preparation nodes before the iron are said (p2, p2.2, p3), none of the End\'s p11, in the Nether too', () => {

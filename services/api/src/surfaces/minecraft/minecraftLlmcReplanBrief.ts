@@ -33,6 +33,8 @@ export interface BriefInput {
   sameNode: number;
   /** The knowledge of the stage the node is in (`V2_STAGES`). */
   knowledge: string;
+  /** What people said to the task, oldest first, each with the time it was received and who said it (`heardLines`): the request and the words after it. */
+  words?: readonly string[];
 }
 
 type Rec = Record<string, unknown>;
@@ -117,6 +119,7 @@ function sections(input: BriefInput, cut: number): string[] {
   const parts: Array<[string, readonly string[]]> = [
     ['依頼', [`${input.goal}（開始から ${minutes(input.seconds)}）`]],
     ['止まり', [`${stall.why}（種類 ${stall.kind}）`, ...(stall.node ? [stalledWords(input)] : [])]],
+    ['人の言葉（依頼と、あとから届いた言葉。原文・話者・時刻つき）', input.words ?? []],
     ['時間の物差し', input.pace ? [`節目 ${input.pace.milestone}・目安 ${input.pace.targetSeconds} 秒・遅れ ${input.pace.secondsBehind} 秒`] : []],
     ['計画', planLines(input.tree)],
     ['今の様子', input.now],

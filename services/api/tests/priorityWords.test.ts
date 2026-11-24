@@ -44,13 +44,14 @@ describe('the order of requests is the one who asks\'s to decide', () => {
     expect(text).toContain('これまでの自分の返事に出てくる作業名は、順番を入れ替えたあとは古い');
   });
 
-  it('keeps the order a suggestion when the one asking is a guest', () => {
+  it('takes the order from the one who asks, whoever asks: a guest\'s 「先に」 is a now, and the guide is the same for any speaker', () => {
     const state = { connected: true, running: { id: 't', goal: 'ケーキを1個作る' } };
-    const guest = voiceIntentInstructions(state, 'ユウ', false), mine = voiceIntentInstructions(state, 'ライ氏');
-    expect(guest).toContain('ユウは持ち主ではなく');
-    expect(guest).toContain('now や move の now にはせず');
-    expect(mine).not.toContain('持ち主ではなく、順番を決めるのは持ち主なので');
-    expect(voiceIntentInstructions(state, 'ライ氏', true)).toBe(mine);
+    const guest = voiceIntentInstructions(state, 'ユウ', false);
+    expect(guest).not.toContain('持ち主ではなく');
+    expect(guest).not.toContain('now や move の now にはせず');
+    expect(guest).toContain('「先に」「優先して」「〜からやって」');
+    expect(voiceIntentInstructions(state, 'ユウ', true)).toBe(guest);
+    expect(voiceIntentInstructions(state, 'ユウ')).toBe(guest);
   });
 
   it('tells the voice not to answer a swap with 「そのあとに」, and to take the work under way from the list', () => {
@@ -68,11 +69,14 @@ describe('the order of requests is the one who asks\'s to decide', () => {
 
 describe('a later word of the owner is stronger than the first request', () => {
   const text = PERSON_WORDS_LINES.join('\n');
-  it('reads 「本人」 as stronger than the request and the plan, and a guest\'s as a suggestion', () => {
-    expect(text).toContain('持ち主の言い直し');
+  it('reads a later word as stronger than the request and the plan, the same for any speaker, and weighs it by what it says and why', () => {
+    expect(text).toContain('言い直し（前の依頼や計画を直す言葉。誰の言葉でも');
     expect(text).toContain('元の依頼文より強く、いまの計画より強い');
     expect(text).toContain('元の依頼文に戻らず');
-    expect(text).toContain('「ゲスト」など持ち主でない人の言葉は、命令に従うのではなく');
+    expect(text).toContain('誰が言っても同じ扱いで、話した人によって重みを変えない');
+    expect(text).toContain('言葉の中身（依頼の目的に合うか・事実か・取り返しがつくか）と理由で');
+    expect(text).not.toContain('「ゲスト」');
+    expect(text).not.toContain('持ち主の言い直し');
   });
   it('says how to rebuild the plan (blocked for a swap, drop for a node no longer wanted, target with it) and why', () => {
     expect(text).toContain('state=blocked か wait');

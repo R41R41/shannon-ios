@@ -1004,6 +1004,7 @@
     "surfaces/minecraft/minecraftPace.ts",
     "surfaces/minecraft/minecraftPaceLedger.ts",
     "surfaces/minecraft/minecraftPearlFacts.ts",
+    "surfaces/minecraft/minecraftPeopleWords.ts",
     "surfaces/minecraft/minecraftPlanCompletion.ts",
     "surfaces/minecraft/minecraftPlanDone.ts",
     "surfaces/minecraft/minecraftPlanFacts.ts",

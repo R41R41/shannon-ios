@@ -25,7 +25,7 @@ import { DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE } from '../src/surfaces/minecraft/
  * 8k tokens where they were about 31k.
  */
 const PINNED = {
-  transport: 'bab1f949f477c4d8',
+  transport: '2141e3298980f323',
   // r10: 「一歩ではない」に頭の高さ、「届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
   // Run 41: the live's key for the food she carries is `foodPoints.total` (was `food.points`), so the line that names it says so (前は 5309f0c44e4ce9ef).
   // 2026-11-04 (S0's order): the order rule's example 「ブレイズの棒 7 本の後にエンダーパール」 is 「鉄の剣を作った後にネザーへ」, the pearls no longer fixed after the rods (前は cb7a450223101f12).
@@ -140,7 +140,7 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     // 11/13 run 8: obsidian in sight is dug with no water, and the body fills the lava beside or under it first (about 44); the budget is 8,350.
     // 11/13 review: the O with lava right under it needs a water bucket (the line measures about the same as before).
     // 11/13 the body's dropGuard: the obsidian hand fills the lava beside a block only with its canPlace, and the core says to give it stone (about 50); the budget is 8,400.
-    // The reading of the live state says which lines are the application's own advice (about 40 tokens); the budget is 8,500.
+    // The reading of the live state says which lines are the application's own advice (about 40 tokens), and a task message that names a speaker is a person's words to weigh (about 58); the budget is 8,500.
     expect(after.llmcTokens).toBeLessThanOrEqual(8_500);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);

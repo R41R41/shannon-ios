@@ -47,7 +47,8 @@ import { progressEvents, type ProgressHand } from './minecraftProgressEvents.js'
  * head by it (`headIncidentKind`). */
 export const HEAD_INCIDENT_PREFIX = 'head:';
 export const STALL = Object.freeze({ nodeMs: 120_000, spotRadius: 3, spotStops: 2, waits: 3, refusals: 2 });
-export type StallKind = 'node_stalled' | 'same_spot_stops' | 'wait_loop' | 'decide_error' | 'death' | 'behind_pace';
+/** `person_words`: not a stall of the body: a person's words for the request under way arrived (`minecraftPeopleWords.ts`), and the plan is looked at again for them. */
+export type StallKind = 'node_stalled' | 'same_spot_stops' | 'wait_loop' | 'decide_error' | 'death' | 'behind_pace' | 'person_words';
 export interface Stall {
   kind: StallKind;
   /** What tells this stall from another of its kind (the node, the place, the way the decision failed): part of the

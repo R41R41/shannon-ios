@@ -1,4 +1,5 @@
 import type { MinecraftIntent } from '../../contracts/minecraftBodyContract.js';
+import type { SpeakerPos } from '../minecraft/minecraftPeopleWords.js';
 
 /**
  * What a Discord voice channel's turn may ask of her Minecraft body (Syzygy dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、
@@ -43,6 +44,18 @@ export interface VoiceMinecraftIntentInput {
   experienceId: string | null;
   /** Who said it; absent, the owner (the form before 2026-11-21). */
   speaker?: VoiceSpeaker;
+  /**
+   * What the task's head is shown of the spoken line beside the intent's goal (the goal is the voice's rewrite, cut to 120 characters). All four are optional: a
+   * line without them reads as before (the speaker's name from `speaker`, the time from `observedAt`, no words as spoken and no place).
+   * - `speakerName`: the speaker's shown name.
+   * - `speakerWords`: the words as the person said them.
+   * - `spokenAt`: when they said it (ISO).
+   * - `speakerPos`: where they stood in the game; absent when the body does not know.
+   */
+  speakerName?: string | undefined;
+  speakerWords?: string | undefined;
+  spokenAt?: string | undefined;
+  speakerPos?: SpeakerPos | undefined;
 }
 
 export interface VoiceMinecraftIntentResult {
