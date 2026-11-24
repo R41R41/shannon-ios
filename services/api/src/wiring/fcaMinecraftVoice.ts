@@ -43,7 +43,7 @@ const minecraftNameOf = (input: VoiceMinecraftIntentInput): string | null => {
 
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
   /**
-   * Who asked, as the head reads it: the shown name, the same for the owner and for anyone else (owner decision 2026-11-25: the words of anyone in the channel are
+   * Who asked, as the head reads it: the shown name, the same for the owner and for anyone else (the words of anyone in the channel are
    * taken by what they say, so the line carries no mark of who may be believed more), with the speaker's in-game name when it is known (「マイクラ名 X」): the head
    * reads whose gaze to look at, and whom to hand a thing to, from it. With no `speaker` (the form before 2026-11-21) it is 「本人」.
    */
