@@ -7,6 +7,7 @@ import { WEB_RESEARCH_DOING, WEB_RESEARCH_SUMMARIES, WEB_RESEARCH_TOOLS } from '
 import { DAILY_TOOLS, DAILY_SUMMARIES } from './dailyToolDefinitions.js';
 import { DEVICE_ACTION_DOING, DEVICE_ACTION_SUMMARIES, DEVICE_ACTION_TOOLS } from './deviceActionToolDefinitions.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule } from '../../contracts/minecraftRequestRules.js';
 import type { ToolExecutionEvidence } from '../../contracts/toolEvidenceContract.js';
 import { SELF_REWRITE_DOING, SELF_REWRITE_SUMMARIES } from './selfRewriteToolDefinitions.js';
 /**
@@ -285,7 +286,7 @@ export const SHANNON_TOOLS: readonly ShannonToolDefinition[] = Object.freeze([
       reason: { type: 'string', description: 'なぜそうしたいか（300字まで）', maxLength: 300 },
     }, ['operation', 'content']) }),
   conversationTool({ name: 'minecraft.request', domain: 'minecraft_body', effect: 'write',
-    description: `${MINECRAFT}に、ゲーム内の目標の実行を頼む（採集・製作・採掘・探索・建築・戦闘など）。何段階もかかる目標も、頼まれた元の目標のまま渡す。準備や手順への分解は体が決めるので、攻略の説明だけで済ませたり、別の小目標に置き換えたりしない。ライ氏にマイクラの中で実行を頼まれた時に、聞き返さずに使う。頼むと体の順番待ちに入り、体が受け取って動き、進み具合と結果があとで届く。頼んだ時点ではまだ達成していないので、完了を確認できる結果が届くまで終わった・集めた・倒したとは言わない。現実の用事には使わない。`,
+    description: `${MINECRAFT}に、ゲーム内の目標の実行を頼む（採集・製作・採掘・探索・建築・戦闘など）。何段階もかかる目標も、頼まれた元の目標のまま渡す。準備や手順への分解は体が決めるので、攻略の説明だけで済ませたり、別の小目標に置き換えたりしない。ライ氏にマイクラの中で実行を頼まれた時に、聞き返さずに使う。${adviceIsRequestRule('ライ氏', 'この道具で頼む')}${KEEP_CONDITIONS_RULE}${noPromiseRule('この道具を使わない返事にする時')}頼むと体の順番待ちに入り、体が受け取って動き、進み具合と結果があとで届く。頼んだ時点ではまだ達成していないので、完了を確認できる結果が届くまで終わった・集めた・倒したとは言わない。現実の用事には使わない。`,
     input: schema({
       goal: { type: 'string', description: `頼まれた元の目標を${MINECRAFT_GOAL_CHARACTERS}字以内。達成条件を保ち、準備の小目標や手順に置き換えない。個数を要する採集・製作の依頼で数がなければ、ほどよい数を決める（例: オークの原木を16個集める）`, minLength: 1, maxLength: MINECRAFT_GOAL_CHARACTERS },
       placement: { type: 'string', enum: ['end', 'next', 'now'], description: 'end=ほかの依頼のあと（既定）。next=いまの次。now=いまの依頼を保留して先に（先に・優先・夜や危険。終われば自動で戻る）' },
@@ -358,7 +359,7 @@ export const TOOL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
   'ownerDocs.search': 'ライ氏のAetherの文書を言葉で探す（自分の時間）',
   'ownerDocs.read': 'ライ氏のAetherの文書を1つ読む（自分の時間）',
   'aether.propose': 'ライ氏のAetherの文書を変える提案を送る',
-  'minecraft.request': 'マイクラの体に採集・製作・探索・建築・戦闘などの目標を渡して実行を頼む（長い目標もそのまま）',
+  'minecraft.request': 'マイクラの体に目標を渡して実行を頼む（助言・提案の形の頼みも、これで渡す）',
   'minecraft.status': 'マイクラの体に頼んだことの様子を見る',
   'minecraft.cancel': 'マイクラの体に頼んだことをやめてもらう',
   'notion.read': 'ライ氏のNotionの共有ページを探して読む',

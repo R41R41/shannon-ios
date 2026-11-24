@@ -35,6 +35,7 @@ import { VoiceRooms } from './voiceRoom.js';
 import { voiceIntentLineKind, intentLog, type VoiceMinecraftIntentResult, type VoiceMinecraftPort, type VoiceMinecraftState } from './voiceMinecraftPort.js';
 import { lifecycleRefusalLine, type LifecycleRequestAction, type VoiceLifecyclePort } from './voiceLifecyclePort.js';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
+import { toolRequestGuide } from '../../contracts/minecraftRequestRules.js';
 
 /**
  * The reply to what someone said in a Discord voice channel (dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、Discordでライ氏や
@@ -412,8 +413,18 @@ export class PlatformVoiceService {
   }
 
   /**
+   * Whether a request kind written in the field reaches the body: where the field is offered, and for the owner alone in his private room with the body
+   * in the game. There her tools are the way she is told to ask, but a request she wrote in the field instead is the same request: dropping it left
+   * her promise (「作るね」) with nothing behind it, and the owner said again what he had said (the listener changes nothing she does).
+   */
+  private carriesRequest(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
+    return this.offersIntent(seat, body) || (seat.owner && seat.policy.gate.ownerOnly && body !== null && body.state.connected);
+  }
+
+  /**
    * Whether the intent field is offered for the way of speaking: wherever the field is, and also to the owner alone in his private room (who
-   * has her ordinary tools for requests, so there the field only carries `speech`; anything else it carries is dropped by `carryIntent`).
+   * has her ordinary tools for requests, so there the field is offered for `speech` and the ways in and out; a request kind she writes in it all the same is
+   * carried (`carriesRequest`), so that a request is not thrown away for having been written by the other way).
    */
   private offersSpeech(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
     return this.offersIntent(seat, body) || (seat.owner && seat.policy.gate.ownerOnly);
@@ -458,12 +469,15 @@ export class PlatformVoiceService {
     const running = body?.state.running?.goal ?? null;
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
     const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/\s+/gu, ' ').trim().slice(0, 40) || '話している人';
-    const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who, seat.owner) : '';
+    // The owner alone gets the same guide as everyone (the listener changes nothing she does) whenever a request written in the field reaches the body.
+    const intent = body && (!ownerTools || this.carriesRequest(seat, body)) ? voiceIntentInstructions(body.state, who, seat.owner) : '';
+    // The owner alone asks the body by the tool, with the same three rules the intent guide gives everyone else (conditions kept, advice is a request, no promise).
+    const toolGuide = ownerTools ? toolRequestGuide(who, intent !== '').join('\n') : '';
     // The way of speaking is a kind of the intent field, so it is offered where the field is.
     const offer = this.lifecycleOffer(seat);
     const callJoin = this.callJoinOffer(request);
     const speech = this.offersSpeech(seat, body)
-      ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate, speechOnly: !this.offersIntent(seat, body), lifecycle: offer, callJoin }) : '';
+      ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate, speechOnly: !this.carriesRequest(seat, body), lifecycle: offer, callJoin }) : '';
     const lifecycle = offer ? lifecycleInstructions({ offer, who }) : '';
     return [
       platformVoiceInstructions({
@@ -475,7 +489,7 @@ export class PlatformVoiceService {
       situationBlock(situation, running, body?.state.resting ?? [], body ? this.rooms.unhanded(roomKey) : []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
-      intent, speech, lifecycle, callJoin ? callJoinInstructions({ who }) : '', directedBlock(request.directed === true, who, intent !== ''),
+      intent, toolGuide, speech, lifecycle, callJoin ? callJoinInstructions({ who }) : '', directedBlock(request.directed === true, who, intent !== '' || toolGuide !== ''),
     ].filter(Boolean).join('\n\n');
   }
 
@@ -607,7 +621,7 @@ export class PlatformVoiceService {
     if (intent?.kind === 'speech') { this.carrySpeech(seat, intent, out); return true; }
     if (intent?.kind === 'call_join') { this.carryCallJoin(request, out); return true; }
     if (intent?.kind === 'login' || intent?.kind === 'logout') { this.carryLifecycle(seat, request, intent.kind, answer); return true; }
-    if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return false;
+    if (!body || !intent || intent.kind === 'none' || !this.carriesRequest(seat, body)) return false;
     const { scopeKey } = this.dependencies;
     const ask = (experienceId: string | null) => body.port.intent({
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
