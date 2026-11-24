@@ -19,7 +19,9 @@ export interface BodyTaskContext {
   sessionId: string; generation: number; goal: string; completionCondition: string;
   /** The interrupted process is context only; it is never an instruction to replay that operation. */
   taskState?: { phase: string; progress: string; activeAction?: { name: string; operationId: string; input: BodyValue };
-    recentResults: readonly { name: string; ok: boolean; summary: string }[] };
+    recentResults: readonly { name: string; ok: boolean; summary: string }[];
+    /** Display only: the model's own thought for the act this command carries (one or two plain sentences, at most 90 characters), shown on the task tab. Absent when the act had none. */
+    thought?: string };
   /**
    * The task's plan tree (`@shannon/mind` planTree, design mb-llm-centric 2.7), for display only: the body shows
  * it (ShannonUI mod v2's

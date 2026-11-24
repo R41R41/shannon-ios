@@ -20,7 +20,7 @@ import { noteItemStart } from './minecraftLlmcNode.js';
 import { itemLabel,itemResult,neverRan,queueLines,QUEUE_MAX,unitOfReceipt,unknownResult } from './minecraftLlmcQueueWords.js';
 import { correctionWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
-import { madeInOf,withMadeIn } from './minecraftMadeIn.js';
+import { madeInOf,withMadeIn,withThought } from './minecraftMadeIn.js';
 import { watchBodyEvents } from './minecraftLlmcBodyEvents.js';
 import { readingOf } from './store/minecraftOperationState.js';
 import { noteResultsRead,noteStageRow } from '../../infra/decisionRecords/decisionRecordNotes.js';
@@ -415,7 +415,7 @@ void restoreReceipts();
       if (items.length > 16) items.splice(0, items.length - 16);
       execution ??= currentActionExecution();
       if (execution) execution.stepOutcome = 'unknown';
-      const handle = deps.control.enqueue({ id: item.id, context: withMadeIn(deps.context(), madeIn), lease: deps.lease, kind: 'skill', skill: spec.skill,
+      const handle = deps.control.enqueue({ id: item.id, context: withThought(withMadeIn(deps.context(), madeIn), spec.thought), lease: deps.lease, kind: 'skill', skill: spec.skill,
         arguments: spec.arguments, milliseconds: Math.min(DEADLINE_CAP_MS, ahead + maxMs + DEADLINE_MARGIN_MS), queue: envelope,
         ...(item.uses.length ? { uses: item.uses } : {}), ...(spec.resumeOf ? { resumeOf: spec.resumeOf.command } : {}) }, item.abort.signal);
       handle.receipt.then(receipt => settle(item, receipt), cause => fail(item, cause));

@@ -1,4 +1,4 @@
-import { ACT_MAX_HANDS, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
+import { ACT_MAX_HANDS, ACT_THOUGHT_DESCRIPTION, ACT_THOUGHT_MAX, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
@@ -281,6 +281,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
     hands: { type: 'array', minItems: 1, maxItems: ACT_MAX_HANDS, items: { type: 'string', maxLength: 600 },
       description: '順に動かす手（1〜12、1 手 1 行）。見えている手はまとめて出す。' },
     why: { type: 'string', maxLength: 120, description: 'この手の組のねらい（短く）' },
+    thought: { type: 'string', maxLength: ACT_THOUGHT_MAX, description: ACT_THOUGHT_DESCRIPTION },
     stopIf: { type: 'string', maxLength: 120, description: '例 "hostileWithin=8 hpBelow=10"' },
     accept: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'この act で戦うと決めた敵の種類（体はそれから逃げない）' },
     pre: { type: 'string', maxLength: 120, description: '始める直前に確かめる条件（例 "have:raw_iron>=3&near:furnace~4"）' },
@@ -297,7 +298,7 @@ export const SHORT_ACT_INPUT_SCHEMA = Object.freeze({
 });
 
 export interface ShortAct {
-  why?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; reserve?: boolean;
+  why?: string; thought?: string; hands: string[]; stopIf?: string; accept?: string[]; pre?: string; done?: string; repeat?: number; replace?: string[]; reserve?: boolean;
      dependsOn?: string[]; uses?: number[];
   keep?: string[];
 }
@@ -310,7 +311,7 @@ function stopIfText(stopIf: NonNullable<ActInput['stopIf']>): string {
 }
 /** act 全体 → 短い書き方。 */
 export function actToShort(input: ActInput): ShortAct {
-  return { ...(input.why !== undefined ? { why: input.why } : {}), hands: input.hands.map(handToLine),
+  return { ...(input.why !== undefined ? { why: input.why } : {}), ...(input.thought !== undefined ? { thought: input.thought } : {}), hands: input.hands.map(handToLine),
     ...(input.stopIf ? { stopIf: stopIfText(input.stopIf) } : {}), ...(input.accept?.length ? { accept: [...input.accept] } : {}),
     ...(input.pre ? { pre: conditionText(input.pre) } : {}), ...(input.done ? { done: conditionText(input.done) } : {}),
     ...(input.repeat !== undefined ? { repeat: input.repeat } : {}), ...(input.replace?.length ? { replace: [...input.replace] } : {}),
@@ -357,11 +358,12 @@ function handsOf(value: unknown, errors: string[], replacing = false): ActHand[]
 }
 /** 短い書き方 → act。読めない行は errors に（act は読めた手だけ）。手が JSON のまま混じっていればそのまま通す。 */
 export function shortToAct(input: unknown): { act: ActInput; errors: string[] } {
-  const value = (input ?? {}) as { why?: unknown; hands?: unknown; stopIf?: unknown; accept?: unknown };
+  const value = (input ?? {}) as { why?: unknown; thought?: unknown; hands?: unknown; stopIf?: unknown; accept?: unknown };
   const errors: string[] = [];
   const queued = queueFieldsOf(input, errors);
   const act: Record<string, unknown> = { hands: handsOf(value.hands, errors, !!queued.replace?.length) };
   if (typeof value.why === 'string') act.why = value.why;
+  if (typeof value.thought === 'string') act.thought = value.thought;
   if (typeof value.stopIf === 'string') act.stopIf = stopIfOf(value.stopIf, errors);
   else if (value.stopIf && typeof value.stopIf === 'object') act.stopIf = value.stopIf;
   if (Array.isArray(value.accept)) act.accept = (act.hands as ActHand[]).some(hand => hand.style === 'shield_rush')

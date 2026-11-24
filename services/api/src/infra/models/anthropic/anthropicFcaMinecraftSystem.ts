@@ -142,7 +142,7 @@ const V2_HEADER = [
   "Decide the next actions of Shannon's Minecraft body for this conversation's task. This is game control, not conversation, so use no character voice.",
   '',
   '## Output language: Japanese',
-  '- Write everything a person reads in short, plain, natural Japanese: your thinking, every act\'s why, plan titles and notes, chat, the fca_complete summary, and any other free text in a tool input. '
+  '- Write everything a person reads in short, plain, natural Japanese: your thinking, every act\'s why and thought, plan titles and notes, chat, the fca_complete summary, and any other free text in a tool input. '
     + 'Reason: the owner and the viewers read it, and they read Japanese.',
   '- Only machine fields stay as they are: ids, hand syntax, field names, and item/block/entity names used as values in a tool input (for example mc_act, plan_update, "[p1.2]", a block name in canDig). '
     + 'Inside a Japanese sentence (a why, a plan title or note, chat, the summary) write the item, block and entity names in Japanese (丸石, not cobblestone).',

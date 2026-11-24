@@ -114,6 +114,8 @@ export interface QueueAdd {
   current?: string | null;
   node: string | null;
   why: string;
+  /** The model's thought for this act (display only; goes to the body in the command's context, not its arguments). */
+  thought?: string;
   fixes: readonly string[];
   maxMs: number;
   /** Run 45's resume: this item sends a held one again (the item's mark and its command's id). Its result says so. */
