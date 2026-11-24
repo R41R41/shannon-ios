@@ -25,8 +25,8 @@ import {
   validatedVoiceTurn, voiceHash,
 } from './platformVoiceRequest.js';
 import {
-  FRIEND_NO_BODY_LINE, VOICE_MINECRAFT_REFUSALS, askedBackBlock, directedBlock, heardBlock, lifecycleInstructions, platformVoiceInstructions, situationBlock,
-  speechInstructions, voiceIntentInstructions,
+  VOICE_MINECRAFT_REFUSALS, askedBackBlock, callJoinInstructions, directedBlock, heardBlock, lifecycleInstructions, platformVoiceInstructions, situationBlock,
+  speakerPositionLine, speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
 import { warmedAudiences, type VoiceWarmAsk, type WarmAudience } from '../voice/voiceWarm.js';
@@ -161,7 +161,9 @@ export class PlatformVoiceService {
     if (!warm || !this.seated) return [];
     const body = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
     const at = Date.parse(this.dependencies.now());
-    const wanted = warmedAudiences(body.others === true).filter(audience => {
+    const known = typeof body.conversationId === 'string' && body.conversationId.length > 0 && body.conversationId.length <= 240
+      ? this.dependencies.bridge.bindingOf({ platform: 'discord', conversationId: body.conversationId }) : null;
+    const wanted = warmedAudiences(body.others === true, known ? known.audience === 'owner-private' : undefined).filter(audience => {
       const last = this.replyWarmedAt.get(audience);
       return last === undefined || at - last >= REPLY_WARM_INTERVAL_MILLISECONDS;
     });
@@ -382,7 +384,8 @@ export class PlatformVoiceService {
       this.rooms.useFiller(request.conversationId, begun.id);
       return begun;
     }
-    const wanted = switchOn(this.environment, 'SHANNON_DC_VOICE_FILLER');
+    // Words said with the key held are certainly answered (no filler is played for a decision not to answer): they get a short sound first even with the switch off.
+    const wanted = switchOn(this.environment, 'SHANNON_DC_VOICE_FILLER') || request.directed === true;
     const previous = this.rooms.lastFiller(request.conversationId);
     const filler = wanted ? selectVoiceFiller({ transcript: request.userMessage, reason: address.reason, previous }) : null;
     this.rooms.useFiller(request.conversationId, filler?.id);
@@ -417,12 +420,12 @@ export class PlatformVoiceService {
   }
 
   /**
-   * Whether the intent field is offered for going into or out of the server, and which: the owner's own turn only (the field is offered to anyone in
-   * the channel, so this is decided here, apart from it), with the body part on and the server's state known. Her body out of the server: `login`;
-   * in it: `logout`; an operation under way or a state not known: none. It does not need the body to be connected: that is what `login` brings.
+   * Whether the intent field is offered for going into or out of the server, and which: anyone's turn (who is listening
+   * changes nothing she does), with the body part on and the server's state known. Her body out of the server: `login`; in it: `logout`; an
+   * operation under way or a state not known: none. It does not need the body to be connected: that is what `login` brings.
    */
-  private lifecycleOffer(seat: ChannelSeat): LifecycleRequestAction | null {
-    if (!seat.owner || !switchOn(this.environment, 'SHANNON_DC_VOICE_MINECRAFT')) return null;
+  private lifecycleOffer(_seat: ChannelSeat): LifecycleRequestAction | null {
+    if (!switchOn(this.environment, 'SHANNON_DC_VOICE_MINECRAFT')) return null;
     try {
       const state = this.dependencies.lifecycle?.()?.state() ?? null;
       if (!state || state.pending) return null;
@@ -433,9 +436,17 @@ export class PlatformVoiceService {
     }
   }
 
-  /** Whether the intent field is offered at all: for requests, for the way of speaking, or for going in or out. */
-  private offersField(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null): boolean {
-    return this.offersSpeech(seat, body) || this.lifecycleOffer(seat) !== null;
+  /**
+   * Whether the intent field offers coming into the Discord call: the speaker spoke from the game's own voice (a key held) and the body says she is
+   * not in the conversation's call. A body that does not say (`inCall` absent) is not asked.
+   */
+  private callJoinOffer(request: VoiceTurnRequest): boolean {
+    return request.directed === true && request.inCall === false;
+  }
+
+  /** Whether the intent field is offered at all: for requests, for the way of speaking, for going in or out, or for coming into the call. */
+  private offersField(seat: ChannelSeat, body: { state: VoiceMinecraftState } | null, request: VoiceTurnRequest): boolean {
+    return this.offersSpeech(seat, body) || this.lifecycleOffer(seat) !== null || this.callJoinOffer(request);
   }
 
   private promptFor(
@@ -446,23 +457,36 @@ export class PlatformVoiceService {
     const situation = request.situation ?? this.rooms.situation(roomKey) ?? this.rooms.situation('default');
     const running = body?.state.running?.goal ?? null;
     const ownerTools = seat.owner && seat.policy.gate.ownerOnly;
-    const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/s+/gu, ' ').trim().slice(0, 40) || '話している人';
+    const who = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName?.replace(/\s+/gu, ' ').trim().slice(0, 40) || '話している人';
     const intent = !ownerTools && body ? voiceIntentInstructions(body.state, who, seat.owner) : '';
     // The way of speaking is a kind of the intent field, so it is offered where the field is.
     const offer = this.lifecycleOffer(seat);
+    const callJoin = this.callJoinOffer(request);
     const speech = this.offersSpeech(seat, body)
-      ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate, speechOnly: !this.offersIntent(seat, body), lifecycle: offer }) : '';
+      ? speechInstructions({ owner: seat.owner, who, mode: request.speechMode, rate: request.speechRate, speechOnly: !this.offersIntent(seat, body), lifecycle: offer, callJoin }) : '';
     const lifecycle = offer ? lifecycleInstructions({ offer, who }) : '';
     return [
       platformVoiceInstructions({
-        title: seat.title, ownerAlone: seat.policy.gate.ownerOnly, ownerSpeaking: seat.owner,
+        title: seat.title, ownerAlone: seat.policy.gate.ownerOnly || this.ownerAloneIn(seat), ownerSpeaking: seat.owner,
         speakerName: seat.owner ? null : request.sourceDisplayName, humans: seat.humans.size, fillerText: filler?.text,
+        viaMod: request.directed === true && request.speakerMinecraftName !== undefined, modOnly: this.modOnly(request),
+        speakerPosition: speakerPositionLine(request.speakerPosition),
       }),
       situationBlock(situation, running, body?.state.resting ?? [], body ? this.rooms.unhanded(roomKey) : []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
-      intent || (seat.owner ? '' : FRIEND_NO_BODY_LINE), speech, lifecycle, directedBlock(request.directed === true, who, intent !== ''),
+      intent, speech, lifecycle, callJoin ? callJoinInstructions({ who }) : '', directedBlock(request.directed === true, who, intent !== ''),
     ].filter(Boolean).join('\n\n');
+  }
+
+  /** The owner is the only one in the room (whatever the conversation's binding says): what the reply is told of who is listening follows this. */
+  private ownerAloneIn(seat: ChannelSeat): boolean {
+    return seat.owner && seat.humans.size === 1;
+  }
+
+  /** The words came by the game's own voice and nobody is in a Discord call under this conversation (the room's channel is the mod's own, `mod:<guild>`). */
+  private modOnly(request: VoiceTurnRequest): boolean {
+    return request.voiceChannelId?.startsWith('mod:') === true;
   }
 
   private async ask(
@@ -479,7 +503,7 @@ export class PlatformVoiceService {
         scopeKey, policy: seat.policy, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`, rawMessage: transcript,
         prompt: this.promptFor(seat, request, filler, body, address), threadTitle: seat.title, voice: true, ownOutreach: false,
         ...(seat.owner && seat.policy.gate.ownerOnly ? { minecraftTools: true } : {}),
-        ...(this.offersField(seat, body) ? { offerMinecraftIntent: true } : {}),
+        ...(this.offersField(seat, body, request) ? { offerMinecraftIntent: true } : {}),
         perception: { surface: 'platform', ownerWrote: seat.owner },
         store: turn => this.keep(seat, request, hash, turn, kept),
       }),
@@ -505,10 +529,10 @@ export class PlatformVoiceService {
     const transcript = request.userMessage;
     const voiceSeat = platformVoiceSeat({
       policy: seat.policy, owner: seat.owner, message: seat.owner ? transcript : `${request.sourceDisplayName}: ${transcript}`,
-      prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersField(seat, body),
+      prompt: this.promptFor(seat, request, filler, body, address), title: seat.title, offerMinecraftIntent: this.offersField(seat, body, request),
       answered: saidToHer(address), keep: turn => this.keep(seat, request, hash, turn, kept),
       // The owner speaking with nobody else in the channel: his room for her feelings, whatever the channel's binding says.
-      ownerAloneInRoom: seat.owner && seat.humans.size === 1,
+      ownerAloneInRoom: this.ownerAloneIn(seat),
     });
     const answer = await askSeated(seated, { scopeKey: this.dependencies.scopeKey, transcript, seat: voiceSeat }, out, {
       sentences: this.dependencies.sentences, ...(this.dependencies.splitter ? { splitter: this.dependencies.splitter } : {}),
@@ -581,11 +605,14 @@ export class PlatformVoiceService {
   ): Promise<boolean> {
     const intent = answer.minecraftIntent;
     if (intent?.kind === 'speech') { this.carrySpeech(seat, intent, out); return true; }
-    if (intent?.kind === 'login' || intent?.kind === 'logout') { this.carryLifecycle(seat, intent.kind, answer); return true; }
+    if (intent?.kind === 'call_join') { this.carryCallJoin(request, out); return true; }
+    if (intent?.kind === 'login' || intent?.kind === 'logout') { this.carryLifecycle(seat, request, intent.kind, answer); return true; }
     if (!body || !intent || intent.kind === 'none' || !this.offersIntent(seat, body)) return false;
     const { scopeKey } = this.dependencies;
     const ask = (experienceId: string | null) => body.port.intent({
       scopeKey, requestId: request.requestId, observedAt: request.observedAt, intent, experienceId,
+      speakerName: request.sourceDisplayName, speakerWords: request.userMessage, spokenAt: request.observedAt,
+      ...(request.speakerPosition ? { speakerPos: request.speakerPosition } : {}),
       speaker: { id: request.sourceUserId, name: request.sourceDisplayName, owner: seat.owner,
         ...(request.speakerMinecraftName ? { minecraftName: request.speakerMinecraftName } : {}) },
     }).catch((): VoiceMinecraftIntentResult => ({ delivered: false }));
@@ -614,16 +641,29 @@ export class PlatformVoiceService {
   }
 
   /**
-   * The owner's words about her going into or out of the server, asked of the operator's door, in parallel with her reply (never waited for:
-   * it takes seconds, and its end is told when it comes). Only the owner's seat, and only the kind that fits where her body is now at this
+   * Anyone's words about her coming into the Discord call: the body is told in the turn's lines (the body holds the Discord side, as it holds the way
+   * of speaking), and takes the channel the speaker is in now, else the owner's. Only when the field offered it this turn (a key held, not in the call).
+   */
+  private carryCallJoin(request: VoiceTurnRequest, out: VoiceOut): void {
+    if (!this.callJoinOffer(request)) {
+      this.log('Shannon platform voice call join dropped: not offered');
+      return;
+    }
+    out.line({ type: 'call', action: 'join' });
+    this.log('Shannon platform voice call join handed to the body');
+  }
+
+  /**
+   * Anyone's words about her going into or out of the server, asked of the operator's door, in parallel with her reply (never waited for:
+   * it takes seconds, and its end is told when it comes). Only the kind that fits where her body is now at this
    * moment: the field is read again here, so a model that chose the other one, or a turn that raced another, changes nothing. A request that
    * would be refused at once says so in a fixed sentence, because her reply has already said she would.
    */
-  private carryLifecycle(seat: ChannelSeat, kind: LifecycleRequestAction, answer: VoiceAnswer): void {
+  private carryLifecycle(seat: ChannelSeat, request: VoiceTurnRequest, kind: LifecycleRequestAction, answer: VoiceAnswer): void {
     const offer = this.lifecycleOffer(seat);
     const port = this.dependencies.lifecycle?.() ?? null;
-    if (!seat.owner || !port || offer !== kind) {
-      this.log(`Shannon platform voice lifecycle dropped: ${seat.owner ? `kind=${kind} offer=${offer ?? '-'}` : 'not owner'}`);
+    if (!port || offer !== kind) {
+      this.log(`Shannon platform voice lifecycle dropped: kind=${kind} offer=${offer ?? '-'}`);
       return;
     }
     const quick = port.check(kind);
@@ -632,7 +672,8 @@ export class PlatformVoiceService {
       if (!quick.ok) answer.spoken.say(lifecycleRefusalLine(quick, kind), true);
       return;
     }
-    void port.request(kind, { threadId: seat.policy.threadId, actor: SHANNON_OWNER_NAME }).then(
+    const actor = seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName.replace(/\s+/gu, ' ').trim().slice(0, 40) || '通話の参加者';
+    void port.request(kind, { threadId: seat.policy.threadId, actor }).then(
       result => this.log(`Shannon platform voice lifecycle ${kind} ok=${result.ok} ${result.ok ? result.state : result.code}`),
       () => this.log(`Shannon platform voice lifecycle ${kind} failed`),
     );

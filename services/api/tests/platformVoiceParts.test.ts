@@ -6,7 +6,8 @@ import { VOICE_ROOM_LIMITS, VoiceRooms } from '../src/surfaces/platform/voiceRoo
 import { ChatSentenceSplitter, splitChatSentences } from '../src/surfaces/text/chatSentenceSplitter.js';
 import { VOICE_SENTENCE_CUT } from '../src/surfaces/text/chatSentenceStream.js';
 import { SpokenSentences, VoiceOut } from '../src/surfaces/platform/platformVoiceLines.js';
-import { heardBlock, platformVoiceInstructions, situationBlock, voiceIntentInstructions } from '../src/surfaces/platform/platformVoicePrompt.js';
+import { callJoinInstructions, heardBlock, platformVoiceInstructions, situationBlock, speakerPositionLine, voiceIntentInstructions } from '../src/surfaces/platform/platformVoicePrompt.js';
+import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
 
 describe('the mouth queue (dc-speak-interface.md)', () => {
   const clock = () => {
@@ -211,6 +212,10 @@ describe('the voice prompt blocks', () => {
     expect(heardBlock([{ userId: 'u', name: 'ミキ', text: 'まだだよ', at: '2026-10-20T12:00:00.000Z' }])).toContain('- ミキ: まだだよ');
     expect(situationBlock(null, null)).toBe('');
     expect(situationBlock('洞窟にいる。', 'エンドラを倒す')).toContain('「エンドラを倒す」をしている');
+    // Nothing running and no scene text: the stopped requests and the promises not handed on are still told (the block used to vanish whole).
+    expect(situationBlock(null, null, ['「羊を倒す」（止めた）'])).toContain('いま動いていない、最近の依頼: 「羊を倒す」（止めた）');
+    expect(situationBlock(null, null, [], ['ベッドは置くね'])).toContain('ベッドは置くね');
+    expect(situationBlock(null, null, [], ['ベッドは置くね'])).toContain('いま、頼まれて動いている作業は無い');
     expect(voiceIntentInstructions({ connected: false, running: null }, 'ライ氏')).toContain('いまは渡せない');
     expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, 'ユウ')).toContain('いまの作業への伝言');
     expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ氏')).toContain('はっきり頼んだら、聞き返さずに引き受けて kind=task');
@@ -236,5 +241,51 @@ describe('the tags of a reply, counted for the log (no text)', () => {
     spoken.say('[happy] やった！ [laughs] ほんとに？');
     expect(spoken.tagSummary).toBe('laughs:2,happy:1');
     expect(spoken.count).toBe(3);
+  });
+});
+
+describe('what a reply is told of where and how she is spoken to, and of requests in the form of advice', () => {
+  const facts = { title: '一般', ownerAlone: true, ownerSpeaking: true, speakerName: null, humans: 1, audioTags: false } as const;
+
+  it('describes the voice from inside the game as it is: no Discord call, the place of the speaker, and the one length', () => {
+    const modOnly = platformVoiceInstructions({ ...facts, viaMod: true, modOnly: true,
+      speakerPosition: speakerPositionLine({ x: 10.2, y: 64, z: -3.7, dimension: 'overworld' }) });
+    expect(modOnly).toContain('Discordの通話には入っていない。マイクラの中の「キーを押して話す声」で話している');
+    expect(modOnly).not.toContain('ボイスチャンネル「一般」');
+    expect(modOnly).toContain('いま聞こえているのは');
+    expect(modOnly).toContain('オーバーワールドの x=10, y=64, z=-4');
+    expect(modOnly).toContain('「1〜3文」とあっても、この通話では、この40字までを守る');
+    expect(modOnly).toContain('話した人が場所や状況を言った時');
+    expect(modOnly).toContain('約束しない');
+    const call = platformVoiceInstructions({ ...facts, viaMod: true, speakerPosition: null });
+    expect(call).toContain('ボイスチャンネル「一般」');
+    expect(call).toContain('Discordの通話の声ではない');
+    expect(speakerPositionLine(undefined)).toBeNull();
+    expect(speakerPositionLine({ x: 1, y: 2, z: 3, dimension: 'the_nether' })).toBe('ネザーの x=1, y=2, z=3');
+  });
+
+  it('asks the one coming into the call to be told apart from coming into the game', () => {
+    const text = callJoinInstructions({ who: 'ライ氏' });
+    expect(text).toContain('kind=call_join');
+    expect(text).toContain('マイクラの中へ入る話（「マイクラに入ってきて」）は call_join でなく login');
+    expect(text).toContain('理由: 入るのは返事のあとで、数秒かかる');
+  });
+
+  it('takes advice, a suggestion and the answer to her question as a request, keeps the conditions, and does not promise what is not handed on', () => {
+    const guide = minecraftQueueGuide({ queueLines: [], running: null, who: 'ライ氏' }).join('\n');
+    expect(guide).toContain('助言・提案・質問への答えの形');
+    expect(guide).toContain('夜が来る前に先にベッド作った方がいいよ');
+    expect(guide).toContain('寝ずにスケルトンを倒して骨粉を手に入れようか');
+    expect(guide).toContain('近くに適当に置いて寝て');
+    expect(guide).toContain('条件（いつ・どうやって・何のため・場所');
+    expect(guide).toContain('理由: 体の作業を進める側は、この goal と、渡される言葉の原文だけ');
+    expect(guide).toContain('約束を返事に入れない');
+    // Nobody's order is decided by who they are.
+    const guest = minecraftQueueGuide({ queueLines: [], running: null, who: 'ユウ', owner: false }).join('\n');
+    expect(guest).not.toContain('持ち主ではなく');
+    expect(guest).toContain('順番は頼んだ人が決める');
+    // While a request runs, a thing to put down or hand over is still a request of its own.
+    const running = minecraftQueueGuide({ queueLines: ['#1 実行中 「ケーキを作る」'], running: 'ケーキを作る', who: 'ライ氏' }).join('\n');
+    expect(running).toContain('message でなく kind=task にする');
   });
 });

@@ -11,6 +11,24 @@ import { minecraftMilestones } from './minecraftReflexAdapter.js';
  * `withMinecraftWorking` it wraps the body instead of growing it: at each decision it says which task this is, while a tool runs it says
  * which, and when the step ends it says so. Nothing it does can change a decision or fail a step: every call into the view is caught.
  */
+/**
+ * What came of a hand, in a line a conversation may carry: a failure with its reason (the tool's own words), or the outcome the tool reported when
+ * it is a plain sentence. Nothing for a result without either (a long structured report says nothing short).
+ */
+export function handResultLine(result: { ok: boolean; text: string }): string | null {
+  const text = String(result.text ?? '').replace(/\s+/gu, ' ').trim();
+  if (!text) return null;
+  if (!result.ok) return `うまくいかなかった（${text.slice(0, 60)}）`;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    const fields = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    const said = [fields?.outcome, fields?.summary, fields?.message].find((value): value is string => typeof value === 'string' && value.trim().length >= 4);
+    return said ? said.trim().slice(0, 70) : null;
+  } catch {
+    return /^[{[]/u.test(text) ? null : text.slice(0, 70);
+  }
+}
+
 export function withMinecraftLive<Made extends { body: FcaBodyLifecycle }>(made: Made, parts: {
   live: MinecraftLiveSink | undefined; control: MinecraftControl; step: TaskStep;
   /** The plan she keeps (the step's `llmc.plan`): a change of it is something she can say. Absent: no plan to read. */
@@ -73,6 +91,7 @@ export function withMinecraftLive<Made extends { body: FcaBodyLifecycle }>(made:
     },
     noteResult(call, result, durationMilliseconds) {
       inner.noteResult?.(call, result, durationMilliseconds);
+      if (call.name === 'mc.act') told(() => { const line = handResultLine(result); if (line) live.result?.(step.taskId, line); });
       if (call.name.startsWith('mc.')) told(() => live.activity(step.taskId, null));
       if (call.name === 'plan.update' && result.ok) told(() => promised(call));
       if (call.name === 'plan.update' || call.name === 'mc.act') told(() => live.plan?.(step.taskId, parts.plan?.()));

@@ -45,6 +45,8 @@ export interface MinecraftLiveSink {
   need?(taskId: string, need: { item: string; count: number; use: string }): void;
   /** What she means by the hands she sends (an act's `why`). */
   thought?(taskId: string, why: string): void;
+  /** What came of a hand she sent (a short line: a failure with its reason, or the outcome the tool reported). */
+  result?(taskId: string, line: string): void;
   /** Her work was stopped, cancelled or held (a stop of a task; the list's cancel, hold or stop): what is still to be said of it is not said. */
   released?(): void;
 }
@@ -71,7 +73,12 @@ interface PlanMemory { revision: number; nodes: Map<string, { title: string; sta
 interface TaskState {
   info: LiveTaskInfo; call: { name: string; input: unknown } | null; updatedAt: number; endedAt: number | null; milestone: number | null; late: Set<string>;
   plan: PlanMemory | null; needs: Map<string, number>; doneTold: boolean; lastThought: string; lastThoughtAt: number | null;
+  /** What came of the hands she sent lately, newest last (`result`): shown to the conversation with her aims. */
+  handLog: Array<{ at: number; line: string }>;
 }
+/** What of her work's own reasoning a conversation reads: how many lines, and of which moments (the aim of a hand, a change of the plan, a step done, a need found). */
+const WORK_NOTES_SHOWN = 5, HAND_LOG_KEPT = 4;
+const WORK_NOTE_KINDS: ReadonlySet<string> = new Set(['thinking', 'plan_changed', 'plan_step', 'material_needed']);
 /** A title or a use as a moment carries it: one line, short, nothing the room should not read aloud. */
 const brief = (value: unknown, limit = 24): string => String(value ?? '').replace(/\s+/gu, ' ').replace(/^\[[^\]]{1,12}\]\s*/u, '').trim().slice(0, limit);
 const HAVE = /have:([a-z][a-z0-9_]{0,40})\s*>=\s*(\d{1,4})/gu;
@@ -116,7 +123,7 @@ eplying, heard). */
     for (const [id, task] of this.tasks) if (task.endedAt !== null && now - task.endedAt > 600_000) this.tasks.delete(id);
     this.tasks.set(info.taskId, { info, call: before?.call ?? null, updatedAt: now, endedAt: null, milestone: before?.milestone ?? null,
       late: before?.late ?? new Set(), plan: before?.plan ?? null, needs: before?.needs ?? new Map(), doneTold: before?.doneTold ?? false,
-      lastThought: before?.lastThought ?? '', lastThoughtAt: before?.lastThoughtAt ?? null });
+      lastThought: before?.lastThought ?? '', lastThoughtAt: before?.lastThoughtAt ?? null, handLog: before?.handLog ?? [] });
   }
 
   /** The items her tasks ask for now, with how many: the detector tells what she gets of them (`material_got`). */
@@ -217,6 +224,29 @@ eplying, heard). */
       task.lastThought = text;
       this.emitWork(task, { kind: 'thinking', key: `why:${taskId}:${this.now()}`, at: this.now(), facts: { why: text } });
     } catch { /* the commentary never fails a decision */ }
+  }
+
+  result(taskId: string, line: string): void {
+    try {
+      const task = this.tasks.get(taskId), text = brief(line, 90);
+      if (!task || text.length < 4) return;
+      task.handLog.push({ at: this.now(), line: text });
+      if (task.handLog.length > HAND_LOG_KEPT) task.handLog.shift();
+    } catch { /* the commentary never fails a decision */ }
+  }
+
+  /**
+   * What the work's own reasoning was lately, newest first, for the conversation to answer 「どうしてそうしてるの」 「うまくいってる？」 with: the aims of
+   * the hands (not the newest, which is the block's 「さっきの狙い」), plan changes and steps, needs found, and what came of the hands. At most `WORK_NOTES_SHOWN`.
+   */
+  private workNotes(task: TaskState | null, now: number): Array<{ ageSeconds: number; line: string }> {
+    const fresh = (at: number) => now - at <= SHOWN_MOMENT_MINUTES * 60_000;
+    const moments = this.moments.filter(moment => WORK_NOTE_KINDS.has(moment.kind) && fresh(moment.at)
+      && !(moment.kind === 'thinking' && task !== null && moment.facts.why === task.lastThought))
+      .map(moment => ({ at: moment.at, line: liveFactLine(moment).replace(/。$/u, '') }));
+    const hands = (task?.handLog ?? []).filter(item => fresh(item.at)).map(item => ({ at: item.at, line: `手の結果: ${item.line}` }));
+    return [...moments, ...hands].sort((a, b) => b.at - a.at).slice(0, WORK_NOTES_SHOWN)
+      .map(item => ({ ageSeconds: Math.max(0, Math.round((now - item.at) / 1000)), line: item.line }));
   }
 
   /** A request that was done lately (its task's phase says so) is told once; her own errands are not asked about. */
@@ -441,7 +471,8 @@ eplying, heard). */
     const plan = task ? this.planSummary(task) : null;
     const aim = task && task.lastThoughtAt !== null && task.lastThought && now - task.lastThoughtAt <= SHOWN_MOMENT_MINUTES * 60_000
       ? { ageSeconds: Math.max(0, Math.round((now - task.lastThoughtAt) / 1000)), text: task.lastThought } : null;
-    return { ...base, ...(plan ? { plan } : {}), ...(aim ? { aim } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step && task && DRAGON_RUN.test(task.info.goal) ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
+    const work = this.workNotes(task, now);
+    return { ...base, ...(plan ? { plan } : {}), ...(aim ? { aim } : {}), ...(work.length ? { work } : {}), frameAgeSeconds: Math.round(ageMs / 1000), milestone: step && task && DRAGON_RUN.test(task.info.goal) ? { name: step.name, next: step.next, elapsed: base.elapsedSeconds } : null,
       dimension: dimensionOfWorld(world, observation.facts), biome: typeof world.biome === 'string' ? world.biome.slice(0, 40).replace(/_/gu, ' ') : null,
       time: timeWords(dimensionOfWorld(world, observation.facts) === 'overworld' ? dayTick(world) : null),
       health: health === null ? null : Math.round(health), food, threats, carried: carriedWords(counts), map: mapWords(world.mapSummary),

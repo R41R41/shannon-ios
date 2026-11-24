@@ -158,7 +158,7 @@ export class PlatformReplyService {
     stored: { experienceId?: string; turn?: CompletedTurn }, body: { port: VoiceMinecraftPort; state: VoiceMinecraftState } | null,
   ): Promise<string> {
     if (!body?.state.connected || !intent || intent.kind === 'none' || intent.kind === 'speech'
-      || intent.kind === 'login' || intent.kind === 'logout') return '';
+      || intent.kind === 'login' || intent.kind === 'logout' || intent.kind === 'call_join') return '';
     const { port } = body, { turn } = stored;
     const { scopeKey } = this.dependencies;
     const needsSource = intent.kind === 'task' || intent.kind === 'message';
