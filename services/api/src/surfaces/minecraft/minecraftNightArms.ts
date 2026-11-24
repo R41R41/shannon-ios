@@ -147,7 +147,7 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
-    + `${netherShare(left, nether)}。今の節を進め、夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）。ただし${SLEEP_COST}。夜に湧く敵を倒す・夜のうちに急ぐ節や、人が寝ないと言った時は入れない（入れた後は ${SLEEP_SKIP} で予約を消せる）。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
+    + `${netherShare(left, nether)}。今の節を進め、夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）。ケーキ・羊毛・道具づくりなど夜を使わない依頼（昼でも夜でもできる作業）も、入れてよい。理由: 夜の地上は敵が増えて危なく、寝れば夜を飛ばして朝まで安全に過ごせる。夜を使う依頼（夜に湧く敵を倒す・夜のうちに急ぐ節）や、人が寝ないと言った時は入れない（理由: 寝ると夜が消え、その依頼の材料が来ない。入れた後は ${SLEEP_SKIP} で予約を消せる）。ただし${SLEEP_COST}。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
 }
 
 /**
