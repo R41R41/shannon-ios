@@ -20,7 +20,7 @@ const context = (): BodyTaskContext => ({ scopeKey: 's', taskId: 't', taskRevisi
 
 describe('the field the model writes', () => {
   it('is in the short schema the model sees, with a length and a reason in its description', () => {
-    const thought = (SHORT_ACT_INPUT_SCHEMA.properties as Record<string, { type: string; maxLength: number; description: string }>).thought!;
+    const thought = (SHORT_ACT_INPUT_SCHEMA.properties as unknown as Record<string, { type: string; maxLength: number; description: string }>).thought!;
     expect(thought.type).toBe('string');
     expect(thought.maxLength).toBe(ACT_THOUGHT_MAX);
     expect(thought.description).toContain('画面');
@@ -46,7 +46,7 @@ describe('the field the model writes', () => {
     expect(llmcInputProblem('mc.act', input)).toBeNull();
   });
   it('says in the field own words what it is for: display only, plain facts, no names or voices, and that it may be left out', () => {
-    const description = (SHORT_ACT_INPUT_SCHEMA.properties as Record<string, { description: string }>).thought!.description;
+    const description = (SHORT_ACT_INPUT_SCHEMA.properties as unknown as Record<string, { description: string }>).thought!.description;
     for (const word of ['表示だけ', '事実', '口調はつけない', 'Discord', '省いてよい']) expect(description).toContain(word);
     expect(description).toBe(ACT_THOUGHT_DESCRIPTION);
   });
