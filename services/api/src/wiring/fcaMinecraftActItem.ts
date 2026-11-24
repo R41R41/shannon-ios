@@ -52,7 +52,8 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   // `pre` and `replace` are the head's (the envelope carries `pre`), and so are `dependsOn` (the envelope), `uses` (kept with the
 // command, never sent to the body) and `keep`
   // (made into promises of the plan below, once the queue has the act).
-  const { pre: modelPre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, reserve: _reserve, ...rawArgs } = input;
+  // `thought` is the head's too: it is for the task tab, goes to the body in the command's context and never in the act's arguments (the body's act takes none).
+  const { pre: modelPre, replace: _replace, dependsOn: _dependsOn, uses: _uses, keep, reserve: _reserve, thought, ...rawArgs } = input;
   // R3-1 (4): a reserve carries the head's safety defaults: its `pre` (safe, health, near here) and its `stopIf`
   // (the body gets the stopIf in its arguments, the pre in the envelope).
   function reserveDefaults() {
@@ -79,7 +80,7 @@ export async function sendItem(parts: { queue: LlmcQueue; control: MinecraftCont
   const queueItemFields = (): Parameters<LlmcQueue['add']>[0] => ({ call: { id: call.operationId, name: call.name, input: call.input },
      operationId: call.operationId, input: timed,
     arguments: args as Record<string, unknown>, skill: parts.skill, ...(pre ? { pre } : {}), node, current: parts.current ?? null,
-    why: String(input.why ?? ''), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
+    why: String(input.why ?? ''), ...(thought ? { thought } : {}), fixes: [], ...(reserving ? { reserve: true } : {}), ...(parts.madeIn !== undefined ? { madeIn: parts.madeIn } : {}),
     maxMs: actMilliseconds(timed, feet) });
   // run 4: a wait-only act behind an item that runs is answered as "woken when it ends", not refused (the queue's own wakes do it; nothing is added).
   // A wait-only act for a result (it names the item, or one waits unread) goes to no wait of the body: the result is told now, or the next hand is asked for.

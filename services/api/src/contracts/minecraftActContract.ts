@@ -1,5 +1,5 @@
 import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SHAPES,VERTICAL_TOWARDS,VERTICAL_LIQUIDS,EQUIP_SLOTS,KEEP_MAX,
-  KEEP_FORM } from './minecraftActTypes.js';
+  KEEP_FORM,ACT_THOUGHT_MAX,ACT_THOUGHT_DESCRIPTION } from './minecraftActTypes.js';
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
@@ -7,7 +7,7 @@ import { BED_BURST_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstCo
 import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
-      KEEP_FORM } from './minecraftActTypes.js';
+      KEEP_FORM, ACT_THOUGHT_MAX, ACT_THOUGHT_DESCRIPTION } from './minecraftActTypes.js';
 export type { ActPos, ActFace, HandKind, ActHand, ActStopIf, ActKeep, ActInput, EarlierPass, ActHandLine, EnderEyeFlight, ActResult,
    ViewInput, ViewResult, LlmCentricWorld } from './minecraftActTypes.js';
 export type { RushCode, RushState, ShieldRushArgs, ShieldRushResult } from './minecraftShieldRushContract.js';
@@ -231,6 +231,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
       blockChanged: { type: 'array', minItems: 1, maxItems: 4, items: pos('見張るブロック') },
     } },
     why: { type: 'string', maxLength: 120, description: 'この手の組のねらい（短く）' },
+    thought: { type: 'string', maxLength: ACT_THOUGHT_MAX, description: ACT_THOUGHT_DESCRIPTION },
     accept: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'この act で戦うと決めた敵の種類（体はそれから逃げない）' },
     repeat: { type: 'integer', minimum: 2, maximum: 8, description: '手の組を最大何回まわすか' },
     done: { ...CONDITION_SCHEMA, description: '満たした所で済みにする条件' },

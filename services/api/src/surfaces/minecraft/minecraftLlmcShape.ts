@@ -1,4 +1,4 @@
-import { handFieldNames, slotWordOf, type HandKind } from '../../contracts/minecraftActContract.js';
+import { ACT_THOUGHT_MAX, handFieldNames, slotWordOf, type HandKind } from '../../contracts/minecraftActContract.js';
 import { HAND_FIELDS } from '../../contracts/minecraftActHandRules.js';
 
 /**
@@ -23,6 +23,9 @@ const ACT_FIXES: readonly Fix[] = [
   listOf('hands', value => !!plainRecord(value)),
   listOf('accept', value => typeof value === 'string'),
   { key: 'why', when: value => typeof value === 'string' && value.length > 120, make: value => String(value).slice(0, 120), say: 'why を 120 字に切った' },
+  // A thought is for the screen only: one that runs long is cut rather than the whole act refused.
+  { key: 'thought', when: value => typeof value === 'string' && value.length > ACT_THOUGHT_MAX, make: value => String(value).slice(0, ACT_THOUGHT_MAX),
+    say: `thought を ${ACT_THOUGHT_MAX} 字に切った` },
 ];
 const HAND_FIXES: readonly Fix[] = [
   { key: 'note', when: value => typeof value === 'string' && value.length > 40, make: value => String(value).slice(0, 40), say: 'note を 40 字に切った' },

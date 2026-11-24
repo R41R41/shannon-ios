@@ -330,10 +330,22 @@ export const KEEP_FORM =
   `keep=spruce_planks:4:作業台（品目:数:用途。複数はコンマで keep=spruce_planks:4:作業台,cobblestone:8:かまど。品目は物の名前か food、数は 1〜${PLAN_LIMITS.promiseCount}、` +
   `用途は ${PLAN_LIMITS.promiseUse} 字まで、${KEEP_MAX} つまで）`;
 
+/** The most characters of an act's `thought` (the task tab wraps it whole; a longer one is cut by the head's plain fix). */
+export const ACT_THOUGHT_MAX = 90;
+export const ACT_THOUGHT_DESCRIPTION =
+  '任意。持ち主が画面のタスクタブで読む、いまの考え（表示だけで、手は決まらない）。見た事と、次にやる事とそのわけを、事実の短い日本語 1〜2 文（60 字まで）で。口調はつけない。'
+  + 'プレイヤーの名前・Discord・声・非公開の物は書かない（他の人にも見える）。前と同じ狙いで続けるなら省いてよい（省けば why が出る）';
+
 export interface ActInput {
   hands: readonly ActHand[];
   stopIf?: ActStopIf;
   why?: string;
+  /**
+   * The model's own thought for this act, one or two plain Japanese sentences (what it saw, what it will do next and why): shown to the
+   * player on the task tab. A head-only field, never sent to the body in the act's arguments (the body's act takes no such argument);
+   * it goes to the body in the command's context (`taskState.thought`) and is used for display only.
+   */
+  thought?: string;
   accept?: readonly string[];
   /**
    * The task queue (design 2026-10-26): `repeat` runs the hands up to that many times (2–8; relative hands only,

@@ -46,6 +46,16 @@ export function withMadeIn(context: BodyTaskContext, madeIn: MadeIn | null): Bod
   return madeIn ? { ...context, life: madeIn.life, headBoot: madeIn.headBoot, madeIn } : context;
 }
 /**
+ * A command's context with the model's thought for the act it carries (display only: the task tab shows it). Unchanged when the act had none;
+ * the thought is one line, cut to `max` characters.
+ */
+export function withThought(context: BodyTaskContext, thought: string | undefined, max = 90): BodyTaskContext {
+  const text = (thought ?? '').replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, max);
+  // A task's command context has no taskState of its own (only the reflex adapter fills one), so the thought carries a bare one.
+  const base = context.taskState ?? { phase: 'executing', progress: '', recentResults: [] };
+  return text ? { ...context, taskState: { ...base, thought: text } } : context;
+}
+/**
  * Whether what a decision read is no longer the body's now, by the order of the contract's table (the connection first, then the
  * life, then the dimension's
  * generation): the body's boot or connection changed; the life number moved on (a death, or the file made again); the dimension's
