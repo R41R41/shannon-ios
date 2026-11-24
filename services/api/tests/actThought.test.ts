@@ -88,6 +88,10 @@ describe('what goes to the body', () => {
     expect(withThought(context(), undefined)).toEqual(context());
     // The rest of the context is left as it was.
     expect(withThought(context(), 't')).toEqual({ ...context(), taskState: { ...context().taskState!, thought: 't' } });
+    // The context a task's command really has carries no taskState: the thought brings a bare one, and the rest stays.
+    const { taskState: _none, ...bare } = context();
+    expect(withThought(bare, '考え')).toEqual({ ...bare, taskState: { phase: 'executing', progress: '', recentResults: [], thought: '考え' } });
+    expect(withThought(bare, '')).toEqual(bare);
   });
 });
 

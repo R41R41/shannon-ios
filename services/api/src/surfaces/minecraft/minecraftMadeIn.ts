@@ -51,7 +51,9 @@ export function withMadeIn(context: BodyTaskContext, madeIn: MadeIn | null): Bod
  */
 export function withThought(context: BodyTaskContext, thought: string | undefined, max = 90): BodyTaskContext {
   const text = (thought ?? '').replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, max);
-  return text && context.taskState ? { ...context, taskState: { ...context.taskState, thought: text } } : context;
+  // A task's command context has no taskState of its own (only the reflex adapter fills one), so the thought carries a bare one.
+  const base = context.taskState ?? { phase: 'executing', progress: '', recentResults: [] };
+  return text ? { ...context, taskState: { ...base, thought: text } } : context;
 }
 /**
  * Whether what a decision read is no longer the body's now, by the order of the contract's table (the connection first, then the
