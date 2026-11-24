@@ -173,7 +173,8 @@ function harness(options: { onAir?: { note: string } | null; server?: ReturnType
   const aki = peopleStore.createPerson('owner', { displayName: 'アキ', howKnown: 'テスト' }, START);
   const mina = peopleStore.createPerson('owner', { displayName: 'ミナ', howKnown: 'テスト' }, START);
   peopleStore.linkPlatformPerson('owner', { platform: 'minecraft', userId: 'Aki_MC', personId: aki.id, displayName: 'Aki_MC', firstSeenAt: START, lastSeenAt: START });
-  peopleStore.linkPlatformPerson('owner', { platform: 'minecraft', userId: 'mina_mc', personId: mina.id, displayName: 'mina_mc', firstSeenAt: START, lastSeenAt: START });
+  // A game account's link is keyed by an id and keeps the player's name.
+  peopleStore.linkPlatformPerson('owner', { platform: 'minecraft', userId: 'mc-user-0002', personId: mina.id, displayName: 'Mina_MC', firstSeenAt: START, lastSeenAt: START });
   peopleStore.linkPlatformPerson('owner', { platform: 'discord', userId: FRIEND, personId: aki.id, displayName: 'aki', firstSeenAt: START, lastSeenAt: START });
   let counter = 0;
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
