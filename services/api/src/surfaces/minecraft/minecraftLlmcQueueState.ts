@@ -32,6 +32,10 @@ export const decisionTimes = new Map<string, number[]>();
 
 export const counters = new Map<string, number>();
 
+/** try1124b stall: the metres of the last go hands that arrived, by task (newest last), for the line that says how far her moves have been. */
+export const recentGos = new Map<string, number[]>();
+export const GO_HOPS_KEPT = 6;
+
 /** Amendment A-6 15: the ms a step the body measured for each form of a vertical hand (`progress.msPerUnit` of
  * its results), by task,
  * in place of the first guesses of an estimate. */
@@ -50,6 +54,7 @@ export function queueWakeMs(taskId: string): number {
 export function forgetLlmcQueues(): void {
   decisionTimes.clear();
   counters.clear();
+  recentGos.clear();
   verticalSpeeds.clear();
 }
 

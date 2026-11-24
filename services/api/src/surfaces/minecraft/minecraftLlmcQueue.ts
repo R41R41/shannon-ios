@@ -1,6 +1,6 @@
 import { createQueueProgress } from './minecraftLlmcQueueProgress.js';
 import { createQueueAdmission } from './minecraftLlmcQueueAdmission.js';
-import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,queueWakeMs,
+import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,recentGos,GO_HOPS_KEPT,queueWakeMs,
   keep,ioTurn,sleepMs } from './minecraftLlmcQueueState.js';
 import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
@@ -168,6 +168,15 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     if (Object.keys(tune).length) keep(verticalSpeeds, deps.taskId, tune);
   }
 
+  /** try1124b stall: the metres of each go that arrived, kept for the line that tells the model how far its moves have been. */
+  function learnHops(item: Pick<QueueItem, 'input'>, receipt: MinecraftControlReceipt): void {
+    const result = readActResult(receipt.result);
+    if (!result) return;
+    const metres = result.lines.filter(line => line.status === 'done' && item.input.hands[line.i - 1]?.do === 'go'
+      && line.progress?.unit === 'meter' && typeof line.progress.done === 'number').map(line => line.progress!.done as number);
+    if (metres.length) keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...metres].slice(-GO_HOPS_KEPT));
+  }
+
   /** An item whose real result came (the first receipt, or the one after an unknown that is the correction). */
   function settle(item: QueueItem, receipt: MinecraftControlReceipt): void {
     const stored = deps.control.store.state(item.id);
@@ -191,6 +200,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     noteBadEnd(item, item.unit, taken, result.ok);
     if (!taken) { book(item, receipt);
       learnSpeed(item, receipt);
+      learnHops(item, receipt);
       for (const listener of listeners) tell(listener, item, result, receipt); }
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
@@ -580,7 +590,7 @@ void restoreReceipts();
       const first = queue[0];
       return queueLines(queue.map(item => ({ ...item, dependStates: item.dependsOn?.map(ref => [ref, dependStateOfRef(ref)] as const),
          reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 },
-         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0 });
+         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], decisionsMs: decisionTimes.get(deps.taskId) ?? [] });
     },
   };
   return api;

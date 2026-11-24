@@ -159,16 +159,35 @@ export function timingLine(timing: { wakeMs: number; leftMs: number }, firstLeft
   return `列の残り 約 ${seconds(timing.leftMs)} 秒／次の決断まで約 ${until > 0 ? seconds(until) : 0} 秒（走っている項目の残りが T=${seconds(timing.wakeMs)} 秒になったら決める。考える時間はこの T）`;
 }
 
+/**
+ * try1124b stall (the owner's test of 11/24, 07:15 to 07:22): 40 finished gos had a median of 6 steps and 1.6 s while a decision takes 2 to 3 s, so the body stood between
+ * acts for most of the run; the model copied its own last short moves (「短く進む」). The line puts her recent moves and the decision time side by side, the facts the model
+ * did not have, and says what a longer move is. Said only when her last moves were short (a median under 14 m over 3 or more).
+ */
+export const SHORT_HOP_M = 14;
+export function hopsLine(hops: readonly number[], decisionsMs: readonly number[]): string | null {
+  const recent = hops.slice(-5);
+  if (recent.length < 3) return null;
+  const median = (values: readonly number[]) => [...values].sort((x, y) => x - y)[Math.floor(values.length / 2)]!;
+  const metres = median(recent);
+  if (metres >= SHORT_HOP_M) return null;
+  const decision = decisionsMs.length ? Math.max(2, Math.round(median(decisionsMs.slice(-10)) / 1000)) : 3;
+  return `直近の go は ${recent.map(m => Math.round(m)).join("・")} m（中央 ${Math.round(metres)} m で約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている。移動の go は 15 m 以上（地図の外の本当の行き先でよい）にするか、go を 2〜3 本 1 つの act に並べる`;
+}
+
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it
  * has no item (the
  * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
-  running: { progress: MinecraftQueueProgress | null; leftMs: number }, timing?: { wakeMs: number; leftMs: number }): string[] {
-  if (!items.length) return ['列に項目なし'];
+  running: { progress: MinecraftQueueProgress | null; leftMs: number },
+  timing?: { wakeMs: number; leftMs: number; hops?: readonly number[]; decisionsMs?: readonly number[] }): string[] {
+  const hopsWords = timing?.hops ? hopsLine(timing.hops, timing.decisionsMs ?? []) : null;
+  if (!items.length) return ['列に項目なし', ...(hopsWords ? [hopsWords] : [])];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
     ...(timing ? [timingLine(timing, running.leftMs)] : []),
+    ...(hopsWords ? [hopsWords] : []),
     // Loop 11/10: the room is said with what it is for: the next work behind the running item, not a look at its result.
     room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く。${last} の結果を待たずに次の作業を足せば、体は止まらない）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
 }
