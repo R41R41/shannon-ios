@@ -50,7 +50,7 @@ describe('the preparation before a fight, in the words of a request (a bone-meal
     const shape = REQUEST_PLAN_SHAPE_LINES.join('\n');
     expect(shape).toContain('food>=60');
     expect(shape).toContain('have:iron_sword>=1');
-    expect(shape).toContain('夜まで N 分が短い時は、剣と盾と食料の節だけにして、鉄の節は足さない');
+    expect(shape).toContain('夜まで N 分が 8 未満の時は、鉄の兜と胸当ての節は足さない');
   });
 });
 
