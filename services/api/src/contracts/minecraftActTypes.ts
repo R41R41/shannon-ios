@@ -222,7 +222,10 @@ export interface ActHand {
   range?: number;
   /** equip: where (default hand). */
   slot?: (typeof EQUIP_SLOTS)[number];
-  /** sneak: on or off. */
+  /**
+   * sneak: on or off. sleep: `false` is "not tonight" (the body drops the booking it keeps; the head stops asking for the sleep until the morning, or for `seconds` 60–300) and `true`
+   * ends it again; absent, the sleep as before. (The hand has no room for a field of its own: the wire's schema takes 60 properties.)
+   */
   on?: boolean;
   /** look: compass degrees (0 north, 90 east, 180 south, 270 west) and pitch (−90 up … 90 down), instead of `to`. */
   yaw?: number;

@@ -6,6 +6,7 @@ import { FOOD_ACQUISITION_KNOWLEDGE, HUNT_FOOD_KNOWLEDGE } from './minecraftFood
 import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
 import { NIGHT_FIGHT_LINES, REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
 import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
+import { SLEEP_EXCEPT } from '../../contracts/minecraftSleepWords.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -172,7 +173,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     LONG_WALK,
     '- ファントムは 3 夜寝ていないと夜に現れることがあり、空から急降下して襲う。',
     '- ベッドで寝ると、ファントムが現れるまでの不眠の数えが戻る。',
-    '- 夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）（夜は敵が増え、ファントムも来る）。ネザー・エンドでは寝ない（爆発する）。',
+    `- 夜（オーバーワールド）は、sleep の手で寝て朝にする（体が持っているベッドを置き、朝に拾い直す）（夜は敵が増え、ファントムも来る）。ネザー・エンドでは寝ない（爆発する）。${SLEEP_EXCEPT}。`,
     PREP_NIGHT_STOP,
     NO_BED_NIGHT,
     // run 5 (11/11) issue 3: a drop one block off a one-wide gap stopped the walk again and again. The body now digs 1-3 blocks of rock to it (only for a pickup that names the drop).

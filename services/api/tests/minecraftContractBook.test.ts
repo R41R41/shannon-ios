@@ -5,6 +5,7 @@ import { SHORT_ACT_DESCRIPTION, SHORT_ACT_INPUT_SCHEMA, SHORT_ACT_MANUAL_FRAGMEN
 import { createMinecraftContractBook, minecraftContractHash } from '../src/contracts/minecraftContractBook.js';
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 import { SELF_DEFENCE_SHORT } from '../src/contracts/minecraftSelfDefenceWords.js';
+import { SLEEP_EXCEPT, SLEEP_MODES } from '../src/contracts/minecraftSleepWords.js';
 
 // Exact special-page text from parent8c, for the historical shoot-only parent comparison.
 const LEGACY_SPECIAL_8C = [
@@ -42,7 +43,13 @@ const REVISIONS_1113: ReadonlyArray<readonly [string | RegExp, string]> = [
   ['collect・exposeOk・seconds・canDig', 'collect・seconds・canDig'],
   ['range・exposeOk・seconds / walk', 'range・seconds / walk'],
 ];
-const undo1113 = (text: string) => REVISIONS_1113.reduce((out, [now, before]) => out.replace(now, before), text);
+// 11/25: the sleep hand's `on` (not tonight / back on) and the exception to "sleep at night" with its reason: the historical contract is made without them.
+const REVISIONS_1125: ReadonlyArray<readonly [string | RegExp, string]> = [
+  ['sleep [ベッド] [seconds=N] [on=false]', 'sleep [ベッド] [seconds=N]'],
+  [`${SLEEP_MODES}。理由:`, '理由:'],
+  [`${SLEEP_EXCEPT}。`, ''],
+];
+const undo1113 = (text: string) => [...REVISIONS_1113, ...REVISIONS_1125].reduce((out, [now, before]) => out.replace(now, before), text);
 
 const pin = { catalogHash: 'a'.repeat(64) };
 const book = () => createMinecraftContractBook(pin);

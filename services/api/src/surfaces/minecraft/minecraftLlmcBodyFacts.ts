@@ -4,7 +4,8 @@ import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { requestFlag } from './minecraftLlmcFightFacts.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
-import { dayBedLine, nightChoiceLine } from './minecraftNightArms.js';
+import { dayBedLine, dayNoBedLine, nightChoiceLine } from './minecraftNightArms.js';
+import { sleepStateLine } from './minecraftLlmcSleepHold.js';
 import { furnaceMeanwhileLine } from './minecraftFurnaceMeanwhile.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
 import { isDragonPlan, reachedMilestoneNames } from './minecraftLlmcRoad.js';
@@ -180,7 +181,14 @@ export function readinessParts(
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
     facts.food, llmc.singleRequest !== true, llmc.singleRequest === true) : null;
-  const night = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true) : null);
+  // No bed by day is said too (a night with no bed cost two deaths and the materials in a run), unless a plan node already makes it; and the night's sleep in one line
+  // beside the plan's now (a skip on, a booking the body may keep, what a sleep costs), so the sleep is weighed against what the node is for.
+  const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|\bbed\b/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
+  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true)
+    ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
+  const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
+  const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
+  const night = [sleepLine, bedLine].filter(Boolean).join('。') || null;
   // Run 6 (2026-11-11): while a furnace works, the hands to take instead of standing (the iron and coal in reach, the plan's next section that does not need the furnace's output),
   // said first like the night's choices (the replay of the night's line moved 3/6 to 6/6); the same choices are in the hold of a long wait (`furnaceStandHold`).
   const meanwhile = planNow ? furnaceMeanwhileLine(facts.world, facts.counts, nodes, display?.current ?? tree?.current ?? null, taskId) : null;
