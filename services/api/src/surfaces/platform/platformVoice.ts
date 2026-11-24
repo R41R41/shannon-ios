@@ -88,7 +88,7 @@ export interface PlatformVoiceDependencies {
   minecraft?: () => VoiceMinecraftPort | null;
   /** Her going into and out of the Minecraft server, for the owner's own spoken request (`lifecycleOffer`); read at each turn. */
   lifecycle?: () => VoiceLifecyclePort | null;
-  /** 「収録中」 (`contracts/opsOnAirContract.ts`): the owner's note while what is said is being recorded or broadcast; null when it is not on air. Read at each turn. */
+  /** 「収録中」 (`contracts/onAirContract.ts`): the owner's note while what is said is being recorded or broadcast; null when it is not on air. Read at each turn. */
   onAir?: () => { note: string } | null;
   /** The auxiliary model (Haiku) that puts event facts into her words (`wording`). */
   chatModel: Pick<ShannonChatModel, 'generate'>;

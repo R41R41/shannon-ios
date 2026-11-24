@@ -55,7 +55,7 @@ export function createConfiguredPlatformBridgeRoute(
     voiceMinecraft?: () => VoiceMinecraftPort | null;
     /** Her going into and out of the Minecraft server for the owner's spoken request (`lifecycleRequest.ts`), read at each turn. */
     voiceLifecycle?: () => VoiceLifecyclePort | null;
-    /** 「収録中」 for the spoken reply (`opsOnAirContract.ts`), read at each turn; null when it is not on air. */
+    /** 「収録中」 for the spoken reply (`onAirContract.ts`), read at each turn; null when it is not on air. */
     voiceOnAir?: () => { note: string } | null;
     /** Listening transcription for the voice channel (`POST /v1/platform/voice/transcribe`); null without `GROQ_API_KEY`. */
     listening?: Listening | null;
