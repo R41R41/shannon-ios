@@ -8,7 +8,7 @@ import { dayNoBedLine } from '../src/surfaces/minecraft/minecraftNightArms.js';
 import { forgetSleepHolds, sleepFirstHold, sleepStateLine } from '../src/surfaces/minecraft/minecraftLlmcSleepHold.js';
 
 /**
- * 11/25: "not tonight" is a hand of the head's (`sleep on=false`), kept as a skip that the morning, its time, a death or a sleep of any other mode ends; the body's booking is
+ * "Not tonight" is a hand of the head's (`sleep on=false`), kept as a skip that the morning, its time, a death or a sleep of any other mode ends; the body's booking is
  * dropped on the same hand, and the head's input says whether a skip is on, a booking may stand, or what a sleep costs.
  */
 const pack = (items: ReadonlyArray<readonly [string, number]>) => items.map(([name, count]) => ({ name, count }));

@@ -71,7 +71,7 @@ function weaponOf(counts: ReadonlyMap<string, number>): string | null {
 /** The iron an iron sword takes (2), and the raw iron she carries counts as iron once smelted. */
 const SWORD_IRON = 2;
 /**
- * 11/25 (a request to fight: the sword stayed stone and the meat raw while 2 iron stood in the pack, ten minutes before the first fight): what is between her and an iron
+ * (a request to fight: the sword stayed stone and the meat raw while 2 iron stood in the pack, ten minutes before the first fight): what is between her and an iron
  * sword, as a fact (「鉄の剣まであと鉄 N」), said while the sword she holds is not iron or better. Nothing is said of a sword she has.
  */
 export function swordGap(counts: ReadonlyMap<string, number>, weapon: string | null): string {

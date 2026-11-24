@@ -43,7 +43,7 @@ const REVISIONS_1113: ReadonlyArray<readonly [string | RegExp, string]> = [
   ['collect・exposeOk・seconds・canDig', 'collect・seconds・canDig'],
   ['range・exposeOk・seconds / walk', 'range・seconds / walk'],
 ];
-// 11/25: the sleep hand's `on` (not tonight / back on) and the exception to "sleep at night" with its reason: the historical contract is made without them.
+// The sleep hand's `on` (not tonight / back on) and the exception to "sleep at night" with its reason: the historical contract is made without them.
 const REVISIONS_1125: ReadonlyArray<readonly [string | RegExp, string]> = [
   ['sleep [ベッド] [seconds=N] [on=false]', 'sleep [ベッド] [seconds=N]'],
   [`${SLEEP_MODES}。理由:`, '理由:'],
