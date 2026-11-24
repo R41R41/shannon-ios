@@ -45,6 +45,8 @@ export interface UnheldParts {
   heldMs(): number;
   validate(before: PlanTree, after: PlanTree): string | null;
   log(line: string): void;
+  /** What people said to the task (`heardLines`): shown to the strong model beside the plan. */
+  people?(): readonly string[];
   /** Puts keys into the task's checkpoint at once (the step holding the task only): the count of the asks for a new plan is kept before one is sent. */
   persist?(keys: Record<string, unknown>): boolean;
 }
@@ -102,7 +104,7 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, pace, tree, doneStatus,
     now: [...nowLines(frame), ...(request ? plantLines(frame) : [])], facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
       ...endgame, ...stops],
-    results: [...results], queue: parts.queue.lines(frame),
+    results: [...results], queue: parts.queue.lines(frame), ...(parts.people ? { words: parts.people() } : {}),
     // A one-thing request is shown its own short text: the stage's text is over the brief's bound and was dropped whole (bn1 to bn4, 11/21).
     knowledge: request ? REQUEST_REPLAN_KNOWLEDGE
       : stageTextsForKind(stalled ? kindOf(stalled) : 'other', facts?.dimension ?? 'overworld') };

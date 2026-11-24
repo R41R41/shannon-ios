@@ -22,6 +22,7 @@ import type { PlanTree } from '@shannon/mind';
 import { type ToolResult } from '../mind/tools/shannonTools.js';
 import { redecideParts } from './minecraftLlmcRedecideWiring.js';
 import { firstPlanInbox,planGoal,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { heardLines, noteHeard } from '../surfaces/minecraft/minecraftPeopleWords.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents,urgentDecision,withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
 import { offerOnce } from '../surfaces/minecraft/minecraftLlmcFacts.js';
@@ -109,10 +110,12 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   // r8: a gap crossed in the rock or by a walled bridge (`FIRST_PLAN_SYSTEM_R8`); r9: the done of a node by its
 // own condition, a place with
   // its dimension, the pearls after the rods, the golden armour in the check (`FIRST_PLAN_SYSTEM_R9`).
+  // What people said to the task (the request as it came and the words after it) is kept for the strong model's inputs; new words for the request under way ask for the plan to be looked at again.
+  const heardNow = noteHeard(step.taskId, step.snapshot.messages ?? []);
   const planner = recordedPlanner({ taskId: step.taskId, stepId: step.id }, llmc.planner);
   const journeyReadiness = isNativeDragonGoal(step.snapshot.task.goal);
   startFirstPlan({ taskId: step.taskId, goal: step.snapshot.task.goal, held: plan.port.tree(), planner, log, world: worldOf(),
-    r4: { world: worldOf, system: firstPlanSystemFor(step.snapshot.task.goal), readiness: true, journeyReadiness } });
+    r4: { world: worldOf, system: firstPlanSystemFor(step.snapshot.task.goal), readiness: true, journeyReadiness, words: () => heardLines(step.taskId) } });
   const display = () => plan.port.display();
   // The task queue of the step (design minebot-task-queue): every `mc.act` is an item put in it, and the step
 // decides again while its items run.
@@ -441,7 +444,8 @@ queue.onRan(noteQueueResult);
   // A request that is not held on a failure still looks for its stalls and asks for a new plan (`minecraftLlmcReplanWiring.ts`).
   const unheld = unheldReplan({ held: stalls !== null, taskId: step.taskId, goal: step.snapshot.task.goal, createdAt: step.snapshot.task.createdAt,
     checkpoint: step.snapshot.checkpoint, replanner: llmc.replanner, observe, plan: plan.port, bodyParts, queue, waits, activeClock,
-    heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log, ...(keep ? { persist: keep } : {}) });
+    heldMs: () => holds?.heldMs?.(step.taskId) ?? 0, validate, log, people: () => heardLines(step.taskId), ...(keep ? { persist: keep } : {}) });
+  for (const line of heardNow) unheld?.flow.note({ kind: 'person_words', key: line.id.slice(0, 40), why: `人の言葉が届いた（${line.at}）: ${line.text.replace(/^.*?: /u, '').slice(0, 120)}` });
   // Amendment A-10 (`minecraftLlmcRedecideWiring.ts`): the model of this step, and the port that asks the stronger one again for an act that breaks a promise.
   const model = llmcModelRouter(llmc.models, step.snapshot.checkpoint, log, step.taskId, () => doneFacts(observe())?.dimension ?? null);
   const { planTools, redecide } = redecideParts(llmc, model, step, plan, log);

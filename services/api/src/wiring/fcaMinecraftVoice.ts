@@ -5,6 +5,7 @@ import type {
 } from '../surfaces/platform/voiceMinecraftPort.js';
 import type { MinecraftQueue } from './fcaMinecraftQueue.js';
 import { applyQueueIntent } from './fcaMinecraftQueueIntent.js';
+import { rememberSpoken, spokenDetail } from '../surfaces/minecraft/minecraftPeopleWords.js';
 
 /**
  * A spoken request in a Discord voice channel, as the common task tree takes it (dc-voice, `platformVoice.ts`), from the owner or anyone
@@ -40,18 +41,20 @@ const minecraftNameOf = (input: VoiceMinecraftIntentInput): string | null => {
 
 export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraftPort {
   /**
-   * Who asked, as the head reads it: the owner as 「本人」 with the shown name, anyone else by the shown name marked （ゲスト） so a guest cannot pass as the owner.
-   * With the speaker's in-game name when it is known (「マイクラ名 X」): the head reads whose gaze to look at, and whom to hand a thing to, from it.
+   * Who asked, as the head reads it: the shown name, the same for the owner and for anyone else (owner decision 2026-11-25: the words of anyone in the channel are
+   * taken by what they say, so the line carries no mark of who may be believed more), with the speaker's in-game name when it is known (「マイクラ名 X」): the head
+   * reads whose gaze to look at, and whom to hand a thing to, from it. With no `speaker` (the form before 2026-11-21) it is 「本人」.
    */
   const whoAsked = (input: VoiceMinecraftIntentInput): string => {
     const { speaker } = input;
     if (!speaker) return '本人';
-    const game = minecraftNameOf(input);
-    const tag = game ? `マイクラ名 ${game}` : '';
-    const name = speaker.name.replace(/\s+/gu, ' ').trim().slice(0, 40);
-    if (speaker.owner) return name || tag ? `本人（${[name, tag].filter(Boolean).join('、')}）` : '本人';
-    return `${name || '通話の参加者'}（ゲスト${tag ? `、${tag}` : ''}）`;
+    const tag = minecraftNameOf(input) ? `マイクラ名 ${minecraftNameOf(input)}` : '';
+    const name = (input.speakerName ?? speaker.name).replace(/\s+/gu, ' ').trim().slice(0, 40) || '通話の参加者';
+    return tag ? `${name}（${tag}）` : name;
   };
+  /** The tail of the spoken line: the words as spoken, when, and where the speaker stood (each only when the voice route gave it). */
+  const detailOf = (input: VoiceMinecraftIntentInput): string => spokenDetail({ speakerWords: input.speakerWords, spokenAt: input.spokenAt,
+    speakerPos: input.speakerPos }, input.intent.goal);
   const byGuest = (input: VoiceMinecraftIntentInput): boolean => input.speaker?.owner === false;
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
@@ -64,7 +67,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     try {
       parts.runtime.observeExternal(input.scopeKey, running.id, {
         eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
-        text: `Discordの通話での${whoAsked(input)}の言葉（いまのタスクへ）: ${input.intent.goal}`,
+        text: `Discordの通話での${whoAsked(input)}の言葉（いまのタスクへ）: ${input.intent.goal}${detailOf(input)}`,
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'FCA_TARGET_FINISHED') return null;
@@ -74,6 +77,8 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     return { delivered: true, as: 'message', taskId: running.id };
   };
   const toList = async (input: VoiceMinecraftIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
+    // The task made from this request (now, or when its turn comes) is told the words as spoken (`fcaMinecraftQueuePorts.ts`).
+    if (input.intent.kind === 'task') rememberSpoken(`dcv:${input.requestId}`, detailOf(input));
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
       observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);
@@ -91,7 +96,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const entry = parts.queue.current();
       const open = parts.openRequest(bodies[0]!);
       const running = entry ? { id: entry.taskId ?? entry.id, goal: entry.goal } : open ? { id: open.id, goal: open.goal } : null;
-      const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
+      const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/\s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
       return { connected: true, running, ...(queue.length ? { queue } : {}), ...(resting.length ? { resting } : {}) };
     },
     async intent(input) {

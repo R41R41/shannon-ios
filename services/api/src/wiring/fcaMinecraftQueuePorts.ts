@@ -5,6 +5,7 @@ import type { MinecraftQueueOrigin } from '../contracts/minecraftQueueContract.j
 import type { QueueRecord } from '../surfaces/minecraft/minecraftRequestQueue.js';
 import { LLMC_STALE_FRAME_MS } from '../surfaces/minecraft/minecraftLlmcLive.js';
 import type { QueueParts } from './fcaMinecraftQueue.js';
+import { spokenFor } from '../surfaces/minecraft/minecraftPeopleWords.js';
 
 /** How many of the newest tasks are looked at for ones still working: a task that works is always among the most recently changed. */
 const RECENT_TASKS = 60;
@@ -42,7 +43,7 @@ export function queueTaskPorts(parts: {
     // A request from no turn (the mod's list) has no source to observe: it is a task of the root's own, as the operator's.
     if (entry.experienceId) {
       parts.runtime.observeExternal(parts.ownerScope, task.id, { eventId: key, experienceIds: [entry.experienceId],
-        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${askedBy(entry)}: ${entry.goal}` });
+        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${askedBy(entry)}: ${entry.goal}${spokenFor(entry.requestId)}` });
     }
     if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     return task.id;

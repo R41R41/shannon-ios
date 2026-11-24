@@ -137,7 +137,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
     return bound(undefined, task => how(task) !== null && parts.control.store.body(task.id) === bodyId && Date.parse(task.updatedAt) >= since
       && admittedMinecraftRequest(task, task.parentId ? parts.runtime.get(parts.ownerScope, task.parentId) : null, true))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id)).slice(0, 3)
-      .map(task => ({ goal: task.goal.replace(/s+/gu, ' ').trim().slice(0, 40), how: how(task)! }));
+      .map(task => ({ goal: task.goal.replace(/\s+/gu, ' ').trim().slice(0, 40), how: how(task)! }));
   };
   const refused = (reason: MinecraftIntentRefusal, kind: string) => {
     log(`Shannon Minecraft intent refused reason=${reason} kind=${kind}`);

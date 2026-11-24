@@ -13,11 +13,14 @@ export interface QueueGuideOptions {
   who?: string;
   /** The request that is running, in her words, or null. */
   running: string | null;
-  /** Whether the one asking is the owner (default: yes). Only the owner decides the order of the list; a guest's words about it are a suggestion. */
+  /**
+   * Whether the one asking is the owner (default: yes). Kept for the callers that pass it; it no longer changes the words (owner decision 2026-11-25: whoever
+   * asks in the channel decides the order of their own request, and the guide is the same for any speaker).
+   */
   owner?: boolean;
 }
 
-const add = (who: string, owner: boolean) => [
+const add = (who: string) => [
   `${who}がマイクラでしてほしいこと（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）をはっきり頼んだら、聞き返さずに引き受けて kind=task にし、`
     + `goal に何をどれだけするかを${MINECRAFT_QUEUE_LIMITS.goalCharacters}字以内で書く（例: 「ケーキを1個作る」「オークの原木を16個集める」）。`
     + '数が言われていなければ、ほどよい数を自分で決める。いま別のことをしていても引き受けてよい。新しい依頼は列に積まれて順番に実行される。',
@@ -26,8 +29,7 @@ const add = (who: string, owner: boolean) => [
     + `「先に」「優先して」「〜からやって」「〜をやる前に」「今のはやめて〜を」は now。理由: 順番を決めるのは頼んだ${who}で、「先に」と言われたのに「いまの作業が終わってから」と返すと、順番を決める権利を取ってしまう。`
     + 'now はいまの依頼を保留にして先にやる形で、先の依頼が終われば保留は自動で戻る（失うものは無い）ので、ためらわない。'
     + `夜になった（暗い）・危険がある・${who}が「いますぐ」と言った時は、順番に触れていなくても now（例: 夜に「ベッドを作って」と頼まれたら now。夜は寝て朝にするのが先）。`
-    + '理由: いまの作業を続けると、夜は襲われて間に合わなくなる。返事にその理由を一言入れる。'
-    + (owner ? '' : `${who}は持ち主ではなく、順番を決めるのは持ち主なので、「先に」と言われても now や move の now にはせず end か next にして、先にしたいなら持ち主に言ってほしいと軽く伝える。`),
+    + '理由: いまの作業を続けると、夜は襲われて間に合わなくなる。返事にその理由を一言入れる。',
   '列にすでに同じ頼み（言い換えでも、[依頼の列] の待ち・保留の依頼と同じ内容）がある時は、kind=task にせず kind=move にして、target にその番号、placement=now（先にと言われた時）か next にする。'
     + '例: 「#8 待ち 「羊を飼ってベッドを作る」」がある時に「羊とベッドを先に」と言われたら、kind=move・target=#8・placement=now。'
     + '理由: task で足すと同じ依頼が二つになり、片方が終わっても残る。保留のものを先に動かす時も move の now。',
@@ -60,7 +62,7 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
     '体は一度に一つの依頼だけを動かす。頼みごとは「依頼の列」に積まれ、順番に実行される。言葉がどれにあたるかは、あなたが判断する。'];
   if (options.running) lines.push(`いま体は「${options.running}」をしている。`);
   const who = options.who ?? SHANNON_OWNER_NAME;
-  lines.push(...add(who, options.owner !== false), ...others(who, !options.running && options.queueLines.length === 0));
+  lines.push(...add(who), ...others(who, !options.running && options.queueLines.length === 0));
   if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
   else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');

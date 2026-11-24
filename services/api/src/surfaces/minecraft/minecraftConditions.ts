@@ -1,8 +1,9 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import type { ActClause, ActCondition } from '../../contracts/minecraftActCondition.js';
 import { carriedItemCounts } from './minecraftItems.js';
-import { carriedFood } from './minecraftLlmcLive.js';
-import { foodPointsWords } from './minecraftFoodWords.js';
+import { carriedFood, FOOD_POINTS } from './minecraftLlmcLive.js';
+import { foodPreparation } from './minecraftFoodPreparation.js';
+import { foodPointsWords, type CookingGain } from './minecraftFoodWords.js';
 import { crystalsLeft } from './minecraftEndView.js';
 import { seenMarks } from './minecraftSeenMarks.js';
 import { foodNearOf, villageFoodOf, woodNearFromResources, woodNearOf } from './minecraftStockLevels.js';
@@ -157,7 +158,7 @@ const round1 = (value: number) => Math.round(value * 10) / 10;
 const LACKS: Lacks = {
   have: (c, facts) => c.op === '<' ? `${c.item} が ${carried(facts.counts, c.item)} 個（${c.n} 未満が条件）`
     : `${c.item} ${Math.min(carried(facts.counts, c.item), c.n)}/${c.n}`,
-  food: (c, facts) => foodPointsWords(facts.food, c.n, facts.foodHay),
+  food: (c, facts) => foodPointsWords(facts.food, c.n, facts.foodHay, cookingOf(facts.counts)),
   hunger: (c, facts) => `満腹 ${round1(facts.hunger ?? 0)}/${c.n}`,
   hp: (c, facts) => `体力 ${round1(facts.hp ?? 0)}/${c.n}`,
   dim: (c, facts) => `次元は ${c.dim}（今 ${facts.dimension ?? '不明'}）`,
@@ -199,4 +200,15 @@ export function conditionWords(condition: ActCondition, frame: BodyObservation |
   const best = [...condition].sort((a, b) => rank(b) - rank(a))[0];
   const lacking = best?.filter(clause => clauseHolds(clause, facts) === false).map(clause => clauseLack(clause, facts)) ?? [];
   return lacking.length ? lacking.join('・') : null;
+}
+
+/**
+ * What cooking the raw meat in the pack would add (points and seconds in one furnace), or null when there is none: a fact for the words of a food
+ * shortage (`foodPointsWords`), so that the way to fill it names the meat she carries before bread she does not have.
+ */
+export function cookingOf(counts: ReadonlyMap<string, number>): CookingGain | null {
+  const made = foodPreparation(counts, 0, FOOD_POINTS);
+  if (!made?.raw.length) return null;
+  const gain = made.raw.reduce((sum, item) => sum + item.pointsIfCooked - item.pointsNow, 0);
+  return gain > 0 ? { gain: Math.round(gain * 10) / 10, seconds: made.raw.reduce((sum, item) => sum + item.count * 10, 0) } : null;
 }

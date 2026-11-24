@@ -20,7 +20,7 @@ export const REPLAN = Object.freeze({ gapMs: 5 * 60_000, gapSameNodeMs: 90_000, 
   pendingMs: 15 * 60_000, safeHp: 12, watchMs: 1_000 });
 
 /** The stalls a new plan answers; a failure of the decision's writing is not one. */
-export const REPLAN_STALLS: ReadonlySet<string> = new Set(['node_stalled', 'same_spot_stops', 'wait_loop', 'death', 'behind_pace']);
+export const REPLAN_STALLS: ReadonlySet<string> = new Set(['node_stalled', 'same_spot_stops', 'wait_loop', 'death', 'behind_pace', 'person_words']);
 
 export interface ReplanRecord {
   /** The task's running clock (ms) when it was asked. */
@@ -74,6 +74,8 @@ export type ReplanVerdict = { ok: true } | { ok: false; why: 'gap' | 'hour' | 'r
 export function replanVerdict(ledger: ReplanLedger, node: string, nowMs: number, kind?: string): ReplanVerdict {
   if (kind === 'death') return { ok: true };
   if (ledger.total >= REPLAN.perRun) return { ok: false, why: 'run' };
+  // A person's words for the request under way (a few a run, said to her on purpose): not held by the gap, the hour or the node's count, which are for a body that stands still.
+  if (kind === 'person_words') return { ok: true };
   if ((ledger.nodes[node] ?? 0) >= REPLAN.perNode) return { ok: false, why: 'node' };
   const recent = ledger.recent.filter(at => nowMs - at < HOUR_MS);
   if (recent.length >= REPLAN.perHour) return { ok: false, why: 'hour' };
@@ -233,6 +235,10 @@ export const REPLAN_SYSTEM = [
     + 'split（id の下に into の節の並びを足す）、set（id の state=done|blocked|continue|wait・title・where・doneWhen・target・note・reason・kind・prep {state,why}）、'
     + 'move（id を parent・after へ）、drop（id とその下を消す）、forbid / caution（id の節に text を 1 行足す）、lift（text の行を消す）。'
     + 'id は入力の計画に出ている物。節は 64 まで・深さ 4 まで・title 60 字まで。',
+  '- 止まりの種類が person_words の時は、体は止まっていない。入力の「人の言葉」（原文・話者・時刻つき）のうち新しい物が、依頼の中身・順番・やり方に関わるかを、言葉の中身と理由で判断する（誰が言っても同じ扱いで、話者で重みを変えない）。'
+    + '依頼の目的を満たす助言（やり方・先にしてほしい事・数の変更）は採って、計画に節を足す・順を変える・title や doneWhen を直す。採った節の note に「○○さんの助言」と書き、why に、採った理由と、計画のどこを変えたかを書く。'
+    + '採らない時や、すでに計画にある事・雑談・今の依頼と関係の無い言葉の時は、ops を空にして、why にその理由を書く。'
+    + '理由: 助言を計画に書かないと、次の判断では古い計画を読んで元の作業へ戻り、言った人が同じことを何度も言うことになる。助言を採るなら、足す節は助言の目的に直接つながる物だけにする。',
   '- 止まりの原因が「見えていない事実」か「足りない前提」かを考える。計画を、観測で確かめられる小さな節に割る・前提の節を足す・順を変える・別の手段の節に替える・できない節を blocked にして理由と代わりの道を書く。',
   '- doneWhen は観測の形で書く: have:物>=数・food>=点・dim:the_nether|the_end|overworld・at:x,y,z~半径@次元・'
     + 'see:fortress / see:end_portal_frame / see:end_portal・crystals<=n・stock:wood / stock:food（安心の量まで。近くに無ければ最低で済み）。& が全部、| がどれか。target は完成品を取る節にだけ。',
@@ -247,5 +253,6 @@ export const REPLAN_SYSTEM = [
   '- 止まりに見えて本当は進行中の待ち（夜待ち・かまど・ブレイズの湧き待ち・竜の止まり待ち）なら、ops を空にして、why にそう書く。',
   '- 入力の「依頼」が一つの物を作る・取る依頼（ゲーム全体の攻略ではない）なら、足してよい節は依頼の完成品とその材料の節だけ。'
     + '「この段の知識」に無い材料・準備（食料・ベッド・骨集め・石の道具・地下）の節は足さない。入っていたら drop する。'
-    + '理由: 依頼に無い節を足すと、体がその節へ動いて依頼が進まない。小麦の育ち待ちで止まった時は、待たずに別の材料の節へ current を移す。',
+    + '理由: 依頼に無い節を足すと、体がその節へ動いて依頼が進まない。小麦の育ち待ちで止まった時は、待たずに別の材料の節へ current を移す。'
+    + 'ただし、入力の「人の言葉」の助言を採って足す節（骨を取る・敵と戦う身支度など）は、その助言の目的に直接つながる物なら足してよい（採った理由は why に書く）。',
 ].join('\n');

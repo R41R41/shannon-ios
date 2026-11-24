@@ -259,14 +259,16 @@ const record = (value: unknown) => value && typeof value === 'object' && !Array.
 /** The input: the goal, where and when she is, what she carries, and what the body knows of the land (cut to
  * `inputCharacters`). */
 export function firstPlanInput(goal: string, world: Record<string, unknown> | null,
-  options: { scan?: boolean; readiness?: boolean; journeyReadiness?: boolean; draft?: string | null } = {}): string {
+  options: { scan?: boolean; readiness?: boolean; journeyReadiness?: boolean; draft?: string | null; words?: readonly string[] } = {}): string {
   const part = (label: string, value: unknown, limit: number) => {
     const shown = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
     return shown ? [`${label}: ${shown.slice(0, limit)}`] : [];
   };
   // r4: the body's scan of the land it holds (its words and every row), before the rest is cut to the bound.
   const scan = options.scan ? scanForPlan(world?.scan) : null;
-  return [`依頼: ${text(goal, 400)}`, ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
+  return [`依頼: ${text(goal, 400)}`,
+    ...(options.words?.length ? [`人の言葉（依頼と、届いた言葉。原文・話者・時刻つき。依頼の一行はこの依頼を書き直した物で、言われた言葉の方が詳しい）:\n${options.words.slice(0, 6).join('\n').slice(0, 1_800)}`] : []),
+    ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
     ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...part('持ち物', world?.inventory, 800),
     ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...readinessInput(world, options.journeyReadiness, planGoal(goal) === null)] : []),
     ...(options.draft ? [options.draft.slice(0, 3_200)] : []),
@@ -540,7 +542,9 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
     /** r5: the words asked with (`FIRST_PLAN_SYSTEM_R5`, doneWhen as predicates). Absent: r4's. */
     system?: string;
     /** r6: the place's shortage and the recovery fact in the input (`readinessInput`). Absent: not. */
-    readiness?: boolean; journeyReadiness?: boolean } }): void {
+    readiness?: boolean; journeyReadiness?: boolean;
+    /** What people said to the task so far (`heardLines`), read when the plan is asked (after the scan wait): shown in the input. */
+    words?(): readonly string[] } }): void {
   const slot = slotOf(parts.taskId);
   if (slot.asked || parts.held.revision > 1) return;
   slot.asked = true;
@@ -564,7 +568,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
     const draft = startDimension === 'overworld' && eyesForStronghold(world) === null ? openingDraft(seedPlan(parts.goal, 'overworld')) : null;
     if (draft) say(`Shannon Minecraft first plan draft task=${parts.taskId} characters=${draft.length}`);
     return planner(r4.system ?? FIRST_PLAN_SYSTEM_R4, firstPlanInput(parts.goal, world,
-      { scan: true, draft, ...(r4.readiness ? { readiness: true, journeyReadiness: r4.journeyReadiness } : {}) }),
+      { scan: true, draft, ...(r4.words ? { words: r4.words() } : {}), ...(r4.readiness ? { readiness: true, journeyReadiness: r4.journeyReadiness } : {}) }),
       abort.signal);
   }) : planner(FIRST_PLAN_SYSTEM, firstPlanInput(parts.goal, parts.world), abort.signal);
   ask.then(answer => {

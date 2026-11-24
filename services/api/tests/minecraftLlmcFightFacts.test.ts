@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { fightLines, gearLine, packLine, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
+import { cookedWords, fightLines, gearLine, packLine, swordGap, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 
 /** The night of 11/23 (d0001): a skeleton 45 m away with zombies around it, a stone sword, an iron, no armour, no shield, no food. */
@@ -24,7 +24,7 @@ describe('the pack and the gear as facts (11/24)', () => {
   });
   it('says the gear and whether it reaches the skeleton rule, or that a body with no weapon does not cut', () => {
     const obs = frame({});
-    expect(gearLine(obs, worldOf(obs))).toBe('戦う装備: 剣 石・防具 なし（0/4）・盾 なし・食べ物 0 点 → 射手へ詰める目安（剣と、盾か鉄の防具 3 部位・体力 10 以上）に届かない');
+    expect(gearLine(obs, worldOf(obs))).toBe('戦う装備: 剣 石（鉄の剣は今作れる）・防具 なし（0/4）・盾 なし・食べ物 0 点 → 射手へ詰める目安（剣と、盾か鉄の防具 3 部位・体力 10 以上）に届かない');
     const bare = frame({}, [['dirt', 20]]);
     expect(gearLine(bare, worldOf(bare))).toContain('武器 なし');
     expect(gearLine(bare, worldOf(bare))).toContain('体は斬らない');
@@ -79,5 +79,31 @@ describe('the water line (11/24 try1124b: a zombie came while she stood in a poo
     const obs = frame({ localMap: POOL, nearbyThreats: [ZOMBIE] }, [['bread', 2]]);
     expect(fightLines(obs, false).some(line => line.startsWith('今は水の中'))).toBe(true);
     expect(inputFacts(obs, {}, true).compressed.some(line => line.startsWith('今は水の中'))).toBe(true);
+  });
+});
+
+describe('the preparation as facts in the gear line (a fight request: raw meat and the iron for a sword)', () => {
+  const counts = (entries: Array<[string, number]>) => new Map(entries);
+  it('says what cooking the raw meat in the pack would come to, in points and seconds, and nothing when there is none', () => {
+    // 4 raw mutton: 12.8 points now, 62.4 cooked, 40 seconds in one furnace.
+    expect(cookedWords(counts([['mutton', 4]]), 12.8)).toBe('（焼けば 62.4 点・40 秒）');
+    expect(cookedWords(counts([['cooked_mutton', 2]]), 31.2)).toBe('');
+    expect(cookedWords(counts([]), 0)).toBe('');
+  });
+  it('says how much iron is between her and an iron sword, counting the raw iron once smelted, and nothing of a sword she has', () => {
+    expect(swordGap(counts([['iron_ingot', 1]]), '剣 石')).toBe('（鉄の剣まであと鉄 1）');
+    expect(swordGap(counts([]), null)).toBe('（鉄の剣まであと鉄 2）');
+    expect(swordGap(counts([['iron_ingot', 1], ['raw_iron', 1]]), '剣 石')).toBe('（鉄の剣は鉄 2 で作れる・生の鉄は焼く）');
+    expect(swordGap(counts([['iron_ingot', 2]]), '剣 石')).toBe('（鉄の剣は今作れる）');
+    expect(swordGap(counts([]), '剣 鉄')).toBe('');
+    // An iron axe is a weapon but not the sword.
+    expect(swordGap(counts([]), '斧 鉄')).toContain('鉄の剣まであと鉄 2');
+  });
+  it('is in the gear line the head reads beside the food points and the sword, in the case of the raw mutton and the stone sword', () => {
+    const obs = frame({}, [['stone_sword', 1], ['mutton', 4], ['iron_ingot', 1], ['raw_iron', 1]]);
+    const line = gearLine(obs, worldOf(obs))!;
+    expect(line).toContain('剣 石（鉄の剣は鉄 2 で作れる・生の鉄は焼く）');
+    expect(line).toContain('食べ物 13 点（焼けば 62.4 点・40 秒）');
+    expect(line).toContain('射手へ詰める目安');
   });
 });

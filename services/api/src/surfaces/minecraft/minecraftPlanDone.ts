@@ -1,6 +1,6 @@
 import { orderedPlan, PLAN_LIMITS, type PlanKind, type PlanNode, type PlanTree, type PlanUpdate } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { acquired, carried, clauseHolds, clauseLack, doneFacts, type DoneFacts } from './minecraftConditions.js';
+import { acquired, carried, clauseHolds, clauseLack, cookingOf, doneFacts, type DoneFacts } from './minecraftConditions.js';
 import { newerClause, type ActClause } from '../../contracts/minecraftActCondition.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
 import { foodEnough, foodStockWords, woodEnough, woodLogs, woodStockWords } from './minecraftStockLevels.js';
@@ -182,7 +182,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
         ? `${words}（種 ${carried(facts.counts, 'wheat_seeds')} 個。育つまで時間がかかる（骨粉で短くなる）ので植えるのは早い方がよい）` : words;
     }
     case 'act': return clauseLack(clause.clause, facts);
-    case 'food': return foodPointsWords(facts.food, clause.points);
+    case 'food': return foodPointsWords(facts.food, clause.points, null, cookingOf(facts.counts));
     case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear, facts.foodHay) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
     case 'see': return clause.what === 'gate_spawn' ? `ゲートの ${GATE_SPAWN_M}m 内のリスポーン地点はまだ無い（ベッドを place して use）`
       : `${SEEN_WORDS[clause.what]}はまだ見えていない`;
@@ -346,7 +346,7 @@ export const prepUnmetNow = (node: Pick<PlanNode, 'prep'>): boolean => node.prep
  * the fact of a descent). */
 export const prepNowWords = (facts: DoneFacts): string =>
   ("" +
-`${foodPointsWords(facts.food, 40)}` +
+`${foodPointsWords(facts.food, 40, null, cookingOf(facts.counts))}` +
 "・作業台 " +
 `${carried(facts.counts, 'crafting_table') > 0 ? '有' : '無'}` +
 "・板 " +

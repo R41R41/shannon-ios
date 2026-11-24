@@ -84,6 +84,12 @@ export function readWaiting(raw: unknown): Waiting | null {
   return { stall: { kind: stall.kind as Stall['kind'], key: stall.key.slice(0, 40), why: stall.why.slice(0, 240) }, at: item.at };
 }
 
+/**
+ * The node a plan asked for a stall is counted against: the stalled node, but for a person's words (`person_words`: the body is not stalled) a count of its own, so that
+ * the words a person says do not use up the node's asks for a real stall.
+ */
+const nodeOf = (stall: Stall, parts: ReplanSources): string => stall.kind === 'person_words' ? 'person_words' : parts.node ?? '-';
+
 export function createReplanFlow(deps: ReplanDeps) {
   let ledger = readReplanLedger(deps.saved);
   let pending: Waiting | null = readWaiting(deps.savedPending);
@@ -129,7 +135,7 @@ export function createReplanFlow(deps: ReplanDeps) {
   };
   /** `earlier`: the ledger before this attempt (what the brief tells of the plans made before). */
   async function answer(stall: Stall, parts: ReplanSources, signal: AbortSignal, earlier: ReplanLedger): Promise<ReplanRecord> {
-    const node = parts.node ?? '-';
+    const node = nodeOf(stall, parts);
     const { node: _node, ...rest } = parts;
     const brief = replanBrief({ ...rest, stall: { kind: stall.kind, why: stall.why, node: parts.node }, earlier: earlier.last,
       sameNode: earlier.nodes[node] ?? 0 });
@@ -176,7 +182,7 @@ export function createReplanFlow(deps: ReplanDeps) {
         pending = null;
         return;
       }
-      const node = parts.node ?? '-';
+      const node = nodeOf(stall, parts);
       if (heldByDanger(stall, node)) return;
       const verdict = replanVerdict(ledger, node, deps.clock(), stall.kind);
       if (!verdict.ok) {
