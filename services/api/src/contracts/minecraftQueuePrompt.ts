@@ -13,7 +13,7 @@ export interface QueueGuideOptions {
   who?: string;
   /** The request that is running, in her words, or null. */
   running: string | null;
-  /** Whether the one asking is the owner (default: yes). Kept for callers: everyone who asks is treated the same (owner decision 2026-11-25). */
+  /** Whether the one asking is the owner (default: yes). Kept for callers: everyone who asks is treated the same. */
   owner?: boolean;
 }
 

@@ -207,8 +207,8 @@ export function speechInstructions(input: { owner: boolean; who: string; mode?: 
 }
 
 /**
- * Going into and out of the Minecraft server by voice (the intent field's `login` and `logout`), offered for anyone's words (owner decision 2026-11-25:
- * who is listening changes nothing she does). `offer` is the one that fits where her body is now (it is out: login; it is in: logout). The words say why
+ * Going into and out of the Minecraft server by voice (the intent field's `login` and `logout`), offered for anyone's words (who is listening
+ * changes nothing she does). `offer` is the one that fits where her body is now (it is out: login; it is in: logout). The words say why
  * each rule is there: a model follows a rule it understands.
  */
 export function lifecycleInstructions(input: { offer: 'login' | 'logout'; who: string }): string {

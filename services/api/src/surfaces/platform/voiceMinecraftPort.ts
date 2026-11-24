@@ -45,7 +45,7 @@ export interface VoiceMinecraftIntentInput {
   experienceId: string | null;
   /** Who said it; absent, the owner (the form before 2026-11-21). */
   speaker?: VoiceSpeaker;
-  /** The words as they were said (the line the head wrote, `intent.goal`, is a summary of them); absent in the form before 2026-11-25. */
+  /** The words as they were said (the line the head wrote, `intent.goal`, is a summary of them); absent in the older form. */
   words?: string;
 }
 

@@ -420,7 +420,7 @@ export class PlatformVoiceService {
   }
 
   /**
-   * Whether the intent field is offered for going into or out of the server, and which: anyone's turn (owner decision 2026-11-25: who is listening
+   * Whether the intent field is offered for going into or out of the server, and which: anyone's turn (who is listening
    * changes nothing she does), with the body part on and the server's state known. Her body out of the server: `login`; in it: `logout`; an
    * operation under way or a state not known: none. It does not need the body to be connected: that is what `login` brings.
    */

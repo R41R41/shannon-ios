@@ -456,11 +456,12 @@ export function withoutRequestEchoes(messages: readonly VisibleMessage[]): reado
     if (entry.item.role !== 'user') return;
     const echoed = REQUEST_ECHO.exec(entry.item.content)?.[1]?.trim();
     if (!echoed) return;
-    const same = messages.slice(Math.max(0, index - 4), index).some((before, offset) => !dropped.has(index - 4 + offset)
+    const from = Math.max(0, index - 4);
+    const same = messages.slice(from, index).some((before, offset) => !dropped.has(from + offset)
       && before.item.role === 'user' && before.item.content.trim() === echoed);
     if (!same) return;
     dropped.add(index);
-    const reply = messages[index + 1], first = messages.slice(Math.max(0, index - 4), index).find(before => before.item.role === 'assistant');
+    const reply = messages[index + 1], first = messages.slice(from, index).find(before => before.item.role === 'assistant');
     if (reply?.item.role === 'assistant' && first && reply.item.content.trim() === first.item.content.trim()) dropped.add(index + 1);
   });
   return dropped.size ? messages.filter((_entry, index) => !dropped.has(index)) : messages;
