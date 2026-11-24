@@ -104,6 +104,9 @@ function readThreats(world: Record<string, unknown>): Threat[] {
   }).sort((a, b) => a.distance - b.distance);
 }
 
+/** The hostiles that hurt from a distance (any within the 24 m the frame reads). */
+const SHOOTERS = /^(?:skeleton|stray|bogged|pillager|blaze|ghast|witch|breeze|wither_skeleton)$/u;
+
 /** The distances of the other people in the frame (the entities of kind `player`): never their names. */
 function readPlayers(world: Record<string, unknown>): number[] {
   return list(world.nearbyEntities).flatMap(entity => {
@@ -205,18 +208,20 @@ export function createMomentDetector(options: { wanted?: () => ReadonlyMap<strin
     const out: LiveMoment[] = [];
     const lost = now.health !== null && prev.health !== null ? prev.health - now.health : 0;
     const close = now.threats.filter(threat => threat.reach && threat.distance <= 6);
-    const hurtByMob = lost >= 1 && close.length > 0;
+    // A hit from a shooter far off (an arrow, a fireball) is a hit from a hostile too: what hurts her need not be within reach of a sword.
+    const hurtFrom = close.length ? close : now.threats.filter(threat => threat.reach && SHOOTERS.test(threat.name));
+    const hurtByMob = lost >= 1 && hurtFrom.length > 0;
     if (hurtByMob && armed.attack) {
       armed.attack = false;
       fight.on = true;
-      const first = close[0]!;
-      out.push(make('attacked', at, { from: mobWords(first.name), count: close.length, health: Math.round(now.health ?? 0) }));
+      const first = hurtFrom[0]!;
+      out.push(make('attacked', at, { from: mobWords(first.name), count: hurtFrom.length, health: Math.round(now.health ?? 0) }));
     }
     if (hurtByMob || close.length > 0) fight.calmSince = null;
     else if (fight.calmSince === null) fight.calmSince = at;
     if (!armed.attack && fight.calmSince !== null && at - fight.calmSince >= 20_000) armed.attack = true;
     // A blow of five or more at once with no hostile at her: a fall, a fire, an arrow from far.
-    if (lost >= 5 && close.length === 0) out.push(make('surprised', at, { amount: Math.round(lost), health: Math.round(now.health ?? 0) }));
+    if (lost >= 5 && hurtFrom.length === 0) out.push(make('surprised', at, { amount: Math.round(lost), health: Math.round(now.health ?? 0) }));
     const creeper = now.threats.find(threat => threat.name === 'creeper' && threat.reach && (threat.distance <= 3.5 || (threat.lit && threat.distance <= 6)));
     if (creeper && armed.scare) {
       armed.scare = false;
