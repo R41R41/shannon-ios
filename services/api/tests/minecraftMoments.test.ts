@@ -87,10 +87,11 @@ describe('createMomentDetector', () => {
     const detector = createMomentDetector();
     detector.observe(frame({ health: 20 }), T0);
     const near = detector.observe(frame({ health: 5, nearbyThreats: [{ name: 'zombie', distance: 2, canReachMe: true }] }), T0 + 500);
-    expect(near.map(moment => [moment.kind, moment.facts])).toEqual([['near_death', { health: 5, from: 'zombie' }]]);
+    expect(near.map(moment => [moment.kind, moment.facts])).toEqual([['near_death', { health: 5, from: 'ゾンビ' }], ['attacked', { from: 'ゾンビ', count: 1, health: 5 }]]);
     expect(detector.observe(frame({ health: 3 }), T0 + 1000)).toEqual([]);
     detector.observe(frame({ health: 14 }), T0 + 1500);
-    expect(kinds(detector.observe(frame({ health: 6 }), T0 + 2000))).toEqual(['near_death']);
+    // (Eight at once with no hostile at her is also a shock.)
+    expect(kinds(detector.observe(frame({ health: 6 }), T0 + 2000))).toEqual(['near_death', 'surprised']);
   });
 
   it('notices hunger, and a death', () => {

@@ -31,18 +31,41 @@ through, another dimension, a lava escape (the reflex counter), a structure the 
 the first blaze rod, pearl, eye, flint and steel, ten obsidian and a bed, a step of the order passed or late, a stalled command. The first
 frame of a run is only remembered. The body sends nothing new for them.
 
+What happens to her as it happens is read from the same frames (`minecraftMoments.ts`, `fights()` and `company()`): the first hit of a hostile that can
+reach her (`attacked`, told at once, and not again until twenty seconds without a hostile at her), a creeper at her side (`scared`), a blow of five
+or more with no hostile near (`surprised`), getting away (`got_away`: nothing that can reach her within 8 m for 8 s after a fight), a hostile that
+stood at her and is gone (`killed`, "gone, it seems"; never a creeper), coming back (`respawned`), a view she has a plain word for (`scenery`) and another
+person coming near after 45 s without one (`player_near`, never a name). Every kind belongs to one of six groups (`liveGroupOf`: danger, fight, find,
+body, work, people); a reaction (`liveIsReaction`) is the kind that is about this second.
+
 `@shannon/mind` `LiveGovernor` (`liveGovernor.ts`) decides whether a moment is told now. Salience is a noisy-OR of the kind's weight, a bonus
 for the first of its kind (0.2) and one for danger (0.25); the threshold is 0.55 and 0.9 is urgent. Then, in order: staleness (the kind's
 lifetime, at most 60 s), a reply being written, someone's words within 8 s (3 s for an important moment) or someone speaking, the minute's
 budget (2) and the ten minutes' (7), the gap (18 s, 6 s urgent), the same topic within 90 s (not for an urgent one), the same kind within 4
-minutes (30 s for a death). A line must also differ from her last six by a trigram measure. None of it waits on a decision of the task: a
+minutes (10 s for a death, 30 s for a near death). A line must also differ from her last six by a trigram measure (a cry: from the last ones of its
+own group, at a lower bar).
+
+A reaction is told in the urgent gap (5 s), and has two words more in the minute than the ordinary talk, up to the six the body's mouth takes
+(`LIVE_REACTION_EXTRA_PER_MINUTE`, `LIVE_MOUTH_PER_MINUTE`). The little voices of her body and of the time of day (hunger, night, morning) and being stuck
+weigh more than the threshold, so that they are not dropped for being quiet. When she has said nothing for `LIVE_QUIET_SECONDS` (22 s) while she
+works and is chatty, the commentary asks the live view for what she is doing (`working`, a moment like the others), so the silence stays well under 40 s. None of it waits on a decision of the task: a
 frame only schedules a timer; the model call is on its own; a failure drops the moment.
 
 ## The line and the wire
 
-`minecraftLiveWriter.ts` asks the auxiliary chat model (Haiku) for one line from her identity (the shared-room identity with her character
+A line is asked as one short request (`infra/models/liveLineModel.ts`: a native Haiku request on the background route `minecraft_line`, no
+thinking, 120 tokens at most, the fixed rules cached), not as a conversation turn (which sent the conversation's instructions and a structured reply:
+about sixteen thousand tokens in, and the style of a report). Without a Claude key it goes through the conversation turn as it did.
+
+What happens to her (the danger and fight kinds, the view, a person near, hunger, night and morning) is written by `minecraftSceneLine.ts` from the
+scene alone (`minecraftLiveScene.ts`: the hostiles at her in her words, her health in words and how fast it fell, what she holds, the odds, whether a
+person is near, the time of day, what she was doing in a few words): not her plan, her aim or what she said of her work. The rules say why each is
+there and give no line as an example; the feelings of the kind are offered in a rotated order, and the openings of what she said lately of the same
+group are named as the ones to avoid.
+
+`minecraftLiveWriter.ts` asks the auxiliary chat model (Haiku) for the other lines (her work, a find, the end of a request) from her identity (the shared-room identity with her character
 core), the persona block of her character space for a group, the block written for a shared room, her last live lines, and the moment's fact
-lines. The answer is cleaned (`cleanLiveLine`: one line, no list, no link, no coordinates, no tool name, 54 characters for a voice and 100
+lines (in the user's turn with the light request). The answer is cleaned (`cleanLiveLine`: one line, no list, no link, no coordinates, no tool name, 54 characters for a voice and 100
 for text) or the moment is dropped.
 
 The control poll (`POST /v1/body/minecraft/control`) gains three optional fields, all ignored by a side that does not know them:

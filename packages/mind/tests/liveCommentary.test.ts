@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, SPEECH_MODES, SPEECH_NEEDED_KINDS, SPEECH_RATES, isSpeechMode, isSpeechRate, itemWords, liveCommentaryLimits, liveRateLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
+  LIVE_COMMENTARY_STREAM, LIVE_COMMENTARY_V1, LIVE_MOMENT_KINDS, LiveGovernor, SPEECH_MODES, SPEECH_NEEDED_KINDS, SPEECH_RATES, isSpeechMode, isSpeechRate, itemWords, liveCommentaryLimits, liveGroupOf, liveIsReaction, liveRateLimits, liveFactLine, liveSalience, pickMoments, type LiveMoment,
   type LiveMomentKind,
 } from '../src/index.js';
 
@@ -12,10 +12,14 @@ describe('liveSalience', () => {
   it('is the kind alone, with a bonus for the first of its kind and one for danger', () => {
     expect(liveSalience('diamond_found', { first: false })).toBeCloseTo(0.82);
     expect(liveSalience('diamond_found', { first: true })).toBeCloseTo(1 - 0.18 * 0.8);
-    expect(liveSalience('night_fell', { first: false })).toBeCloseTo(0.45);
+    expect(liveSalience('night_fell', { first: false })).toBeCloseTo(0.6);
     expect(liveSalience('night_fell', { first: true })).toBeGreaterThan(LIVE_COMMENTARY_V1.threshold);
-    expect(liveSalience('morning', { first: true })).toBeLessThan(LIVE_COMMENTARY_V1.threshold);
-    expect(liveSalience('morning', { first: true, danger: true })).toBeGreaterThan(LIVE_COMMENTARY_V1.threshold);
+    // The little voices of her body and of the time of day are above the bar even the second time (they were below it, and so never said).
+    for (const kind of ['hungry', 'morning', 'night_fell', 'stuck'] as const) expect(liveSalience(kind, { first: false })).toBeGreaterThanOrEqual(LIVE_COMMENTARY_V1.threshold);
+    // The view of a place is a quiet one: the first is said, a second is not unless danger is near.
+    expect(liveSalience('scenery', { first: false })).toBeLessThan(LIVE_COMMENTARY_V1.threshold);
+    expect(liveSalience('scenery', { first: true })).toBeGreaterThan(LIVE_COMMENTARY_V1.threshold);
+    expect(liveSalience('scenery', { first: false, danger: true })).toBeGreaterThan(LIVE_COMMENTARY_V1.threshold);
   });
   it('is in [0, 1] for every kind', () => {
     for (const kind of LIVE_MOMENT_KINDS) {
@@ -53,14 +57,15 @@ describe('LiveGovernor', () => {
   it('speaks of a loud first moment and is silent for a quiet one', () => {
     const governor = new LiveGovernor();
     expect(governor.verdict(moment('diamond_found'), room(T0 + 1000))).toMatchObject({ speak: true });
-    expect(governor.verdict(moment('morning'), room(T0 + 1000))).toMatchObject({ speak: false, reason: 'salience' });
-    expect(governor.verdict(moment('night_fell'), room(T0 + 1000))).toMatchObject({ speak: true });
+    expect(governor.verdict(moment('morning'), room(T0 + 1000))).toMatchObject({ speak: true });
+    governor.delivered(moment('scenery'), '景色が変わった', T0);
+    expect(governor.verdict(moment('scenery', T0 + 400_000), room(T0 + 400_000))).toMatchObject({ speak: false, reason: 'salience' });
   });
 
   it('lets a repeat of a quiet kind pass in silence once it has been told', () => {
     const governor = new LiveGovernor();
-    governor.delivered(moment('night_fell'), '夜だ', T0);
-    expect(governor.verdict(moment('night_fell', T0 + 900_000), room(T0 + 900_000))).toMatchObject({ speak: false, reason: 'salience' });
+    governor.delivered(moment('scenery'), '景色だ', T0);
+    expect(governor.verdict(moment('scenery', T0 + 900_000), room(T0 + 900_000))).toMatchObject({ speak: false, reason: 'salience' });
   });
 
   it('holds a moment that is old: its lifetime, and once spent', () => {
@@ -149,7 +154,14 @@ describe('LiveGovernor', () => {
   });
 
   it('names the kinds she still says when not chatty, and every one is a live moment of hers', () => {
-    expect([...SPEECH_NEEDED_KINDS]).toEqual(['task_done', 'stuck', 'near_death', 'died']);
+    expect(SPEECH_NEEDED_KINDS.slice(0, 4)).toEqual(['task_done', 'stuck', 'near_death', 'died']);
+    // The voice of what happens to her is said when she speaks only when needed; her monologue of the work is not.
+    for (const kind of ['attacked', 'scared', 'surprised', 'got_away', 'killed', 'respawned', 'hungry', 'night_fell', 'morning', 'player_near', 'scenery'] as const) {
+      expect(SPEECH_NEEDED_KINDS).toContain(kind);
+    }
+    for (const kind of ['thinking', 'plan_step', 'plan_changed', 'material_needed', 'material_got', 'milestone_passed', 'milestone_late', 'working'] as const) {
+      expect(SPEECH_NEEDED_KINDS).not.toContain(kind);
+    }
     for (const kind of SPEECH_NEEDED_KINDS) expect(LIVE_MOMENT_KINDS).toContain(kind);
     expect(SPEECH_MODES).toEqual(['chatty', 'needed', 'silent']);
     expect(SPEECH_RATES).toEqual(['low', 'normal', 'high']);
@@ -214,13 +226,16 @@ describe('LiveGovernor', () => {
     const governor = new LiveGovernor();
     governor.delivered(moment('died', T0), 'やられた', T0);
     expect(governor.verdict(moment('died', T0 + 40_000), room(T0 + 40_000))).toMatchObject({ speak: true });
-    expect(governor.verdict(moment('died', T0 + 20_000), room(T0 + 20_000))).toMatchObject({ speak: false });
+    // Each death is its own word: a second one 20 s after the first is told, one a few seconds after it is not.
+    expect(governor.verdict(moment('died', T0 + 20_000), room(T0 + 20_000))).toMatchObject({ speak: true });
+    expect(governor.verdict(moment('died', T0 + 7_000), room(T0 + 7_000))).toMatchObject({ speak: false });
   });
 
   it('counts danger toward a quiet moment', () => {
     const governor = new LiveGovernor();
-    expect(governor.verdict(moment('hungry', T0, { food: 4 }), room(T0)).speak).toBe(false);
-    expect(governor.verdict(moment('hungry', T0, { food: 4 }), room(T0, { danger: true })).speak).toBe(true);
+    governor.delivered(moment('scenery', T0 - 400_000), '景色だ', T0 - 400_000);
+    expect(governor.verdict(moment('scenery', T0), room(T0)).speak).toBe(false);
+    expect(governor.verdict(moment('scenery', T0), room(T0, { danger: true })).speak).toBe(true);
   });
 
   it('remembers her words and rejects a line that says the same again', () => {
@@ -242,5 +257,53 @@ describe('pickMoments', () => {
     expect(picked?.main).toBe(a);
     expect(picked?.also).toEqual([b, d]);
     expect(pickMoments([])).toBeNull();
+  });
+});
+
+describe('the voice of what happens to her', () => {
+  it('belongs to six groups, and a reaction is the kind of thing that happens this second', () => {
+    const groups = new Set(LIVE_MOMENT_KINDS.map(kind => liveGroupOf(kind)));
+    expect([...groups].sort()).toEqual(['body', 'danger', 'fight', 'find', 'people', 'work']);
+    for (const kind of ['attacked', 'scared', 'surprised', 'got_away', 'killed', 'respawned', 'near_death', 'died'] as const) expect(liveIsReaction(kind)).toBe(true);
+    for (const kind of ['hungry', 'scenery', 'task_done', 'thinking', 'working'] as const) expect(liveIsReaction(kind)).toBe(false);
+  });
+
+  it('tells each new kind in fixed words with its closed values', () => {
+    expect(liveFactLine(moment('attacked', T0, { from: 'ゾンビ', count: 3, health: 14 }))).toBe('ゾンビたち（3体）に襲われはじめた（体力が20のうち14）。');
+    expect(liveFactLine(moment('attacked', T0, { from: 'ゾンビ', count: 1, health: 17 }))).toBe('ゾンビに襲われはじめた（体力が20のうち17）。');
+    expect(liveFactLine(moment('died', T0, { cause: 'モンスターに殴られた', from: 'ゾンビ' }))).toBe('体が倒れた（原因: モンスターに殴られた。近くにゾンビがいた）。');
+    expect(liveFactLine(moment('scared', T0, { from: 'クリーパー', distance: 3, lit: true }))).toContain('火がついている');
+    expect(liveFactLine(moment('respawned'))).toBe('倒れたあと、生き返った。');
+    expect(liveFactLine(moment('working', T0, { doing: '階段状に深く掘り下がっている', seconds: 24 }))).toBe('いま「階段状に深く掘り下がっている」の途中で、24秒ほど話していない。');
+  });
+
+  it('gives a reaction the urgent gap and a few words more in the minute than her ordinary talk, but never more than the mouth takes', () => {
+    const governor = new LiveGovernor();
+    for (let i = 0; i < 4; i += 1) governor.delivered(moment('scenery', T0 + i * 12_000), `景色${i}`, T0 + i * 12_000);
+    const now = T0 + 50_000;
+    // Four words in the last minute: ordinary talk is at its limit, a hit is not.
+    expect(governor.verdict(moment('hungry', now), room(now))).toMatchObject({ speak: false, reason: 'rate' });
+    expect(governor.verdict(moment('attacked', now), room(now))).toMatchObject({ speak: true });
+    for (let i = 0; i < 2; i += 1) governor.delivered(moment('killed', T0 + 36_000 + i * 6_000), `やった${i}`, T0 + 40_000 + i * 6_000);
+    expect(governor.verdict(moment('got_away', now), room(now))).toMatchObject({ speak: false, reason: 'rate' });
+    // The gap of a reaction is the urgent one (5 s), an ordinary kind's is 12 s.
+    const fresh = new LiveGovernor();
+    fresh.delivered(moment('scenery', T0), '景色', T0);
+    expect(fresh.verdict(moment('attacked', T0 + 6_000), room(T0 + 6_000))).toMatchObject({ speak: true });
+    expect(fresh.verdict(moment('hungry', T0 + 6_000), room(T0 + 6_000))).toMatchObject({ speak: false, reason: 'gap' });
+  });
+
+  it('asks what she said lately of one group only, and holds a cry to a lower bar of freshness against its own sort', () => {
+    const governor = new LiveGovernor();
+    governor.delivered(moment('plan_step', T0), 'ベッドできたよ！ふかふかだよ', T0);
+    governor.delivered(moment('attacked', T0 + 1_000), 'うわあああ！襲われてるよお！', T0 + 1_000);
+    expect(governor.recentOf('danger', T0 + 5_000)).toEqual(['うわあああ！襲われてるよお！']);
+    expect(governor.recentOf('work', T0 + 5_000)).toEqual(['ベッドできたよ！ふかふかだよ']);
+    expect(governor.recentOf('danger', T0 + 400_000)).toEqual([]);
+    expect(governor.fresh('うわあああ！襲われてるよお！', 'danger', 0.2)).toBe(false);
+    expect(governor.fresh('いたたた、また来たよお', 'danger', 0.2)).toBe(true);
+    // A work line is not compared with a cry.
+    expect(governor.fresh('うわあああ！襲われてるよお！', 'work')).toBe(true);
+    expect(governor.lastToldAt()).toBe(T0 + 1_000);
   });
 });

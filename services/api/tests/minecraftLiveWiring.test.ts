@@ -144,4 +144,44 @@ describe('the wiring, end to end through the control', () => {
     expect(f.poll({}).speech).toBeUndefined();
     f.wiring.stop();
   });
+  it('asks the cry for a hit of the scene writer through the light request, and a line of her work with the facts in the user turn; no conversation turn is used', async () => {
+    const f = setup(ON);
+    const asked: Array<{ system: string; message: string }> = [];
+    const lineWriter = { complete: async (request: { system: string; message: string }) => { asked.push(request); return request.system.includes('[場面の一言]') ? 'うわっ、ゾンビだよお！' : 'ダイヤ、とれたよ！'; } };
+    f.wiring.startCommentary({ scopeKey: 'owner', model: f.model, lineWriter, store: f.store, bridge: BRIDGE });
+    f.poll({});
+    await vi.advanceTimersByTimeAsync(500);
+    f.poll({ health: 15, nearbyThreats: [{ name: 'zombie', kind: 'hostile', distance: 1.5, canReachMe: true }] });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.message).toContain('ゾンビに襲われはじめた。');
+    expect(asked[0]!.message).toContain('[いまの場面]');
+    expect(asked[0]!.system).toContain('[場面の一言]');
+    expect(asked[0]!.system).not.toContain('[マイクラの体の今]');
+    expect(f.poll({ health: 15 }).speech?.[0]).toMatchObject({ text: 'うわっ、ゾンビだよお！', kind: 'attacked' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    f.poll({ health: 20, inventory: [{ name: 'diamond', count: 2 }] });
+    await vi.advanceTimersByTimeAsync(100);
+    const work = asked.find(item => !item.system.includes('[場面の一言]'))!;
+    expect(work.system).toContain('[実況の一言]');
+    expect(work.system).not.toContain('[いま起きたこと]');
+    expect(work.message.startsWith('[いま起きたこと]')).toBe(true);
+    expect(work.message).toContain('ダイヤモンドを手に入れた');
+    expect(f.model.requests).toEqual([]);
+    f.wiring.stop();
+  });
+
+  it('without the light request the cry goes through the conversation turn as the whole prompt, as every line did', async () => {
+    const f = setup(ON);
+    f.model.reply = 'ひゃっ、いたいよお！';
+    f.wiring.startCommentary({ scopeKey: 'owner', model: f.model, store: f.store, bridge: BRIDGE });
+    f.poll({});
+    await vi.advanceTimersByTimeAsync(500);
+    f.poll({ health: 15, nearbyThreats: [{ name: 'zombie', kind: 'hostile', distance: 1.5, canReachMe: true }] });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(f.model.requests).toHaveLength(1);
+    expect(f.model.requests[0]!.systemPrompt).toContain('[場面の一言]');
+    expect(f.poll({ health: 15 }).speech?.[0]).toMatchObject({ text: 'ひゃっ、いたいよお！', kind: 'attacked' });
+    f.wiring.stop();
+  });
 });

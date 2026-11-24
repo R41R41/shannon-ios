@@ -222,7 +222,8 @@ describe('LiveCommentary', () => {
 
   it('stays silent for a quiet moment, and drops it', async () => {
     const f = setup();
-    f.emit(moment('morning'));
+    f.engine.governor.delivered({ ...moment('scenery'), key: 'scenery:old' }, '景色だ', clock - 400_000);
+    f.emit(moment('scenery'));
     await f.settle();
     expect(f.requests).toEqual([]);
     expect(f.engine.stats().dropped_salience).toBe(1);

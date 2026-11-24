@@ -3,6 +3,7 @@ import { liveFactLine, type LiveMoment, type WorkingEvent } from '@shannon/mind'
 import type { BodyObservation, BodyPlanView } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { liveBlock, type LiveSnapshot } from './minecraftLiveBlock.js';
+import { sceneOf, type HealthTrail, type LiveScene } from './minecraftLiveScene.js';
 import { bodyInDanger, createMomentDetector, dayTick, dimensionOfWorld, type MomentDetector } from './minecraftMoments.js';
 import { carriedWords, doingWords, mapWords, mobWords, skillDoing, timeWords } from './minecraftLiveWords.js';
 import { MILESTONES, milestoneNow, milestoneTargetSeconds } from './minecraftStage.js';
@@ -93,6 +94,8 @@ eplying, heard). */
   private replies = 0;
   private heardAt: number | null = null;
   private stall: { what: string; seconds: number; at: number } | null = null;
+  /** Her health at each frame of the last few seconds, by body: what the scene says of how fast it fell. */
+  private readonly trails = new Map<string, Array<{ at: number; health: number }>>();
   /** The command the body reported running last (its progress events come every two seconds): it says what a procedure is doing. */
   private running: { skill: string; at: number } | null = null;
 
@@ -294,6 +297,7 @@ eplying, heard). */
       this.detectors.set(bodyId, detector);
       if (arrival.newConnection) detector.reset();
       this.danger = bodyInDanger(observation);
+      this.trail(bodyId, observation, now);
       if (now - (this.seenAt.get(bodyId) ?? -Infinity) < DETECT_EVERY_MS) return;
       this.seenAt.set(bodyId, now);
       // The places of ore the map knows are news for a run toward diamonds; on another job (a cake), or with no job yet (the body has just come in), they only grow in number and the room would hear them over and over.
@@ -307,6 +311,40 @@ eplying, heard). */
     } catch (error) {
       this.parts.log?.(`Shannon Minecraft live frame failed reason=${error instanceof Error ? error.message.slice(0, 80) : 'unknown'}`);
     }
+  }
+
+  /** Keeps her health of the last five seconds (a frame comes about every 0.2 s). */
+  private trail(bodyId: string, observation: BodyObservation, now: number): void {
+    const health = finite(record(observation.state.world)?.health);
+    if (health === null) return;
+    const trail = this.trails.get(bodyId) ?? [];
+    trail.push({ at: now, health });
+    while (trail.length && now - trail[0]!.at > 5_000) trail.shift();
+    this.trails.set(bodyId, trail);
+  }
+
+  /**
+   * The scene around her now, from the newest frame (`minecraftLiveScene.ts`): what the writer of a voice for a hit, a get-away or a fall is
+   * given in place of the whole block. Null while she has no frame.
+   */
+  scene(): LiveScene | null {
+    const task = this.activeTask(), now = this.now();
+    const bodyId = task?.info.bodyId ?? this.parts.frames.available()[0] ?? null;
+    const found = bodyId ? this.parts.frames.latest(bodyId, LIVE_FRAME_MAXIMUM_SECONDS * 1000) : null;
+    if (!found || !bodyId) return null;
+    const trail: HealthTrail = this.trails.get(bodyId) ?? [];
+    return sceneOf(found.observation, { now, trail, doing: doingWords(task?.call ?? null, this.runningWords(now)) });
+  }
+
+  /**
+   * She is working and has said nothing for a while: what she is doing now, as a moment (`working`), or null when she is not at work (no
+   * task, a task that ended, no frame) or has nothing to say of it. The commentary asks only when the quiet is long.
+   */
+  working(seconds: number): LiveMoment | null {
+    const task = this.activeTask(), now = this.now();
+    if (!task || task.endedAt !== null || this.halted(task)) return null;
+    const doing = doingWords(task.call, this.runningWords(now)) || 'マイクラの作業を進めている';
+    return { kind: 'working', key: `working:${task.info.taskId}:${now}`, at: now, facts: { doing, seconds: Math.round(seconds) } };
   }
 
   /** The step the owner's order is at has moved on (or is late), for the task of this body. */

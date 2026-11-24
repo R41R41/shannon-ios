@@ -1,4 +1,4 @@
-import { LIVE_COMMENTARY_V1, LiveGovernor, SPEECH_NEEDED_KINDS, isSpeechMode, isSpeechRate, liveFactLine, liveRateLimits, pickMoments,
+import { LIVE_COMMENTARY_V1, LIVE_QUIET_SECONDS, LiveGovernor, SPEECH_NEEDED_KINDS, isSpeechMode, isSpeechRate, liveFactLine, liveGroupOf, liveIsReaction, liveRateLimits, pickMoments,
   type LiveCommentaryLimits, type LiveMoment, type LiveRoom, type SpeechMode, type SpeechRate } from '@shannon/mind';
 import { outsideActionExecution } from '../../infra/context/actionExecution.js';
 import type { MinecraftLiveRoom, MinecraftLiveSpeechReceipt } from '../../contracts/minecraftControlContract.js';
@@ -27,7 +27,12 @@ export const LIVE_COMMENTARY_ENGINE = Object.freeze({
    * A kind's own time, from how much the word matters later: a thought of the moment is gone in ten seconds, the end of a request (the
    * thing she must say, and ask) waits for the room. The body waits at most as long as the line's time says (and, today, at most eight).
    */
-  lineLifetimeByKindMilliseconds: Object.freeze<Record<string, number>>({ thinking: 10_000, plan_step: 12_000, material_got: 12_000, task_done: 40_000 }),
+  lineLifetimeByKindMilliseconds: Object.freeze<Record<string, number>>({ thinking: 10_000, plan_step: 12_000, material_got: 12_000, task_done: 40_000,
+    // A cry of a fight is about the second it came from: said after a few seconds it is about something that is over.
+    attacked: 8_000, scared: 6_000, surprised: 6_000, near_death: 12_000, got_away: 12_000, killed: 10_000, respawned: 12_000, scenery: 20_000,
+    player_near: 12_000, working: 15_000 }),
+  /** How often the quiet is looked at (while she works, a word of what she is doing is asked for when she has said nothing for a while). */
+  quietCheckMilliseconds: 4_000,
   /** Of these kinds only the newest waiting moment is worth a word: an older one is about a step that has already passed. */
   supersededKinds: Object.freeze(['thinking', 'plan_step']),
   /** The moments of her work as she does it: the end of a request closes them. */
@@ -40,6 +45,8 @@ export interface LiveWriteRequest {
   main: LiveMoment;
   also: readonly LiveMoment[];
   recent: readonly string[];
+  /** What she said lately of the same sort of thing (the moment's group): what a voice for a hit or a find is asked not to repeat. */
+  recentSame: readonly string[];
   /** The events she already told of this request's work (fact lines): the writer sees these, not her own words. */
   told: readonly string[];
   /** The line will be spoken (she is in a voice channel), not written. */
@@ -56,6 +63,8 @@ export interface LiveCommentaryParts {
     onRelease?(listener: () => void): () => void;
     inDanger(): boolean;
     conversation(): { replying: boolean; sinceHumanMilliseconds: number | null };
+    /** What she is doing now as a moment, when she is at work (asked only when she has been quiet for a while); null otherwise (absent: nothing tells). */
+    working?(quietSeconds: number): LiveMoment | null;
   };
   outbox: Pick<LiveSpeechOutbox, 'enqueue' | 'onEnd' | 'room'> & Partial<Pick<LiveSpeechOutbox, 'withdraw'>>;
   /** The line for these moments in her voice, or null when she has none; may throw (the moment is then dropped). */
@@ -97,6 +106,9 @@ export class LiveCommentary {
   private readonly toldFacts = new LiveToldFacts();
   private serial = 0;
   private stops: Array<() => void> = [];
+  /** When the commentary began and when it last asked for a word of her work: the quiet is counted from the later of these and her last word. */
+  private readonly startedAt: number;
+  private quietAskedAt = 0;
   private readonly counts: Record<string, number> = {};
   /** The ends of requests that were given a second try (the first line was lost); each gets one. */
   private readonly retried = new Set<string>();
@@ -105,6 +117,7 @@ export class LiveCommentary {
 
   constructor(private readonly parts: LiveCommentaryParts) {
     this.governor = parts.governor ?? new LiveGovernor();
+    this.startedAt = (parts.now ?? Date.now)();
   }
 
   private now(): number { return (this.parts.now ?? Date.now)(); }
@@ -116,6 +129,35 @@ export class LiveCommentary {
     this.stops.push(this.parts.live.onMoment(moment => this.hear(moment)), this.parts.outbox.onEnd((receipt, draft) => this.ended(receipt, draft)));
     const unhear = this.parts.live.onRelease?.(() => this.release());
     if (unhear) this.stops.push(unhear);
+    if (this.parts.live.working) {
+      const timer = setInterval(() => this.quiet(), LIVE_COMMENTARY_ENGINE.quietCheckMilliseconds);
+      timer.unref?.();
+      this.stops.push(() => clearInterval(timer));
+    }
+  }
+
+  /**
+   * She has been quiet for a while at her work: the live view says what she is doing now (a `working` moment) and it is weighed like any other
+   * (the gap, the minute, a person talking and a reply being written still hold it). It is asked at most once in the quiet's length, only when
+   * nothing waits and no line is being written or said, and only when she speaks at all in the way that includes her work (chatty): the
+   * moment is a monologue, and a body that is not chatty declines it.
+   */
+  private quiet(): void {
+    try {
+      const now = this.now();
+      if (this.waiting.length || this.writing || this.pending.size > 0 || this.speech().mode !== 'chatty') return;
+      const last = Math.max(this.startedAt, this.quietAskedAt, this.governor.lastToldAt() ?? 0);
+      const seconds = (now - last) / 1000;
+      if (seconds < LIVE_QUIET_SECONDS) return;
+      // Someone is talking with her (her replies are not live lines, so the quiet above does not see them): that is not a quiet to fill.
+      const since = this.room().sinceHumanMilliseconds;
+      if (since !== null && since < LIVE_QUIET_SECONDS * 1000) return;
+      const moment = this.parts.live.working?.(seconds);
+      if (!moment) return;
+      this.quietAskedAt = now;
+      this.count('quiet_asked');
+      this.hear(moment);
+    } catch { /* the quiet is only looked at; a failure here changes nothing */ }
   }
 
   /**
@@ -238,6 +280,7 @@ export class LiveCommentary {
       const voice = this.parts.outbox.room()?.voice === true, folded = also.map(item => item.moment);
       const mode = this.speech().mode;
       const request: LiveWriteRequest = { main: main.moment, also: folded, recent: this.governor.recentWords(), told: this.toldFacts.list(), voice,
+        recentSame: this.governor.recentOf(liveGroupOf(main.moment.kind), this.now()),
         ...(mode !== 'chatty' ? { speech: mode } : {}) };
       const text = await within(this.parts.write(request).catch(() => null), LIVE_COMMENTARY_ENGINE.writeMilliseconds);
       // Her work was released while the model wrote (the line is of the work, not the end of a request): the line is not said.
@@ -260,13 +303,16 @@ export class LiveCommentary {
       this.dropWaiting(main.moment, folded);
     };
     // The end was already written once more and is still lost for a reason of the line: the fixed line is said (it is not judged as a repeat).
-    if ((!text || !this.governor.fresh(text)) && main.moment.kind === 'task_done' && this.retried.has(main.moment.key) && this.parts.doneFallback) {
+    // A cry of a fight may sound like the last one (a stretched sound is much like another): it is held to a lower bar, and only against its own sort.
+    const reaction = liveIsReaction(main.moment.kind), group = liveGroupOf(main.moment.kind);
+    const fresh = (line: string) => (reaction ? this.governor.fresh(line, group, 0.2) : this.governor.fresh(line));
+    if ((!text || !fresh(text)) && main.moment.kind === 'task_done' && this.retried.has(main.moment.key) && this.parts.doneFallback) {
       this.count('done_fallback');
       text = this.parts.doneFallback;
     } else if (!text) {
       this.count('write_empty');
       return giveUp();
-    } else if (!this.governor.fresh(text)) {
+    } else if (!fresh(text)) {
       this.count('write_repeat');
       return giveUp();
     }

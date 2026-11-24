@@ -19,6 +19,7 @@ import { createConfiguredTurnMemoryRecall } from './mind/recall/turnMemoryRecall
 import { DurableBackgroundDispatcher } from './mind/sleep/backgroundUpdates.js';
 import { startToolTraceSweep } from './mind/tools/shannonToolTraceSweep.js';
 import { createConfiguredChatModel } from './infra/models/chatModel.js';
+import { configuredLiveLineWriter } from './infra/models/liveLineModel.js';
 import { configuredVoiceDecision,startRewardMood } from './wiring/cognitionLedgerWiring.js';
 import { configuredJevChooser,readToolPorts,skillRoutingParts } from './wiring/skillRoutingWiring.js';
 import { configuredStream } from './wiring/streamWiring.js';
@@ -359,7 +360,7 @@ const lifecycleRequests = lifecycle ? createLifecycleRequests({ scopeKey: lifecy
   unresolved: () => lifecycle.service.store.unresolved(), ...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}),
   log: line => console.info(line) }) : null;
 if (lifecycleRequests) minecraft.connectLifecycleRequest(lifecycleRequests);
-minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
+minecraft.startLive({ model: haiku, lineWriter: configuredLiveLineWriter(process.env, { usageStore: persistentStore, now }), innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
 // The YouTube stream's place (docs/stream-contract.md): no switch; nothing runs until a stream is started from the desktop.
 const stream = configuredStream({ scopeKey: shannonNowOwnerScope(process.env), now: () => Date.now(), feeling: feeling?.port ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey),
