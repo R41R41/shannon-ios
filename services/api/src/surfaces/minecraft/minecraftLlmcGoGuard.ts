@@ -193,7 +193,7 @@ const DEFAULT_MAX_PLACE = 24;
 /** A destination this near (flat) over her head is climbed to level by level (the body's CLIMB_NEAR_M of 6 and the range) and not walked up a slope. */
 const CLIMB_FLAT_M = 8;
 /**
- * A go to a place straight over her head that is higher than the blocks it may lay: a climb lays one block a level, so it stops half way up at maxPlace (11/25: 44 levels up with
+ * A go to a place straight over her head that is higher than the blocks it may lay: a climb lays one block a level, so it stops half way up at maxPlace (44 levels up with
  * maxPlace 30, then 40 for 56 levels: a stop and a new decision of 4.8 to 7.9 s each, in the middle of a climb). The model writes the number; the line says what the height needs.
  */
 function climbProblem(hand: Rec, here: Cell | null): Found {
@@ -205,7 +205,7 @@ function climbProblem(hand: Rec, here: Cell | null): Found {
   const limit = typeof hand.maxPlace === 'number' ? hand.maxPlace : DEFAULT_MAX_PLACE;
   if (up <= limit || Math.hypot(nearest.x - here.x, nearest.z - here.z) > CLIMB_FLAT_M) return null;
   const need = Math.min(100, up + 4);
-  return { code: 'place_missing', line: `行き先 (${nearest.x},${nearest.y},${nearest.z}) は真上 ${up} 段。上り 1 段で置く 1 個で、maxPlace ${limit}${typeof hand.maxPlace === 'number' ? '' : '（既定）'} だと途中で止まる。maxPlace=${need} 以上にする（荷の置く物も ${up} 個以上要る）` };
+  return { code: 'place_missing', line: `行き先 (${nearest.x},${nearest.y},${nearest.z}) は真上 ${up} 段。上るのは 1 段ごとに 1 個置くので、maxPlace ${limit}${typeof hand.maxPlace === 'number' ? '' : '（既定）'} だと途中で止まる。maxPlace=${need} 以上にする（荷の置く物も ${up} 個以上要る）` };
 }
 
 /** How many blocks a vertical is expected to dig: stairs two a step, a shaft one; from maxDig or the steps to toY. */
