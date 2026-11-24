@@ -245,7 +245,7 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   const queue = fcaMinecraftQueue(queueTaskPorts({ db: parts.db, control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope,
     atomic: parts.atomic, stop: parts.stop, log, spec, newTask, requestOrigin: task => requestOrigin(task) }));
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
-    sourceVisible: parts.sourceVisible, bound: () => bound(undefined, unfinished), openRequest, resting, log, queue });
+    sourceVisible: parts.sourceVisible, ...(parts.sourceWhy ? { sourceWhy: parts.sourceWhy } : {}), bound: () => bound(undefined, unfinished), openRequest, resting, log, queue });
   /**
    * dragon26 (the mod's 「やめる」 was said to her as 「今の作業をやめて」 and refused twice as `turn_not_visible`, so the task ran on): the stop of
    * the owner's own button. It is the owner's body device (the route checked it) stopping the owner's tasks bound to a body, so no turn's

@@ -19,6 +19,8 @@ export interface FcaMinecraftVoiceParts {
   ownerScope: string;
   stop(id: string, reason: string): Promise<TaskView[]>;
   sourceVisible(id: string): boolean;
+  /** Content-free words for why `sourceVisible` was false (for the journal only); see `FcaMinecraftRequestParts.sourceWhy`. */
+  sourceWhy?(id: string): string;
   /** The tasks bound to a body, and the newest open request of his on a body (`fcaMinecraftRequests`). */
   bound(): TaskView[];
   openRequest(bodyId: string): TaskView | undefined;
@@ -108,7 +110,15 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const bodies = parts.control.available();
       if (bodies.length !== 1) return refuse('body_unavailable', intent.kind);
       if (!input.experienceId) return refuse('no_turn', intent.kind);
-      if (!parts.sourceVisible(input.experienceId)) return refuse('turn_not_visible', intent.kind);
+      if (!parts.sourceVisible(input.experienceId)) {
+        // 11/25: every spoken request was refused once as `turn_not_visible` and taken on the retry with a record, with no line to say why.
+        if (parts.sourceWhy) {
+          let why = 'unknown';
+          try { why = parts.sourceWhy(input.experienceId); } catch { /* the line is only for the journal */ }
+          parts.log(`Shannon Minecraft voice source not visible kind=${intent.kind} ${why}`);
+        }
+        return refuse('turn_not_visible', intent.kind);
+      }
       if (intent.kind === 'message') {
         const told = message(input, input.experienceId, bodies[0]!);
         if (told) return told;

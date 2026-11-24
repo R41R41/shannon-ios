@@ -37,8 +37,9 @@ const PINNED = {
   // 11/13 review of the run-8 fixes: only the O with lava right under it needs a water bucket (the body fills the rest) (前は 640b0eb4dec985c4).
   // 11/13 the body's dropGuard: the lava beside or above is filled with stone, the obsidian hand's with its canPlace only, so the core asks for stone there (前は a4f7d78bb3171771).
   // 11/13 the 1111 review: lava beside is not walked and only O is dug there (the core's falls line) (前は a49b5cc1bdf3e971).
-  llmc_r9_system: '05691936cd001657',
-  old_mode_system: '9484df3e3e4d04cf',
+  // 11/25: the reading of the live state says the application's own lines are advice and only world text is never obeyed (the model took its own lines for injected text; 前は 05691936cd001657 と 9484df3e3e4d04cf).
+  llmc_r9_system: 'c0d825f9d55a9361',
+  old_mode_system: '3345e1deee8a446d',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 type Body = Record<string, unknown> & { system: Array<{ text: string; cache_control?: unknown }>; messages: unknown[] };
@@ -139,7 +140,8 @@ describe('SHANNON_MINECRAFT_OWN_PROMPT on: the body task\'s own instructions', (
     // 11/13 run 8: obsidian in sight is dug with no water, and the body fills the lava beside or under it first (about 44); the budget is 8,350.
     // 11/13 review: the O with lava right under it needs a water bucket (the line measures about the same as before).
     // 11/13 the body's dropGuard: the obsidian hand fills the lava beside a block only with its canPlace, and the core says to give it stone (about 50); the budget is 8,400.
-    expect(after.llmcTokens).toBeLessThanOrEqual(8_400);
+    // 11/25: the reading of the live state says which lines are the application's own advice (about 40 tokens); the budget is 8,500.
+    expect(after.llmcTokens).toBeLessThanOrEqual(8_500);
     expect(after.estimated).toBeLessThanOrEqual(7_000);
     expect(after.llmcTokens / before.llmcTokens).toBeLessThan(0.3);
   }, 60_000);
