@@ -50,7 +50,7 @@ export interface MinecraftQueueEntry {
   state: MinecraftQueueState;
   pos: number;
   origin: MinecraftQueueOrigin;
-  /** Who asked, when the entry came from a voice channel (a shown name; a guest is marked as one). */
+  /** Who asked, when the entry came from a voice channel (a shown name, the same for the owner and anyone else). */
   askedBy?: string;
   /** The common task once it has run (it stays after a pause). */
   taskId?: string;

@@ -15,7 +15,7 @@ const TYPED_BY_HIM: ReadonlySet<MinecraftQueueOrigin> = new Set<MinecraftQueueOr
 const ASKED_BY: Readonly<Partial<Record<MinecraftQueueOrigin, string>>> = Object.freeze({
   chat: 'ゲーム内の本人の依頼', voice: 'Discordの通話での本人の依頼',
 });
-/** The line for the entry: a voice request names who asked (a guest marked as one), the others say where it came from. */
+/** The line for the entry: a voice request names who asked (by the shown name), the others say where it came from. */
 const askedBy = (entry: QueueRecord): string => (entry.askedBy ? `Discordの通話での${entry.askedBy}の依頼` : ASKED_BY[entry.origin] ?? '本人の依頼');
 
 /**

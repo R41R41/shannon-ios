@@ -23,7 +23,7 @@ export interface QueueRecord {
   /** The stored turn the request was made in, and when it was said; null for a request that came from no turn. */
   experienceId: string | null;
   observedAt: string | null;
-  /** Who asked, in the words of the entry (a Discord member's shown name, a guest marked as one); null when the entry does not say. */
+  /** Who asked, in the words of the entry (a Discord member's shown name, the same for the owner and anyone else); null when the entry does not say. */
   askedBy: string | null;
   taskId: string | null;
   createdAt: string;
