@@ -48,18 +48,32 @@ class Hostiles {
 /** A hostile that gets a line: within its distance (24 m; creeper 32; shooter 48, by name), named by a probe or urgent, or in sight or with a way. */
 const matters = (e: Enemy): boolean => e.wait || e.dist <= lineMeters(e.name) || e.notes.length > 0 || e.reach === 'seen' || e.reach === 'path';
 const isShooter = (e: Enemy): boolean => e.shooter || SHOOTER_KINDS.has(e.name);
+/** A group's heights against her feet: 「（下 47〜56）」; nothing when all are within 3 of her feet; 「（下 5〜上 8）」 when they straddle her; empty when none is known. */
+export function heightWords(dys: readonly number[]): string {
+  if (!dys.length) return '';
+  const low = Math.min(...dys), high = Math.max(...dys);
+  if (Math.abs(low) <= 3 && Math.abs(high) <= 3) return '';
+  const side = (n: number) => `${n > 0 ? '上' : '下'} ${Math.abs(n)}`;
+  if (low > 0) return `（${side(low)}${low === high ? '' : `〜${high}`}）`;
+  if (high < 0) return `（${side(high)}${low === high ? '' : `〜${Math.abs(low)}`}）`;
+  return `（${side(low)}〜${side(high)}）`;
+}
 /** The others in one line: how many by kind (a shooter marked), and the nearest with its height against her feet and how it stands to her. */
 function farLine(far: readonly Enemy[], self: P): string[] {
   const first = far[0];
   if (!first) return [];
   const dy = first.pos ? first.pos.y - self.y : 0;
   const how = [...dy ? [`${dy > 0 ? '上' : '下'} ${Math.abs(dy)}`] : [], ...first.reach ? [REACH_SHORT[first.reach]] : []];
-  const kinds = new Map<string, number>();
+  // Each kind says its height against her feet (「skeleton 6」 with only the nearest enemy's height was read as six skeletons on the surface; they were 47 to 56 blocks down).
+  const kinds = new Map<string, { count: number; dys: number[] }>();
   for (const e of far) {
     const kind = `${e.name}${isShooter(e) ? `（${SHOOTER_WORD}）` : ''}`;
-    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    const entry = kinds.get(kind) ?? { count: 0, dys: [] };
+    entry.count += 1;
+    if (e.pos) entry.dys.push(e.pos.y - self.y);
+    kinds.set(kind, entry);
   }
-  const counts = [...kinds].map(([name, count]) => `${name} ${count}`).join('・');
+  const counts = [...kinds].map(([name, { count, dys }]) => `${name} ${count}${heightWords(dys)}`).join('・');
   return [`ほか ${far.length} 体（${counts}。いちばん近い: ${first.name} ${first.dist}m${how.map(part => `・${part}`).join('')}）`];
 }
 

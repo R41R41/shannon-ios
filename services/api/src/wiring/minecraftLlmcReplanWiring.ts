@@ -21,6 +21,7 @@ import { treeQuestions, workingNode } from '../surfaces/minecraft/minecraftLlmcN
 import type { Stall } from '../surfaces/minecraft/minecraftLlmcStalls.js';
 import { stallVitals } from '../surfaces/minecraft/minecraftLlmcStallRecord.js';
 import { createStallWatch } from '../surfaces/minecraft/minecraftLlmcWatch.js';
+import { recentJumpLine } from '../surfaces/minecraft/minecraftLlmcShiftFacts.js';
 import type { createWaitLedger } from '../surfaces/minecraft/minecraftPurposeProgress.js';
 
 /**
@@ -100,7 +101,7 @@ function sourcesOf(parts: UnheldParts, results: readonly string[], stall: Stall)
   const current = tree.nodes.find(item => item.id === tree.current);
   const obsidian = [stalled, current].some(item => item && OBSIDIAN_STAGE.has(kindOf(item))) ? obsidianTallyLine(frame) : null;
   return { node: stalled ? stalled.id : null, goal: parts.goal, seconds, pace, tree, doneStatus,
-    now: [...nowLines(frame), ...(request ? plantLines(frame) : [])], facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(readiness.recovery ?? []),
+    now: [...nowLines(frame), ...(request ? plantLines(frame) : [])], facts: [...(readiness.shortage ? [`足りない物: ${readiness.shortage}`] : []), ...(obsidian ? [obsidian] : []), ...(recentJumpLine(parts.taskId) ? [recentJumpLine(parts.taskId)!] : []), ...(readiness.recovery ?? []),
       ...endgame, ...stops],
     results: [...results], queue: parts.queue.lines(frame),
     // A one-thing request is shown its own short text: the stage's text is over the brief's bound and was dropped whole (bn1 to bn4, 11/21).

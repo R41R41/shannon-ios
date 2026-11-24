@@ -36,6 +36,9 @@ export const counters = new Map<string, number>();
 export const recentGos = new Map<string, number[]>();
 export const GO_HOPS_KEPT = 6;
 
+/** When the head stopped a running item of the task by `replace` (newest last, at most 12), for the line that says how often it has done it. */
+export const reissues = new Map<string, number[]>();
+
 /** Amendment A-6 15: the ms a step the body measured for each form of a vertical hand (`progress.msPerUnit` of
  * its results), by task,
  * in place of the first guesses of an estimate. */
@@ -55,6 +58,7 @@ export function forgetLlmcQueues(): void {
   decisionTimes.clear();
   counters.clear();
   recentGos.clear();
+  reissues.clear();
   verticalSpeeds.clear();
 }
 

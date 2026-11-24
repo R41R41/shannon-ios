@@ -1,6 +1,6 @@
 import { createQueueProgress } from './minecraftLlmcQueueProgress.js';
 import { createQueueAdmission } from './minecraftLlmcQueueAdmission.js';
-import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,recentGos,GO_HOPS_KEPT,queueWakeMs,
+import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,recentGos,GO_HOPS_KEPT,reissues,queueWakeMs,
   keep,ioTurn,sleepMs } from './minecraftLlmcQueueState.js';
 import type { QueueItem,QueueAdd,QueueRecordRow,QueueDeps,RanListener,LlmcQueue } from './minecraftLlmcQueueState.js';
 import { createQueueReceiptHandlers } from './minecraftLlmcQueueReceipts.js';
@@ -17,7 +17,7 @@ import { offer as offerOnceFact } from './minecraftLlmcOnceFacts.js';
 import { placementCorrections } from './minecraftLlmcResultWords.js';
 import { urgentWatch } from './minecraftLlmc.js';
 import { noteItemStart } from './minecraftLlmcNode.js';
-import { itemLabel,itemResult,neverRan,queueLines,QUEUE_MAX,unitOfReceipt,unknownResult } from './minecraftLlmcQueueWords.js';
+import { DROPPED_LATELY_MS,itemLabel,itemResult,neverRan,queueLines,QUEUE_MAX,unitOfReceipt,unknownResult } from './minecraftLlmcQueueWords.js';
 import { correctionWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { madeInOf,withMadeIn } from './minecraftMadeIn.js';
@@ -173,7 +173,10 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     const result = readActResult(receipt.result);
     if (!result) return;
     const metres = result.lines.filter(line => line.status === 'done' && item.input.hands[line.i - 1]?.do === 'go'
-      && line.progress?.unit === 'meter' && typeof line.progress.done === 'number').map(line => line.progress!.done as number);
+      && line.progress?.unit === 'meter' && typeof line.progress.done === 'number' && line.progress.done > 0)
+      // 0 m is a go that ran a planned path (its length is in steps), not a short hop: counting it pulled the median down
+      // and told the model that a 52 s move had left the body standing.
+      .map(line => line.progress!.done as number);
     if (metres.length) keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...metres].slice(-GO_HOPS_KEPT));
   }
 
@@ -468,6 +471,7 @@ void restoreReceipts();
         }
       }
       const running = chosen.filter(item => item.startedAt !== null).map(item => item.item);
+      if (running.length) keep(reissues, deps.taskId, [...(reissues.get(deps.taskId) ?? []), now()].slice(-12));
       for (const item of gone) {
         item.because ??= '差し替え';
         item.abort.abort('replaced');
@@ -590,7 +594,9 @@ void restoreReceipts();
       const first = queue[0];
       return queueLines(queue.map(item => ({ ...item, dependStates: item.dependsOn?.map(ref => [ref, dependStateOfRef(ref)] as const),
          reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 },
-         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], decisionsMs: decisionTimes.get(deps.taskId) ?? [] });
+         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], decisionsMs: decisionTimes.get(deps.taskId) ?? [],
+           reissuedAgoMs: (reissues.get(deps.taskId) ?? []).map(at => now() - at),
+           droppedLately: dropLog.filter(entry => entry.at >= now() - DROPPED_LATELY_MS).map(entry => entry.why) });
     },
   };
   return api;

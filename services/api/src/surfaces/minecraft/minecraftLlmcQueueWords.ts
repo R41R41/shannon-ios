@@ -175,19 +175,53 @@ export function hopsLine(hops: readonly number[], decisionsMs: readonly number[]
   return `直近の go は ${recent.map(m => Math.round(m)).join("・")} m（中央 ${Math.round(metres)} m で約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている。移動の go は 15 m 以上（地図の外の本当の行き先でよい）にするか、go を 2〜3 本 1 つの act に並べる`;
 }
 
+/**
+ * Hostiles on her (one within 8 m) or health at 12 or less, read from the frame: the body's `nearbyThreats` carry the distance, `health` the points. False when the frame says neither.
+ */
+export function underAttack(frame: BodyObservation | null): boolean {
+  const world = frame?.state.world;
+  if (!world || typeof world !== 'object' || Array.isArray(world)) return false;
+  const record = world as Record<string, unknown>;
+  const health = record.health;
+  const near = Array.isArray(record.nearbyThreats) && record.nearbyThreats.some(entity =>
+    !!entity && typeof entity === 'object' && typeof (entity as { distance?: unknown }).distance === 'number' && (entity as { distance: number }).distance <= 8);
+  return near || (typeof health === 'number' && health <= 12);
+}
+
+/** Items taken off the queue in the last `DROPPED_LATELY_MS` (a stop of the one before them): said again in the live state, since a decision asked just before the stop was made without it (nine decisions in 27 s waited for an item that had already failed). */
+export const DROPPED_LATELY_MS = 30_000;
+export function droppedLine(why: readonly string[]): string | null {
+  return why.length ? `直近 ${DROPPED_LATELY_MS / 1000} 秒に列から外れた項目（体は動いていない）: ${why.slice(-3).join('／')}。待たずに、止まった理由を読んで次の手を出す` : null;
+}
+
+/** Moves stopped by a new decision in the last minute (`reissuedAgoMs`: the ages of the stops, newest last); said from the third. */
+export const REISSUE_WINDOW_MS = 60_000;
+export function reissueLine(agoMs: readonly number[]): string | null {
+  const recent = agoMs.filter(age => age <= REISSUE_WINDOW_MS);
+  if (recent.length < 3) return null;
+  const every = Math.max(1, Math.round(REISSUE_WINDOW_MS / 1000 / recent.length));
+  return `この 1 分で、走っている手を ${recent.length} 回止めて出し直した（約 ${every} 秒ごと）。止めるたびに体は歩き出しからやり直し、go は着く前に切れる。今の手と同じ向きなら出し直さず走らせ、向き・目標が変わる事実（敵が別の側に回った・体力が急に落ちた・足場が無い）がある時だけ止める`;
+}
+
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it
  * has no item (the
  * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number },
-  timing?: { wakeMs: number; leftMs: number; hops?: readonly number[]; decisionsMs?: readonly number[] }): string[] {
-  const hopsWords = timing?.hops ? hopsLine(timing.hops, timing.decisionsMs ?? []) : null;
-  if (!items.length) return ['列に項目なし', ...(hopsWords ? [hopsWords] : [])];
+  timing?: { wakeMs: number; leftMs: number; hops?: readonly number[]; decisionsMs?: readonly number[]; reissuedAgoMs?: readonly number[];
+    droppedLately?: readonly string[] }): string[] {
+  // A line that says 「移動の go は 15 m 以上にせよ」 is for a calm stretch of work; with enemies on her or her health low it sent a flight to a target 31 m away (the lake was 12 m off).
+  const hopsWords = timing?.hops && !underAttack(frame) ? hopsLine(timing.hops, timing.decisionsMs ?? []) : null;
+  const reissueWords = timing?.reissuedAgoMs ? reissueLine(timing.reissuedAgoMs) : null;
+  const droppedWords = droppedLine(timing?.droppedLately ?? []);
+  if (!items.length) return ['列に項目なし', ...(droppedWords ? [droppedWords] : []), ...(hopsWords ? [hopsWords] : []), ...(reissueWords ? [reissueWords] : [])];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
     ...(timing ? [timingLine(timing, running.leftMs)] : []),
     ...(hopsWords ? [hopsWords] : []),
+    ...(reissueWords ? [reissueWords] : []),
+    ...(droppedWords ? [droppedWords] : []),
     // Loop 11/10: the room is said with what it is for: the next work behind the running item, not a look at its result.
     room > 0 ? `あと ${room} つ足せる（足した項目は ${last} の後ろに付く。${last} の結果を待たずに次の作業を足せば、体は止まらない）` : `列はいっぱい（${QUEUE_MAX}/${QUEUE_MAX}）`];
 }

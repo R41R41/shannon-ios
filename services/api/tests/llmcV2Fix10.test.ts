@@ -52,11 +52,11 @@ describe('C1: a hostile gets a line when it matters now, with how it stands to h
     expect(lines[0]).toMatch(/^#1 zombie 10\.4m \(8,0,6\) 東8・南6・見える（射線の中）$/u);
     expect(lines[1]).toContain('壁の向こうで届かない');
     expect(lines[2]).toContain('見えない・道はある（回って来る）');
-    expect(lines[3]).toBe('ほか 2 体（zombie 1・creeper 1。いちばん近い: zombie 39.6m・上 35・壁の向こう）');
+    expect(lines[3]).toBe('ほか 2 体（zombie 1（上 35）・creeper 1（下 36）。いちばん近い: zombie 39.6m・上 35・壁の向こう）');
   });
   it('says nothing of reach where the frame says nothing (not made up), and keeps a far hostile that sees her or has a way', () => {
     const out = rewritten({ threats: ['#9 zombie 60m (0,40,0)', '#8 skeleton 44m (10,0,0)・見える（射線の中）'] });
-    expect(out.body.threats).toEqual(['#8 skeleton 44m (10,0,0) 東10・見える（射線の中）・飛び道具', 'ほか 1 体（zombie 1。いちばん近い: zombie 60m・上 40）']);
+    expect(out.body.threats).toEqual(['#8 skeleton 44m (10,0,0) 東10・見える（射線の中）・飛び道具', 'ほか 1 体（zombie 1（上 40）。いちばん近い: zombie 60m・上 40）']);
   });
   it('keeps a line for a shooter up to 48 m and a creeper up to 32 m by name, marked, and counts the rest by kind in the one line', () => {
     const out = rewritten({ threats: ['#1 ghast 41m (0,10,0)', '#2 skeleton 30m (30,0,0)', '#3 creeper 31m (31,0,0)', '#4 creeper 33m (33,0,0)',
