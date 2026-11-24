@@ -33,7 +33,7 @@ const BOOKING_GRACE_MS = 90_000;
 const bookings = new Map<string, { at: number; night?: number }>();
 
 /**
- * 11/25 (the night's skeletons, asked of her): a sleep came at night in the middle of the request twice, once by a booking made by day that the body kept for 25 minutes
+ * A run's night: a sleep came at night in the middle of the request twice, once by a booking made by day that the body kept for 25 minutes
  * (the head could not take it back and its input never showed it), once by the head's own sleep hand written for "the night's skeletons". The head now says "not tonight" with a
  * `sleep` hand of `on=false` (and `seconds` 60–300, else the morning): the body drops its booking, and this module stops holding the night's work for a sleep. A skip ends by
  * itself at the morning, at its time, at a death, and when the head sends a sleep (`mode` now or none) or `resume`: it is never left on by forgetting. The skip's reason is the act's `why`.

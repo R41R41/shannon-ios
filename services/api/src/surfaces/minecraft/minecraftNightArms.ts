@@ -151,8 +151,8 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
 }
 
 /**
- * 11/25 (the cake's evening: no bed at dusk, two deaths in the night's four minutes and every material lost): by day with no bed in the pack, the bed is said as a thing to make first, whatever the
- * request or the node is (the owner's rule: with nothing ordered, a bed is still made first). Said with its reasons, once the clock is known; left out when a node of the plan already makes the bed
+ * By day with no bed in the pack, the bed is said as a thing to make first, whatever the
+ * request or the node is (with nothing ordered, a bed is still made first; a run with no bed at dusk lost every material to two deaths in four minutes). Said with its reasons, once the clock is known; left out when a node of the plan already makes the bed
  * (`bedNode`: the first plan's own node must not be said twice), when the night's own choice line has taken over (3 minutes before dark), in a storm and outside the overworld.
  */
 export function dayNoBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, bedNode = false): string | null {

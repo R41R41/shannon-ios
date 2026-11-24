@@ -180,9 +180,9 @@ export function readinessParts(
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
     facts.food, llmc.singleRequest !== true, llmc.singleRequest === true) : null;
-  // 11/25: no bed by day is said too (the cake's evening: a night with no bed cost two deaths and the materials), unless a plan node already makes it; and the night's sleep in one line
+  // No bed by day is said too (a night with no bed cost two deaths and the materials in a run), unless a plan node already makes it; and the night's sleep in one line
   // beside the plan's now (a skip on, a booking the body may keep, what a sleep costs), so the sleep is weighed against what the node is for.
-  const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|bed/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
+  const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|\bbed\b/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
   const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true)
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
