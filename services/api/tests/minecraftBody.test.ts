@@ -826,7 +826,7 @@ describe('game.died through POST /v1/body/events', () => {
     // Phase 2 (owner 2026-10-26): dying frustrates her, through the one game table; the duplicate moved nothing again.
     const after = store.snapshot('owner');
     expect(after.emotion.valence).toBeLessThan(before.emotion.valence);
-    expect(after.expressiveEmotion).toMatchObject({ primary: 'frustrated', cause: 'マイクラで死んでしまった' });
+    expect(after.expressiveEmotion).toMatchObject({ primary: 'lamenting', cause: 'マイクラで死んでしまった' });
     close();
   });
 

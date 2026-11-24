@@ -241,6 +241,8 @@ describe('what she means, and the end of a request', () => {
   it('tells a request that is done once, when the task says so after its step ended; never her own errand, never one still going', () => {
     let phase: string | null = 'running';
     const f = fixture({ phase: () => phase });
+    const glad: string[] = [];
+    f.live.onTaskDone(scopeKey => glad.push(scopeKey));
     f.see();
     expect(f.kinds()).toEqual([]);
     f.live.end('task');
@@ -250,6 +252,8 @@ describe('what she means, and the end of a request', () => {
     f.see();
     f.see();
     expect(f.moments.filter(moment => moment.kind === 'task_done')).toEqual([expect.objectContaining({ key: 'done:task', facts: { goal: 'ケーキを作る' } })]);
+    // Her feeling is told once too, with the scope of the task.
+    expect(glad).toEqual(['owner']);
     const own = fixture({ origin: 'own_time', phase: () => 'completed' });
     own.see();
     own.live.end('task');

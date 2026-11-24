@@ -360,6 +360,8 @@ const lifecycleRequests = lifecycle ? createLifecycleRequests({ scopeKey: lifecy
   log: line => console.info(line) }) : null;
 if (lifecycleRequests) minecraft.connectLifecycleRequest(lifecycleRequests);
 minecraft.startLive({ model: haiku, innerNote: innerNote?.port, feeling: feeling?.port, store: persistentStore, bridge: platformBridge?.configuration });
+// A request she finished is a joy to her: the feeling shows as the joyful face (the body's own flash does not run in the common FCA).
+minecraft.live?.onTaskDone(scopeKey => persistentStore.apply(scopeKey, { type: 'game-felt', moment: { kind: 'taskDone' } }));
 // The YouTube stream's place (docs/stream-contract.md): no switch; nothing runs until a stream is started from the desktop.
 const stream = configuredStream({ scopeKey: shannonNowOwnerScope(process.env), now: () => Date.now(), feeling: feeling?.port ?? null,
   snapshot: scopeKey => persistentStore.snapshot(scopeKey),

@@ -87,6 +87,7 @@ export class MinecraftLive implements MinecraftLiveSink {
   private readonly moments: LiveMoment[] = [];
   private readonly listeners = new Set<(moment: LiveMoment) => void>();
   private readonly releaseListeners = new Set<() => void>();
+  private readonly doneListeners = new Set<(scopeKey: string) => void>();
   private danger = false;
   /** Replies being written now, and when someone last wrote or spoke to her (the conversations tell: 
 eplying, heard). */
@@ -224,6 +225,9 @@ eplying, heard). */
       try { phase = task.info.phase?.() ?? null; } catch { phase = null; }
       if (phase !== 'completed') continue;
       task.doneTold = true;
+      for (const listener of this.doneListeners) {
+        try { listener(task.info.scopeKey); } catch { /* her feeling never fails the poll */ }
+      }
       out.push({ kind: 'task_done', key: `done:${taskId}`, at: now, facts: { goal: brief(task.info.goal, 50) } });
     }
     return out;
@@ -244,6 +248,12 @@ eplying, heard). */
   onMoment(listener: (moment: LiveMoment) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Told once when a request she was given is done (the scope the task belongs to): her feeling takes it as something she got done. */
+  onTaskDone(listener: (scopeKey: string) => void): () => void {
+    this.doneListeners.add(listener);
+    return () => this.doneListeners.delete(listener);
   }
 
   /** Told when her work is released (stopped, cancelled, held). */

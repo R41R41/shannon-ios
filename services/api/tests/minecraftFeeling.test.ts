@@ -3,7 +3,7 @@ import {
   SHANNON_GAME_THOUGHT_KINDS, createInitialCompanionState, faceForEmotionKind, presentShannonMood, reduceCompanionState, type CompanionStateEvent,
 } from '@shannon/cognition';
 import {
-  MINECRAFT_THOUGHT_LIMITS, MinecraftFeelings, configuredMinecraftFeelings, minecraftThoughtsOn, minecraftThoughtInstructions, parsedMinecraftThought,
+  MINECRAFT_THOUGHT_LIMITS, MinecraftFeelings, minecraftActResult, configuredMinecraftFeelings, minecraftThoughtsOn, minecraftThoughtInstructions, parsedMinecraftThought,
   type MinecraftActNote, type MinecraftThought, type MinecraftThoughtInput,
 } from '../src/mind/emotion/minecraftFeeling.js';
 
@@ -48,7 +48,7 @@ describe('her feeling from her own acts in Minecraft', () => {
     feelings.noted(note({ why: '[p1.3] かまどで焼く' }));
     await settle();
     expect(asked).toHaveLength(1);
-    expect(asked[0]).toEqual({ goal: 'ネザーに行く', acts: [expect.objectContaining({ why: '[p1.2] 鉄を掘る', ok: true }),
+    expect(asked[0]).toEqual({ goal: 'ネザーに行く', acts: [expect.objectContaining({ why: '[p1.2] 鉄を掘る', result: 'done' }),
       expect.objectContaining({ why: '[p1.2] 鉄を掘る' }), expect.objectContaining({ why: '[p1.3] かまどで焼く' })] });
     expect(applied).toContainEqual({ type: 'game-felt', moment: { kind: 'thought', thought: { primary: 'smug', intensity: 0.5, words: '計画どおり鉄が集まった' } } });
     // Within the interval, however many acts: no call.
@@ -70,6 +70,28 @@ describe('her feeling from her own acts in Minecraft', () => {
     await settle();
     const quiet = new MinecraftFeelings({ state: { apply: () => ({}) as never }, appraiser: null });
     expect(() => quiet.noted(note())).not.toThrow();
+  });
+
+  it('a body stop (cancelled, or cut by a reflex) is no failure in a row, and the appraisal is told progressed, stopped and failed apart', async () => {
+    const { feelings, applied, asked } = harness();
+    const fail = note({ ok: false, outcome: 'act 0/2 済みで止まった（failure）' });
+    feelings.noted(fail); feelings.noted(fail);
+    feelings.noted(note({ ok: false, stopped: true, outcome: '取り消された' }));
+    expect(applied.filter(event => event.type === 'game-felt' && event.moment.kind === 'stuck')).toEqual([]);
+    await settle();
+    expect(asked[0]!.acts.map(act => act.result)).toEqual(['failed', 'failed', 'stopped']);
+    expect(minecraftActResult(note())).toBe('done');
+    expect(minecraftActResult(note({ ok: false, progressed: true }))).toBe('progressed');
+    expect(minecraftActResult(note({ ok: false, reflex: true }))).toBe('stopped');
+  });
+
+  it('says what a failure of hers feels like (flustered, helpless, lamenting, try again) and keeps anger to a short annoyance when disturbed, with the reasons', () => {
+    const text = minecraftThoughtInstructions();
+    expect(text).not.toContain('悔しい時は frustrated');
+    expect(text).not.toContain('frustrated');
+    for (const needle of ['flustered', 'helpless', 'lamenting', 'retrying', 'progressed', 'stopped']) expect(text).toContain(needle);
+    expect(text).toMatch(/annoyed.*邪魔された.*時だけ.*0\.4/u);
+    expect(text).toContain('怒っていると受け取ってしまうから');
   });
 
   it('reads only a playing feeling from the answer, and says the input is data', () => {
@@ -109,7 +131,7 @@ describe('what the appraisal is told to feel in each scene reaches the face she 
   const kindsNamed = (text: string) => SHANNON_GAME_THOUGHT_KINDS.filter(kind => text.includes(kind));
   it('names every scene feeling the instructions give as one of the kinds a thought may bring', () => {
     const named = kindsNamed(minecraftThoughtInstructions());
-    for (const kind of ['focused', 'happy', 'excited', 'fun', 'relief', 'curiosity', 'surprised', 'confused', 'blocked', 'frustrated', 'annoyed', 'retrying',
+    for (const kind of ['focused', 'happy', 'excited', 'fun', 'relief', 'curiosity', 'surprised', 'confused', 'blocked', 'annoyed', 'retrying', 'flustered', 'helpless', 'lamenting', 'disappointed',
       'cautious', 'anxious', 'tired', 'pride', 'smug', 'triumphant', 'determined'] as const) expect(named).toContain(kind);
   });
   it('shows steady work as the thinking face, a success as a smile, a relief as relieved, being lost as confused', () => {
@@ -118,7 +140,7 @@ describe('what the appraisal is told to feel in each scene reaches the face she 
     expect(faceForEmotionKind('excited').expression).toBe('excited');
     expect(faceForEmotionKind('relief').expression).toBe('relieved');
     expect(faceForEmotionKind('confused').expression).toBe('confused');
-    expect(faceForEmotionKind('frustrated').expression).toBe('annoyed');
+    expect(faceForEmotionKind('helpless').expression).toBe('concerned');
     expect(faceForEmotionKind('surprised').expression).toBe('surprised');
   });
   it('a thought of steady work is a visible feeling in the state she shows, and its face is thinking (not the quiet mood)', async () => {
