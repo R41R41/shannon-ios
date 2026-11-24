@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { TaskRuntime, TaskSpec, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { SpokenWords } from '../mind/action/taskRuntime/taskExternalEventPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type { MinecraftQueueOrigin } from '../contracts/minecraftQueueContract.js';
 import type { QueueRecord } from '../surfaces/minecraft/minecraftRequestQueue.js';
@@ -14,6 +15,16 @@ const TYPED_BY_HIM: ReadonlySet<MinecraftQueueOrigin> = new Set<MinecraftQueueOr
 const ASKED_BY: Readonly<Partial<Record<MinecraftQueueOrigin, string>>> = Object.freeze({
   chat: 'ゲーム内の本人の依頼', voice: 'Discordの通話での本人の依頼',
 });
+/** What the person said with a voice request (`SpokenWords`), read from the entry; none for an entry without it or with a value that cannot be read. */
+function spokenWordsOf(stored: string | null | undefined): SpokenWords | undefined {
+  if (!stored) return undefined;
+  try {
+    const said = JSON.parse(stored) as Partial<SpokenWords>;
+    return said && typeof said.speakerName === 'string' && typeof said.speakerWords === 'string' ? said as SpokenWords : undefined;
+  } catch {
+    return undefined;
+  }
+}
 /** The line for the entry: a voice request names who asked (a guest marked as one), the others say where it came from. */
 const askedBy = (entry: QueueRecord): string => (entry.askedBy ? `Discordの通話での${entry.askedBy}の依頼` : ASKED_BY[entry.origin] ?? '本人の依頼');
 
@@ -39,10 +50,11 @@ export function queueTaskPorts(parts: {
   const create = (entry: QueueRecord, bodyId: string, key: string): string => parts.atomic(() => {
     const task = parts.runtime.createChild(parts.ownerScope, parts.runtime.ensureRoot(parts.ownerScope).id, parts.spec(entry.goal), key,
       { sources: 'asking' });
+    const said = spokenWordsOf(entry.said);
     // A request from no turn (the mod's list) has no source to observe: it is a task of the root's own, as the operator's.
     if (entry.experienceId) {
       parts.runtime.observeExternal(parts.ownerScope, task.id, { eventId: key, experienceIds: [entry.experienceId],
-        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${askedBy(entry)}: ${entry.goal}` });
+        observedAt: entry.observedAt ?? new Date().toISOString(), text: `${askedBy(entry)}: ${entry.goal}`, ...(said ? { said } : {}) });
     }
     if (!parts.control.store.bind(task.id, bodyId)) throw new Error('FCA_BODY_BINDING_CONFLICT');
     return task.id;

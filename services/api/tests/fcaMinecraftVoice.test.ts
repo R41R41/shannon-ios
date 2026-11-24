@@ -16,6 +16,7 @@ afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 /** The queue runs on a small fake of the task runtime (a task per start); the voice parts are as `fcaMinecraftRequests` gives them. */
 function fixture(options: { bodies?: string[]; running?: TaskView | null; visible?: boolean; finished?: boolean; resting?: Array<{ goal: string; how: string }> } = {}) {
   const calls: string[] = [];
+  const saids: unknown[] = [];
   const db = new DatabaseSync(':memory:');
   databases.push(db);
   const tasks = new Map<string, string>();
@@ -40,8 +41,9 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
   const parts: FcaMinecraftVoiceParts = {
     control: { available: () => options.bodies ?? ['minecraft:world'] } as never,
     runtime: {
-      observeExternal: (_scope: string, id: string, event: { eventId: string; experienceIds: string[]; text: string }) => {
+      observeExternal: (_scope: string, id: string, event: { eventId: string; experienceIds: string[]; text: string; said?: unknown }) => {
         if (options.finished && id === 't1') throw new Error('FCA_TARGET_FINISHED');
+        saids.push(event.said ?? null);
         calls.push(`observe ${id} ${event.eventId} ${event.experienceIds.join(',')} ${event.text}`);
         return { accepted: true, duplicate: false };
       },
@@ -55,7 +57,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
     log: () => undefined,
     queue,
   };
-  return { port: fcaMinecraftVoice(parts), calls, queue };
+  return { port: fcaMinecraftVoice(parts), calls, queue, saids };
 }
 
 const input = (fields: Record<string, unknown> = {}) => ({
@@ -147,6 +149,30 @@ describe('the owner\'s spoken request, as the task tree takes it', () => {
     expect(await fixture({ bodies: [] }).port.intent(task1())).toEqual({ delivered: false, reason: 'body_unavailable' });
     expect(await fixture().port.intent(task1({ experienceId: null }))).toEqual({ delivered: false, reason: 'no_turn' });
     expect(await fixture({ visible: false }).port.intent(task1())).toEqual({ delivered: false, reason: 'turn_not_visible' });
+  });
+});
+
+describe('what the person said, beside the line that sums it up', () => {
+  const said = { words: 'そこに適当に置いて寝てほしい', speaker: { id: 'u1', name: 'ライ氏', owner: true, minecraftName: 'Rai1241', position: { x: 10, y: 64, z: -4, dimension: 'overworld' } } };
+
+  it('gives the task\'s head the name, the words, the time and the place with a message, and nothing extra for the form without the words', async () => {
+    const f = fixture({ running: task('t1', 'ケーキを作る') });
+    await f.port.intent(input({ ...said }));
+    expect(f.saids[0]).toEqual({ speakerName: 'ライ氏', speakerWords: 'そこに適当に置いて寝てほしい', spokenAt: '2026-10-20T12:00:00.000Z',
+      speakerPos: { x: 10, y: 64, z: -4, dimension: 'overworld' } });
+    const before = fixture({ running: task('t1', 'ケーキを作る') });
+    await before.port.intent(input({ requestId: 'r2' }));
+    expect(before.saids[0]).toBeNull();
+  });
+
+  it('keeps them on the entry of a request, for the task made for it', async () => {
+    const f = fixture();
+    await f.port.intent(task1({ ...said }));
+    const entry = f.queue.snapshot().entries[0]!;
+    expect(JSON.parse(entry.said!)).toMatchObject({ speakerName: 'ライ氏', speakerWords: 'そこに適当に置いて寝てほしい', speakerPos: { x: 10, y: 64, z: -4 } });
+    const plain = fixture();
+    await plain.port.intent(task1({ requestId: 'r9' }));
+    expect(plain.queue.snapshot().entries[0]!.said).toBeUndefined();
   });
 });
 

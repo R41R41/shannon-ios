@@ -40,6 +40,9 @@ export function platformVoiceEnabled(environment: SwitchValues = serverEnvironme
   return switchOn(environment, 'SHANNON_DC_VOICE');
 }
 
+/** A place in the game as the body read it. */
+export interface SpeakerPosition { x: number; y: number; z: number; dimension?: string | undefined }
+
 export interface VoiceTurnRequest {
   platform: ShannonPlatform;
   requestId: string;
@@ -57,6 +60,10 @@ export interface VoiceTurnRequest {
    * the body could give): the words are the owner's, as if they came with the owner's id (`ownerAsBound`). Present only when true.
    */
   speakerIsOwner?: boolean;
+  /** Where the speaker is in the game (whole blocks), when the body read it from the world; it goes with a spoken request to the task's head. */
+  speakerPosition?: SpeakerPosition;
+  /** She is in the conversation's Discord call (the body knows); false: not, so 「おいで」 may bring her in. Absent: not known. */
+  inCall?: boolean;
   userMessage: string;
   observedAt: string;
   participants: string[];
@@ -93,6 +100,8 @@ export type VoiceTurnLine =
   | { type: 'intent'; kind: 'task_message' | 'task' | 'stop' | 'none'; delivered: boolean; taskId?: string; reason?: string }
   /** The owner asked how she speaks (from the intent field's `speech`): at least one is set. The body checks the speaker is the owner again. */
   | { type: 'speech'; mode?: SpeechMode; rate?: SpeechRate }
+  /** Someone asked her to come into the Discord call (from the intent field's `call_join`): the body takes the channel the speaker is in now, else the owner's. */
+  | { type: 'call'; action: 'join' }
   | { type: 'done'; reply: string; threadId: string; duplicate: boolean; silent?: true; reason?: string;
     timings?: { decisionMs: number; firstSentenceMs: number | null; totalMs: number };
     /** A typed message's answer only (rich chat §4): the emoji she put on the message she answered; the entry adds it as her reaction. */
@@ -110,7 +119,7 @@ export interface StoredVoiceTurn {
 
 const REQUEST_FIELDS = new Set([
   'platform', 'requestId', 'conversationId', 'voiceChannelId', 'sourceUserId', 'sourceDisplayName', 'speakerMinecraftName', 'speakerIsOwner',
-  'userMessage', 'observedAt', 'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId',
+  'speakerPosition', 'inCall', 'userMessage', 'observedAt', 'participants', 'heard', 'followsShannonTurn', 'directed', 'speakingNow', 'shannonSpokeMsAgo', 'fillerId',
   'situation', 'sttMs', 'utteranceMs', 'speechMode', 'speechRate',
 ]);
 
@@ -191,10 +200,21 @@ function validatedIdentity(body: Record<string, unknown>): void {
 }
 
 function validatedFlags(body: Record<string, unknown>): void {
-  for (const flag of ['followsShannonTurn', 'directed', 'speakingNow', 'speakerIsOwner'] as const) {
+  for (const flag of ['followsShannonTurn', 'directed', 'speakingNow', 'speakerIsOwner', 'inCall'] as const) {
     if (body[flag] !== undefined && typeof body[flag] !== 'boolean') throw badRequest(`${flag} is invalid.`);
   }
   if (body.fillerId !== undefined && !identifier(body.fillerId, 80)) throw badRequest('fillerId is invalid.');
+  if (body.speakerPosition !== undefined && validatedPosition(body.speakerPosition) === null) throw badRequest('speakerPosition is invalid.');
+}
+
+/** A position of whole or fractional blocks within the world's reach, with the dimension's name when it is given; null when it is not one. */
+export function validatedPosition(value: unknown): SpeakerPosition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const coordinate = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 40_000_000;
+  if (!coordinate(item.x) || !coordinate(item.y) || !coordinate(item.z)) return null;
+  const dimension = typeof item.dimension === 'string' && /^[a-z_:]{1,40}$/u.test(item.dimension) ? item.dimension.replace(/^minecraft:/u, '') : undefined;
+  return { x: Math.round(item.x), y: Math.round(item.y), z: Math.round(item.z), ...(dimension ? { dimension } : {}) };
 }
 
 export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
@@ -210,6 +230,8 @@ export function validatedVoiceTurn(value: unknown): VoiceTurnRequest {
     sourceDisplayName: trimmed('sourceDisplayName'),
     ...(body.speakerMinecraftName !== undefined ? { speakerMinecraftName: trimmed('speakerMinecraftName') } : {}),
     ...(body.speakerIsOwner === true ? { speakerIsOwner: true } : {}),
+    ...(body.speakerPosition !== undefined ? { speakerPosition: validatedPosition(body.speakerPosition)! } : {}),
+    ...(typeof body.inCall === 'boolean' ? { inCall: body.inCall } : {}),
     userMessage: trimmed('userMessage'),
     observedAt: new Date(body.observedAt as string).toISOString(),
     participants: validatedParticipants(body.participants),

@@ -59,7 +59,7 @@ describe('a request to go in or out of the server', () => {
     expect(result).toEqual({ ok: true, lifecycleId: 'operator:1', state: 'accepted' });
     expect(f.door.calls[0]!.value).toEqual({ v: 1, operator: 'body-mod', domain: 'minecraft', op: 'login' });
     for (const label of Object.values(LIFECYCLE_OPERATOR_LABELS)) expect(label).toMatch(/^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$/u);
-    expect(LIFECYCLE_OPERATOR_LABELS).toEqual({ mod: 'body-mod', discord_slash: 'body-discord', voice: 'voice-owner' });
+    expect(LIFECYCLE_OPERATOR_LABELS).toEqual({ mod: 'body-mod', discord_slash: 'body-discord', voice: 'voice' });
     expect(f.lines.some(line => line.includes('login via=mod actor=RaiRai server=shannon-home result=accepted id=operator:1'))).toBe(true);
   });
 
@@ -217,7 +217,7 @@ describe('a request to go in or out of the server', () => {
       const f = fixture();
       await f.requests.request({ action: 'login', via: 'voice', threadId: 'thread-1' });
       expect(f.door.calls[0]!.hooks.quiet).toBe(true);
-      expect(f.door.calls[0]!.value.operator).toBe('voice-owner');
+      expect(f.door.calls[0]!.value.operator).toBe('voice');
       settle(f, 0, { outcome: 'completed' });
       await Promise.resolve();
       expect(f.told).toEqual([{ scopeKey: 'owner', threadId: 'thread-1', operationId: 'operator:1', action: 'login', outcome: 'completed' }]);
@@ -268,7 +268,7 @@ describe('a request to go in or out of the server', () => {
     it('asks as a spoken request', async () => {
       const f = fixture();
       await f.requests.voicePort().request('login', { threadId: 'thread-9', actor: 'owner' });
-      expect(f.door.calls[0]!.value.operator).toBe('voice-owner');
+      expect(f.door.calls[0]!.value.operator).toBe('voice');
       expect(f.lines.some(line => line.includes('via=voice actor=owner'))).toBe(true);
     });
   });

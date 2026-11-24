@@ -3,7 +3,7 @@ import type { LiveMoment } from '@shannon/mind';
 import type { BodyObservation, BodyPlanView } from '../src/contracts/bodyControlContract.js';
 import type { FcaBodyLifecycle } from '../src/mind/action/fca/fcaPorts.js';
 import { MinecraftLive, type LiveFrames, type LiveTaskInfo } from '../src/surfaces/minecraft/minecraftLive.js';
-import { withMinecraftLive } from '../src/surfaces/minecraft/minecraftLiveBody.js';
+import { handResultLine, withMinecraftLive } from '../src/surfaces/minecraft/minecraftLiveBody.js';
 import { noteItemStart } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LiveCommentary } from '../src/surfaces/minecraft/minecraftLiveCommentary.js';
 import { LiveSpeechOutbox } from '../src/surfaces/minecraft/minecraftLiveSpeech.js';
@@ -481,5 +481,33 @@ describe('her work in the commentary', () => {
     await g.settle();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(g.requests).toHaveLength(1);
+  });
+});
+
+describe('the reasoning of her work, carried in the block so a reply can say why and how it goes', () => {
+  it('lists the aims, the plan changes, the needs found and what came of the hands, newest first, and drops what is old', () => {
+    const f = fixture();
+    f.live.thought('task', '鉄を探しに洞窟へ行く');
+    f.advance(10_000);
+    f.live.thought('task', '先に松明を作る');
+    f.live.plan('task', view(1, 'a', [node('a', '木を集める')]));
+    f.live.need('task', { item: 'iron_ingot', count: 3, use: 'バケツ' });
+    f.live.result('task', 'うまくいかなかった（洞窟の入り口が埋まっている）');
+    f.advance(5_000);
+    const block = f.live.block({ alone: false, participants: true });
+    expect(block).toContain('作業の考え');
+    expect(block).toContain('手の結果: うまくいかなかった（洞窟の入り口が埋まっている）');
+    expect(block).toContain('鉄を探しに洞窟へ行く');
+    // The newest aim is the block's own line, so it is not said twice.
+    expect(block.split('先に松明を作る').length - 1).toBe(1);
+    f.advance(60 * 60_000);
+    expect(f.live.block({ alone: false, participants: true })).not.toContain('作業の考え');
+  });
+
+  it('says what a hand came to in one short line, or nothing for a long report', () => {
+    expect(handResultLine({ ok: false, text: '  水に落ちた  ' })).toBe('うまくいかなかった（水に落ちた）');
+    expect(handResultLine({ ok: true, text: JSON.stringify({ outcome: '原木を3個集めた', big: [1, 2, 3] }) })).toBe('原木を3個集めた');
+    expect(handResultLine({ ok: true, text: JSON.stringify({ big: [1, 2, 3] }) })).toBeNull();
+    expect(handResultLine({ ok: true, text: '' })).toBeNull();
   });
 });

@@ -50,6 +50,7 @@ const S3_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
     'exec_state_at TEXT', 'exec_starting INTEGER'],
   mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
+  fca_task_messages: ['speaker_json TEXT'],
 };
 const S3_TABLES = ['mind_action_slot_pools', 'mind_action_slot_classes', 'operator_audit', 'fca_provenance_sets', 'minecraft_request_queue',
   'minecraft_request_queue_state'];
@@ -315,6 +316,9 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
   'execution/014_minecraft_request_queue': '1d5bd8a8fec986d3d4201fe774d6ad38e4ff43a87c46d07c38a02a89915f9097',
   'execution/015_minecraft_queue_resume_after': 'b5fa8e49fa80beffc444715cb04cc3ef4ead7da6f17fb31e498aac34ffb25c9c',
+  // 2026-11-25: what a person said beside a voice request (the task's head reads it): a column on the messages, and one on the list of requests.
+  'execution/016_fca_task_message_speaker': '50c949793c11a850fe711d38de695974831ee261661252b07ea15496ca1a488d',
+  'execution/017_minecraft_queue_said': '723a9cbb9ad47f95e0b98c4ca84d418dbca45c5b4e9a64c8317775c3882910a7',
 };
 
 function reindented(step: SchemaStep): SchemaStep {

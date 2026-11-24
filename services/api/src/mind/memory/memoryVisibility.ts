@@ -440,7 +440,30 @@ export function visibleReplayMessages(
   present: MemoryAudience, limit: number,
 ): { messages: readonly VisibleMessage[]; reachedLimit: boolean } {
   const stored = store.recentMessages?.(scopeKey, threadID, limit) ?? store.conversationHistory(scopeKey, threadID).slice(-limit);
-  return { messages: visibleMessages(state, store, scopeKey, stored, present), reachedLimit: stored.length >= limit };
+  return { messages: withoutRequestEchoes(visibleMessages(state, store, scopeKey, stored, present)), reachedLimit: stored.length >= limit };
+}
+
+/** A spoken request is kept a second time under the speaker's name so that a task can stand on it (`「名前（通話）: 言葉」`): the same words twice. */
+const REQUEST_ECHO = /^[^:：\n]{1,60}（通話）: ([\s\S]+)$/u;
+
+/**
+ * The replay and its summaries read the words of a request once: the echo that follows the same words from the same thread (and its repeated
+ * reply) is left out. Reason: the echo is for the task that stands on it; a replay with both fills the window twice as fast with one thing said.
+ */
+export function withoutRequestEchoes(messages: readonly VisibleMessage[]): readonly VisibleMessage[] {
+  const dropped = new Set<number>();
+  messages.forEach((entry, index) => {
+    if (entry.item.role !== 'user') return;
+    const echoed = REQUEST_ECHO.exec(entry.item.content)?.[1]?.trim();
+    if (!echoed) return;
+    const same = messages.slice(Math.max(0, index - 4), index).some((before, offset) => !dropped.has(index - 4 + offset)
+      && before.item.role === 'user' && before.item.content.trim() === echoed);
+    if (!same) return;
+    dropped.add(index);
+    const reply = messages[index + 1], first = messages.slice(Math.max(0, index - 4), index).find(before => before.item.role === 'assistant');
+    if (reply?.item.role === 'assistant' && first && reply.item.content.trim() === first.item.content.trim()) dropped.add(index + 1);
+  });
+  return dropped.size ? messages.filter((_entry, index) => !dropped.has(index)) : messages;
 }
 
 /**

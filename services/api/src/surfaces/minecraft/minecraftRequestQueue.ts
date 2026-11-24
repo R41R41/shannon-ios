@@ -25,6 +25,8 @@ export interface QueueRecord {
   observedAt: string | null;
   /** Who asked, in the words of the entry (a Discord member's shown name, a guest marked as one); null when the entry does not say. */
   askedBy: string | null;
+  /** What the person said when the request was made by voice (`SpokenWords` as JSON): the words, the time and the place, given to the task's head with the goal. */
+  said?: string | null;
   taskId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -139,6 +141,7 @@ export interface NewQueueEntry {
   experienceId?: string | null;
   observedAt?: string | null;
   askedBy?: string | null;
+  said?: string | null;
 }
 
 /**
@@ -164,7 +167,7 @@ export function addToQueue(snapshot: QueueSnapshot, input: NewQueueEntry, at: st
 function newRecord(input: NewQueueEntry, goal: string, seq: number, at: string): QueueRecord {
   return { id: input.id, seq, goal, state: 'queued', pos: 0, origin: input.origin, requestId: input.requestId ?? null,
     experienceId: input.experienceId ?? null, observedAt: input.observedAt ?? null,
-    askedBy: input.askedBy ?? null, taskId: null, createdAt: at, updatedAt: at, endedAt: null, note: null, resumeAfter: null };
+    askedBy: input.askedBy ?? null, ...(input.said ? { said: input.said } : {}), taskId: null, createdAt: at, updatedAt: at, endedAt: null, note: null, resumeAfter: null };
 }
 
 /**

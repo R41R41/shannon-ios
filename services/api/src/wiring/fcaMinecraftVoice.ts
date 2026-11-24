@@ -1,4 +1,5 @@
 import type { TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
+import type { SpokenWords } from '../mind/action/taskRuntime/taskExternalEventPorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type {
   VoiceMinecraftIntentInput, VoiceMinecraftIntentResult, VoiceMinecraftPort, VoiceMinecraftRefusal,
@@ -53,6 +54,15 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     return `${name || '通話の参加者'}（ゲスト${tag ? `、${tag}` : ''}）`;
   };
   const byGuest = (input: VoiceMinecraftIntentInput): boolean => input.speaker?.owner === false;
+  /** What the person said as the task's head reads it beside the summary line: their name, words, the time and where they stood (none when the words were not handed on). */
+  const saidOf = (input: VoiceMinecraftIntentInput): SpokenWords | undefined => {
+    const words = input.words?.trim();
+    if (!words) return undefined;
+    const name = input.speaker?.name.replace(/\s+/gu, ' ').trim().slice(0, 40) || (input.speaker?.owner === false ? '通話の参加者' : '本人');
+    const at = input.speaker?.position;
+    return { speakerName: name, speakerWords: words.slice(0, 400), spokenAt: input.observedAt,
+      ...(at ? { speakerPos: { x: at.x, y: at.y, z: at.z, ...(at.dimension ? { dimension: at.dimension } : {}) } } : {}) };
+  };
   const refuse = (reason: VoiceMinecraftRefusal, kind: string): VoiceMinecraftIntentResult => {
     parts.log(`Shannon Minecraft voice intent refused reason=${reason} kind=${kind}`);
     return { delivered: false, reason };
@@ -65,6 +75,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       parts.runtime.observeExternal(input.scopeKey, running.id, {
         eventId: `dcv:${input.requestId}`, experienceIds: [experienceId], observedAt: input.observedAt,
         text: `Discordの通話での${whoAsked(input)}の言葉（いまのタスクへ）: ${input.intent.goal}`,
+        ...(saidOf(input) ? { said: saidOf(input)! } : {}),
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'FCA_TARGET_FINISHED') return null;
@@ -75,7 +86,8 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
   };
   const toList = async (input: VoiceMinecraftIntentInput, experienceId: string | null): Promise<VoiceMinecraftIntentResult> => {
     const outcome = await applyQueueIntent(parts.queue, input.intent, { origin: 'voice', requestId: `dcv:${input.requestId}`, experienceId,
-      observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop' });
+      observedAt: input.observedAt, askedBy: input.speaker ? whoAsked(input) : null, stopReason: 'owner_voice_stop',
+      said: input.intent.kind === 'task' && saidOf(input) ? JSON.stringify(saidOf(input)) : null });
     if (!outcome.delivered) return refuse(outcome.reason, input.intent.kind);
     const entry = outcome.entry;
     return { delivered: true, as: outcome.as, ...(entry?.taskId ? { taskId: entry.taskId } : {}),
@@ -91,7 +103,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const entry = parts.queue.current();
       const open = parts.openRequest(bodies[0]!);
       const running = entry ? { id: entry.taskId ?? entry.id, goal: entry.goal } : open ? { id: open.id, goal: open.goal } : null;
-      const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
+      const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/\s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
       return { connected: true, running, ...(queue.length ? { queue } : {}), ...(resting.length ? { resting } : {}) };
     },
     async intent(input) {

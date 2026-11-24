@@ -30,7 +30,7 @@ export function platformVoiceSeat(input: {
   answered?: boolean; ownerAloneInRoom?: boolean; keep: VoiceSeat['keep'];
 }): VoiceSeat {
   const { policy } = input;
-  const audience = platformAudienceTurn(policy);
+  const audience = platformAudienceTurn(policy, { ownerAlone: input.ownerAloneInRoom === true });
   return {
     threadId: policy.threadId, present: policy.present, ownerAlone: policy.gate.ownerOnly, ownerSpeaking: input.owner, ownerPresent: policy.ownerPresent,
     ...(policy.speaker ? { speaker: policy.speaker } : {}), ...(input.ownerAloneInRoom ? { ownerAloneInRoom: true } : {}), message: input.message,

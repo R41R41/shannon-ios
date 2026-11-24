@@ -26,6 +26,8 @@ export interface TaskRecord {
 export interface TaskView extends TaskRecord { phase: TaskPhase; childIds: string[] }
 export interface TaskMessage {
   id: string; sourceTaskId: string; targetTaskId: string; text: string; receivedAt: string;
+  /** What a person said (a spoken request or word for the work), when the message carries it (`SpokenWords`): who, their words, when, and where in the game. */
+  speakerName?: string; speakerWords?: string; spokenAt?: string; speakerPos?: { x: number; y: number; z: number; dimension?: string | undefined };
 }
 export interface TaskConversationSource {
   experienceId: string; threadId: string; observedAt: string; recalledMemoryIds: readonly string[];

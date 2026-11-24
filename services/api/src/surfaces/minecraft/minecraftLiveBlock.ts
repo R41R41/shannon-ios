@@ -38,6 +38,8 @@ export interface LiveSnapshot {
   plan?: { section: string | null; points: readonly string[]; ahead?: string };
   /** What she meant by the hands she sent last (an act's `why`), and how long ago: the 「さっきの狙い」. Absent: none lately. */
   aim?: { ageSeconds: number; text: string };
+  /** The work's own reasoning lately, newest first: the aims of earlier hands, plan changes and steps, needs found, what came of hands (`workNotes`). Absent: none lately. */
+  work?: ReadonlyArray<{ ageSeconds: number; line: string }>;
 }
 
 const DIMENSIONS: Readonly<Record<string, string>> = { overworld: 'オーバーワールド', the_nether: 'ネザー', the_end: 'ジ・エンド' };
@@ -97,6 +99,12 @@ function planLines(snapshot: LiveSnapshot, shown: boolean): string[] {
     plan.ahead ? `- 計画で未完の一番先の節（いま手をつけている節とは限らない）: ${plan.ahead}` : '', plan.points.length ? `- 計画の要点: ${plan.points.slice(0, 4).join(' → ')}` : ''];
 }
 
+/** What her work thought and found lately, newest first: told where the plan's words are (they can carry the request). */
+function workLines(snapshot: LiveSnapshot, shown: boolean): string[] {
+  if (!shown || !snapshot.work?.length) return [];
+  return [`- 作業の考え（新しい順。「どうしてそうしたの」「うまくいってる？」にはこれで答える）: ${snapshot.work.map(item => `${minutes(item.ageSeconds)}前 ${item.line}`).join(' ／ ')}`];
+}
+
 /** What happened lately, newest first: the world's moments, and her last aim when its words may be told (it can carry the request). */
 function recentLines(snapshot: LiveSnapshot, shown: boolean) {
   const aim = shown && snapshot.aim ? [{ ageSeconds: snapshot.aim.ageSeconds, line: `「${snapshot.aim.text}」をねらって手を動かした` }] : [];
@@ -119,5 +127,6 @@ export function liveBlock(snapshot: LiveSnapshot | null, options: { alone: boole
   const exchanges = options.alone ? options.exchanges ?? '' : '';
   const participants = options.participants === true;
   const tasks = taskLines(snapshot, options.alone, participants);
-  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot, requestShown(snapshot, options.alone, participants)), ...stateLines(snapshot, requestShown(snapshot, options.alone, participants)), ...old, exchanges].filter(Boolean).join('\n');
+  return [LIVE_BLOCK_HEADER, ...tasks, ...planLines(snapshot, requestShown(snapshot, options.alone, participants)),
+    ...workLines(snapshot, requestShown(snapshot, options.alone, participants)), ...stateLines(snapshot, requestShown(snapshot, options.alone, participants)), ...old, exchanges].filter(Boolean).join('\n');
 }

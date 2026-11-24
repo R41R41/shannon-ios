@@ -4,13 +4,13 @@ import { TaskInbox } from './taskInboxRedelivery.js';
 import { TaskMaintenanceStore } from './taskMaintenanceStore.js';
 import { TaskRuntimeRecovery } from './taskRuntimeRecovery.js';
 import { bounded,json,taskRuntimeLimits as limits } from './taskRuntimeValidation.js';
-import { observeExternalEvent } from './taskExternalEventStore.js';
+import { observeExternalEvent, speakerFields } from './taskExternalEventStore.js';
 import { TaskConversationDeliveryStore } from './taskConversationDeliveryStore.js';
 import type { TaskConversationDeliveryInput,TaskConversationDeliveryStage } from '../taskConversationDeliveryPorts.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { applySchemaSteps } from '../../../../infra/sqlite/migrations/schemaSteps.js';
-import { FCA_TASK_RUNTIME_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
+import { FCA_TASK_MESSAGE_SPEAKER_STEP, FCA_TASK_RUNTIME_STEP } from '../../../../infra/sqlite/migrations/executionSteps.js';
 import type { ActionLease } from '@shannon/mind';
 import type {
 TaskAuthority,TaskChildOptions,TaskCommit,TaskConversationSource,TaskHistoryCommit,TaskHistoryWindow,TaskMessage,
@@ -53,7 +53,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
   constructor(private readonly db: DatabaseSync, private readonly options: TaskRuntimeOptions) {
     this.authority = options.authority;
     this.now = options.now ?? (() => new Date().toISOString());
-    applySchemaSteps(db, [FCA_TASK_RUNTIME_STEP]);
+    applySchemaSteps(db, [FCA_TASK_RUNTIME_STEP, FCA_TASK_MESSAGE_SPEAKER_STEP]);
     this.progressStore = new TaskProgressStore(db, this.authority, this.now);
     this.sources = new TaskSourceStore(db);
     this.histories = new TaskHistoryStore(db, options.provenanceRefs === true);
@@ -431,7 +431,7 @@ export class SQLiteTaskRuntimeStore implements TaskRuntime {
     return this.db.prepare('SELECT * FROM fca_task_messages WHERE target_task_id=? AND consumed_by IS NULL ORDER BY rowid').all(taskId)
       .filter(row => this.sources.messageVisible(taskId, String(row.message_id)) && !this.deliveries.reserved(taskId, String(row.message_id)))
       .map(row => ({ id: String(row.message_id), sourceTaskId: String(row.source_task_id), targetTaskId: String(row.target_task_id),
-        text: String(row.text), receivedAt: String(row.received_at) }));
+        text: String(row.text), receivedAt: String(row.received_at), ...speakerFields(row.speaker_json) }));
   }
   private snapshotInTransaction(scope: string, id: string): TaskSnapshot | null {
     const task = this.get(scope, id);

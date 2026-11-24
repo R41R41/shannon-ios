@@ -31,6 +31,17 @@ describe('source-bound external task events', () => {
     expect(f.db.prepare("SELECT 1 FROM sqlite_master WHERE name='experience_events'").get()).toBeUndefined();
   });
 
+  it('keeps what a person said beside the line, as fields of the message, and an older message has none', () => {
+    const f = fixture(), task = f.runtime.createChild('owner', f.root.id, { title: 'Watch', goal: 'Watch' }, 'watch');
+    f.runtime.wait('owner', task.id, task.revision);
+    const said = { speakerName: 'ライ氏', speakerWords: '地上にスケルトンたくさんいるよ', spokenAt: at, speakerPos: { x: 1, y: 70, z: -2, dimension: 'overworld' } };
+    f.runtime.observeExternal('owner', task.id, { ...event, eventId: 'voice:said', said });
+    f.runtime.observeExternal('owner', task.id, { ...event, eventId: 'voice:plain' });
+    const [withSaid, plain] = f.runtime.snapshot('owner', task.id)!.messages;
+    expect(withSaid).toMatchObject(said);
+    expect(Object.keys(plain!).sort()).toEqual(['id', 'receivedAt', 'sourceTaskId', 'targetTaskId', 'text']);
+  });
+
   it('rejects cross-scope delivery, preserves stop intent and carries only consumed evidence into descendants', () => {
     const f = fixture(), task = f.runtime.createChild('owner', f.root.id, { title: 'Watch', goal: 'Watch' }, 'watch');
     expect(() => f.runtime.observeExternal('other', task.id, event)).toThrow('NOT_FOUND');

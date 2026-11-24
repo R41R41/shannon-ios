@@ -29,8 +29,14 @@ export interface VoiceWarmAsk {
   offerMinecraftIntent: boolean;
 }
 
-/** The audiences a channel may hear: the owner alone in his room hears only the first; anyone else's presence adds the others. */
-export function warmedAudiences(others: boolean): WarmAudience[] {
+/**
+ * The audiences a channel may hear. The owner's own turn is read as a shared one (`owner_others`) wherever the conversation is not bound `owner-private`
+ * (the open conversation of the game's voice is not), even with nobody else in the room: `ownerPrivate === false` says so, and that is the one warmed,
+ * not `owner_alone` (a warm-up of another system than the one the first reply is made with is read by nobody). Without the conversation known, the owner
+ * alone in his room hears only the first; anyone else's presence adds the others.
+ */
+export function warmedAudiences(others: boolean, ownerPrivate?: boolean): WarmAudience[] {
+  if (ownerPrivate === false) return others ? ['owner_others', 'guest'] : ['owner_others'];
   return others ? ['owner_others', 'guest'] : ['owner_alone'];
 }
 

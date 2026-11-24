@@ -44,6 +44,9 @@ export const PINNED_SCHEMA_STEPS = Object.freeze({
   // 2026-11-21: the owner's list of requests for her Minecraft body, made when the head's request list first opens its store.
   'execution/014_minecraft_request_queue': '1d5bd8a8fec986d3d4201fe774d6ad38e4ff43a87c46d07c38a02a89915f9097',
   'execution/015_minecraft_queue_resume_after': 'b5fa8e49fa80beffc444715cb04cc3ef4ead7da6f17fb31e498aac34ffb25c9c',
+  // 2026-11-25: what a person said beside a voice request (the task's head reads it): a column on the messages, and one on the list of requests.
+  'execution/016_fca_task_message_speaker': '50c949793c11a850fe711d38de695974831ee261661252b07ea15496ca1a488d',
+  'execution/017_minecraft_queue_said': '723a9cbb9ad47f95e0b98c4ca84d418dbca45c5b4e9a64c8317775c3882910a7',
   // Her inner note (Syzygy ADR-0012, services/api/src/infra/sqlite/migrations/emotion/), as production's ledger holds them since
   // 2026-10-13 (read 2026-10-14): without them every deploy check reported `unknown step emotion/…`.
   'emotion/001_inner_notes': 'd683a488c6ec1095487a1f8cb721506c571bc59e9bbff5e0b876c7fa9c49e3cc',
@@ -84,6 +87,8 @@ export const S3_ADDITIONS = Object.freeze({
     agent_tasks: ['task_kind TEXT', 'capability TEXT', 'exec_state TEXT', 'wait_reason TEXT', 'unknown_since TEXT', 'effect_class TEXT',
       'exec_state_at TEXT', 'exec_starting INTEGER'],
     mind_actions: ['task_id TEXT', 'slot_class TEXT', 'effect_sent INTEGER'],
+    // 2026-11-25: what a person said beside a voice request (execution/016); the list of requests of 017 is in `tables` below.
+    fca_task_messages: ['speaker_json TEXT'],
     // Syzygy ADR-0009 stage 2 (E2): her goals' lifecycle, added by her own time's store (not a step of the ledger).
     autonomy_pursuits: ['source_kind TEXT', 'source_ref TEXT', 'interest_id TEXT', 'expected_value REAL', 'expected_score REAL',
       'completion_predicate TEXT', 'review_at TEXT', 'progress REAL', 'last_worked_at TEXT', 'evidence_json TEXT', 'closed_reason TEXT',

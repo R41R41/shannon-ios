@@ -31,7 +31,7 @@ export interface LifecycleRequestInput {
 
 /** The operator's label of each way in (a label: `[A-Za-z0-9._@-]`, no colon). */
 export const LIFECYCLE_OPERATOR_LABELS: Readonly<Record<LifecycleRequestVia, string>> = Object.freeze({
-  mod: 'body-mod', discord_slash: 'body-discord', voice: 'voice-owner',
+  mod: 'body-mod', discord_slash: 'body-discord', voice: 'voice',
 });
 
 export interface LifecycleRequestParts {

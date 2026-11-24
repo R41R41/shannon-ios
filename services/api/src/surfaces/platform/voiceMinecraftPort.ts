@@ -31,6 +31,8 @@ export interface VoiceSpeaker {
   owner: boolean;
   /** Who they are in the game, when the body knows (`speakerMinecraftName` of the voice turn): the player whose look 「ここ」 is read from. */
   minecraftName?: string;
+  /** Where they stood in the game when they spoke, when the body could read it. */
+  position?: { x: number; y: number; z: number; dimension?: string | undefined };
 }
 
 export interface VoiceMinecraftIntentInput {
@@ -43,6 +45,8 @@ export interface VoiceMinecraftIntentInput {
   experienceId: string | null;
   /** Who said it; absent, the owner (the form before 2026-11-21). */
   speaker?: VoiceSpeaker;
+  /** The words as they were said (the line the head wrote, `intent.goal`, is a summary of them); absent in the form before 2026-11-25. */
+  words?: string;
 }
 
 export interface VoiceMinecraftIntentResult {

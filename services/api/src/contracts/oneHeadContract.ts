@@ -48,7 +48,9 @@ export interface ConversationTurn {
     voiceChannelId?: string;
   };
   /** `speakerIsOwner`: the body checked that the speaker is the owner (present only when true); the words are the owner's whatever id they carry. */
-  who: { userId: string; displayName: string; speakerMinecraftName?: string; speakerIsOwner?: boolean };
+  who: { userId: string; displayName: string; speakerMinecraftName?: string; speakerIsOwner?: boolean;
+    /** Where the speaker is in the game, when the body could read it (whole blocks): handed on with a spoken request, and read by the reply. */
+    speakerPosition?: { x: number; y: number; z: number; dimension?: string } };
   presence: {
     /** The people there (bots excluded), the speaker included. */
     participants: string[];
@@ -57,6 +59,8 @@ export interface ConversationTurn {
     /** The speaker pressed a key to talk: the words were said to her, so she answers them without being named. */
     directed?: boolean;
     speakingNow?: boolean;
+    /** She is in the Discord call of this conversation now (the body knows); `false`: only the game's voice, so a spoken 「おいで」 can bring her in. Absent: not said. */
+    inCall?: boolean;
     /** How long ago she last finished speaking here, in ms (0: speaking now): the follow-up window of `SHANNON_ADDRESSED`. */
     shannonSpokeMsAgo?: number;
     situation?: string;

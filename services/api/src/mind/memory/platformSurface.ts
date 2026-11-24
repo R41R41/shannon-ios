@@ -37,7 +37,7 @@ const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line =>
  *   「シャノン用フォルダ」 and nothing else (owner decision 2026-10-06), with his secrets and personal matters left out of what she
  *   reads; her Minecraft body's game chat does not ask for it.
  */
-export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudienceTurn {
+export function platformAudienceTurn(policy: PlatformAudiencePolicy, options: { ownerAlone?: boolean } = {}): ChatAudienceTurn {
   if (policy.gate.ownerOnly) return chatAudienceTurn('owner')!;
   const { present } = policy;
   return Object.freeze({
@@ -48,8 +48,10 @@ export function platformAudienceTurn(policy: PlatformAudiencePolicy): ChatAudien
     // Nothing of his notes, tasks, Notion or calendar is read for a conversation others can read.
     capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: false }),
     // The owner's own turn keeps the rule that he may release a protected line by asking; anyone else's has neither that rule nor such a line.
-    instructions: [sharedAudienceHeader(policy.ownerWrote), ...policy.peopleLines, ...policy.impressionLines,
-      policy.ownerWrote ? speakTimePrivacyCheck : OTHERS_SPEAK_TIME_CHECK].join('\n'),
+    // The owner alone in the room (a spoken turn through the game's voice, whatever the conversation's binding says) is told no 「others read this」 note:
+    // there is no one else to read it, and the note made her say she did not remember things the profile of a shared audience does not carry.
+    instructions: [options.ownerAlone && policy.ownerWrote ? '' : sharedAudienceHeader(policy.ownerWrote), ...policy.peopleLines, ...policy.impressionLines,
+      policy.ownerWrote ? speakTimePrivacyCheck : OTHERS_SPEAK_TIME_CHECK].filter(Boolean).join('\n'),
     // The verified owner's own turn in a shared conversation: his words, heard by everyone there (as the bridge stores it).
     turnLabel: Object.freeze({ audience: present, speaker: policy.ownerWrote ? 'owner' as const : 'unknown' as const }),
     identity: () => identityOnly(policy.ownerWrote ? shannonIdentityPrompt('owner', { othersPresent: true }) : shannonIdentityPrompt('guest')),

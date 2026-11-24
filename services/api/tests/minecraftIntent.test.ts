@@ -38,13 +38,16 @@ describe('the intent field of her reply', () => {
   });
 
   it('puts login and logout after speech, reading nothing else from them, and the body is never told of them as a request', () => {
-    expect([...MINECRAFT_INTENT_KINDS].slice(-3)).toEqual(['speech', 'login', 'logout']);
-    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.description).toContain('login=マイクラの体をサーバーへ入れてほしいと持ち主が頼んだ時だけ');
-    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.description).toContain('logout=マイクラの体をサーバーから出してほしいと持ち主が頼んだ時だけ（体への頼みではない）');
+    expect([...MINECRAFT_INTENT_KINDS].slice(-4)).toEqual(['speech', 'login', 'logout', 'call_join']);
+    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.description).toContain('login=マイクラの体をサーバーへ入れてほしいと誰かが頼んだ時だけ');
+    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.description).toContain('logout=マイクラの体をサーバーから出してほしいと誰かが頼んだ時だけ。');
+    expect(MINECRAFT_INTENT_SCHEMA.properties.kind.description).toContain('call_join=Discordの通話に入ってきてほしい');
     expect(parsedMinecraftIntent({ kind: 'login', goal: 'x', placement: 'now', target: '3', speechMode: 'silent', speechRate: 'low' })).toEqual({ kind: 'login', goal: '' });
     expect(parsedMinecraftIntent({ kind: 'logout', goal: '', placement: '', target: '', speechMode: '', speechRate: '' })).toEqual({ kind: 'logout', goal: '' });
     expect(bodyIntentOf({ kind: 'login', goal: '' })).toEqual({ kind: 'none', goal: '' });
     expect(bodyIntentOf({ kind: 'logout', goal: '' })).toEqual({ kind: 'none', goal: '' });
+    expect(parsedMinecraftIntent({ kind: 'call_join', goal: 'x', placement: 'now', target: '3' })).toEqual({ kind: 'call_join', goal: '' });
+    expect(bodyIntentOf({ kind: 'call_join', goal: '' })).toEqual({ kind: 'none', goal: '' });
   });
 
   it('reads nothing from a task without words, a move without a target, an unknown kind, or a placement that is not one', () => {

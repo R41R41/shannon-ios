@@ -183,7 +183,7 @@ export class MinecraftBody {
     if (!completion) throw new Error('MINECRAFT_TURN_WITHOUT_COMPLETION');
     // A way of speaking, and going in or out of the server, are carried by the voice call alone (`platformVoice.ts`): game chat reads them as nothing.
     const intentKind = completion.minecraftIntent?.kind;
-    const offered = intentKind === 'speech' || intentKind === 'login' || intentKind === 'logout' ? undefined : completion.minecraftIntent;
+    const offered = intentKind === 'speech' || intentKind === 'login' || intentKind === 'logout' || intentKind === 'call_join' ? undefined : completion.minecraftIntent;
     const proposed = blocked ? { kind: 'none' as const, goal: '' } : offered ?? { kind: 'none' as const, goal: '' };
     const asked = bodyIntentOf(proposed);
     // The owner's intent enters the common task tree (`fcaIntent`); without it (a switched-off part) it is answered as proposed.

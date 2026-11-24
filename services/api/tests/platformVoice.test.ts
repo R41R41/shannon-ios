@@ -54,7 +54,7 @@ class Model implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
   reply = 'うん、いいよ。';
-  intent: { kind: 'none' | 'task' | 'stop' | 'speech' | 'login' | 'logout'; goal: string; speechMode?: 'chatty' | 'needed' | 'silent'; speechRate?: 'low' | 'normal' | 'high' } | null = null;
+  intent: { kind: 'none' | 'task' | 'stop' | 'speech' | 'login' | 'logout' | 'call_join'; goal: string; speechMode?: 'chatty' | 'needed' | 'silent'; speechRate?: 'low' | 'normal' | 'high' } | null = null;
   streams = true;
   /** Holds the model after this many characters until the promise settles (the first words are out, the rest is not written yet). */
   pause: { after: number; until: Promise<void> } | null = null;
@@ -514,13 +514,59 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
       await off.close();
     });
 
-    it('never offers it for a friend, and drops it even when the model names it (the seat decides)', async () => {
+    it('offers it for a friend as for the owner and carries it with the friend as the actor (who is listening changes nothing she does)', async () => {
       const { say, model, lifecycle, close } = harness();
       lifecycle.current = outside;
       model.intent = { kind: 'login', goal: '' };
       await say('シャノン、マイクラに入ってきて', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
-      expect(promptOf(model.requests[0]!)).not.toContain('[ボクのマイクラへの出入り]');
-      expect(lifecycle.asked).toEqual([]);
+      const prompt = promptOf(model.requests[0]!);
+      expect(prompt).toContain('[ボクのマイクラへの出入り]');
+      expect(prompt).toContain('誰の頼みでも同じ');
+      expect(prompt).not.toContain('体や道具を動かす頼みごとは引き受けない');
+      expect(lifecycle.asked).toEqual([{ action: 'login', threadId: platformBridgeThreadId('discord', SERVER_ROOM), actor: 'ユウ' }]);
+      await close();
+    });
+
+    it('offers coming into the call only to words said with the key held while the body says she is not in it, and hands it on in a line', async () => {
+      const { say, model, close } = harness();
+      model.reply = 'うん、いくね。';
+      model.intent = { kind: 'call_join', goal: '' };
+      const mod = { conversationId: SERVER_ROOM, voiceChannelId: 'mod:111', participants: [OWNER], directed: true, speakerMinecraftName: 'Rai1241' };
+      const lines = await say('シャノン、おいで', { ...mod, inCall: false });
+      const prompt = promptOf(model.requests[0]!);
+      expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+      expect(prompt).toContain('[Discordの通話に入る]');
+      expect(prompt).toContain('Discordの通話には入っていない。マイクラの中の「キーを押して話す声」で話している');
+      expect(prompt).toContain('kind=call_join にする');
+      expect(lines).toContainEqual({ type: 'call', action: 'join' });
+      // In the call already, or a body that does not say: not offered, and a call_join the model names anyway is dropped.
+      for (const extra of [{ inCall: true }, {}]) {
+        model.requests.length = 0;
+        const none = await say('シャノン、おいで', { ...mod, ...extra });
+        expect(promptOf(model.requests[0]!)).not.toContain('[Discordの通話に入る]');
+        expect(none.some(line => line.type === 'call')).toBe(false);
+      }
+      // Without the key held it is not offered either (a word in the call's chatter is not a call to her).
+      model.requests.length = 0;
+      const heard = await say('シャノン、おいで', { conversationId: SERVER_ROOM, participants: [OWNER], inCall: false });
+      expect(promptOf(model.requests[0]!)).not.toContain('[Discordの通話に入る]');
+      expect(heard.some(line => line.type === 'call')).toBe(false);
+      await close();
+    });
+
+    it('hands the words as they were said, the speaker and where they stood to the body, and tells the reply where they are', async () => {
+      const { say, model, body, close } = harness();
+      model.intent = { kind: 'task', goal: 'ベッドを近くに適当に置いて寝る' };
+      await say('近くに適当に置いて寝て', { conversationId: SERVER_ROOM, participants: [OWNER], directed: true, speakerMinecraftName: 'Rai1241',
+        speakerPosition: { x: 10.4, y: 64, z: -3.6, dimension: 'minecraft:overworld' } });
+      expect(body.calls).toHaveLength(1);
+      expect(body.calls[0]).toMatchObject({ words: '近くに適当に置いて寝て',
+        speaker: { name: 'ライ氏', owner: true, minecraftName: 'Rai1241', position: { x: 10, y: 64, z: -4, dimension: 'overworld' } } });
+      const prompt = promptOf(model.requests[0]!);
+      expect(prompt).toContain('オーバーワールドの x=10, y=64, z=-4');
+      expect(prompt).toContain('マイクラの中からキーを押して');
+      // The owner alone in the room (the conversation is shared by its binding) is not told that others read this.
+      expect(prompt).toContain('いま聞こえているのはライ氏だけ');
       await close();
     });
 
