@@ -25,7 +25,7 @@ export const LIVE_COMMENTARY_ENGINE = Object.freeze({
   lineLifetimeMilliseconds: Object.freeze({ ordinary: 15_000, urgent: 25_000 }),
   /**
    * A kind's own time, from how much the word matters later: a thought of the moment is gone in ten seconds, the end of a request (the
-   * thing she must say, and ask) waits for the room. The body waits at most as long as the line's time says (and, today, at most eight).
+   * thing she must say, and ask) waits for the room. The body waits for an urgent line as long as the line's time says (a request's end: 40 s); an ordinary line at most eight seconds.
    */
   lineLifetimeByKindMilliseconds: Object.freeze<Record<string, number>>({ thinking: 10_000, plan_step: 12_000, material_got: 12_000, task_done: 40_000,
     // A cry of a fight is about the second it came from: said after a few seconds it is about something that is over.
