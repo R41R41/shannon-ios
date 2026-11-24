@@ -560,8 +560,8 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
       await say('近くに適当に置いて寝て', { conversationId: SERVER_ROOM, participants: [OWNER], directed: true, speakerMinecraftName: 'Rai1241',
         speakerPosition: { x: 10.4, y: 64, z: -3.6, dimension: 'minecraft:overworld' } });
       expect(body.calls).toHaveLength(1);
-      expect(body.calls[0]).toMatchObject({ words: '近くに適当に置いて寝て',
-        speaker: { name: 'ライ氏', owner: true, minecraftName: 'Rai1241', position: { x: 10, y: 64, z: -4, dimension: 'overworld' } } });
+      expect(body.calls[0]).toMatchObject({ speakerName: 'ライ氏', speakerWords: '近くに適当に置いて寝て', speakerPos: { x: 10, y: 64, z: -4, dimension: 'overworld' },
+        speaker: { name: 'ライ氏', owner: true, minecraftName: 'Rai1241' } });
       const prompt = promptOf(model.requests[0]!);
       expect(prompt).toContain('オーバーワールドの x=10, y=64, z=-4');
       expect(prompt).toContain('マイクラの中からキーを押して');

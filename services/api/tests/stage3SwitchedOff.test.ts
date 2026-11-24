@@ -76,7 +76,7 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * child Shannon): the stored step keeps the reworded fixed phrase of the autonomy loop.
  * The two digests of `minecraft` (its first and third provider requests) were changed by hand again on 2026-11-24 for a change that is not stage 3's (what a
  * reply may promise: only the list is what was accepted, and the order example is a blank): the first and third provider requests carry the guide.
- * The same two digests were changed by hand once more on 2026-11-25 for the sleep hand's words (`on=false`, not tonight, in the act's description): not stage 3's either.
+ * The same two digests were changed by hand once more on 2026-11-25 for the sleep hand's words (`on=false`, not tonight, in the act's description), the intent field's `call_join` kind and the request guide's words about advice and conditions: not stage 3's either.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

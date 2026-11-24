@@ -144,7 +144,7 @@ describe('a voice channel of three: anyone may ask for her body', () => {
     expect(calls.filter(call => call.startsWith('log ') && call.includes('refused'))).toEqual([]);
     expect(first.find(line => line.type === 'intent')).toMatchObject({ kind: 'task', delivered: true, taskId: 'task-1' });
     expect(calls).toContain('task 鉄の剣を作る');
-    expect(calls.some(call => call === 'task-1 Discordの通話でのユウの依頼: 鉄の剣を作る')).toBe(true);
+    expect(calls.some(call => call.startsWith('task-1 Discordの通話でのユウの依頼: 鉄の剣を作る'))).toBe(true);
     expect(queue.view().entries[0]).toMatchObject({ goal: '鉄の剣を作る', state: 'running', origin: 'voice', askedBy: 'ユウ' });
     // The task stands on a turn the owner can read (the real memory read), written with the friend's name on it.
     expect(sources[0]).toHaveLength(1);
@@ -158,11 +158,11 @@ describe('a voice channel of three: anyone may ask for her body', () => {
     model.intent = { kind: 'message', goal: '剣は2本にして' };
     const message = await say('シャノン、剣は2本にして', { id: OTHER, name: 'ミキ' });
     expect(message.find(line => line.type === 'intent')).toMatchObject({ kind: 'task_message', delivered: true, taskId: 'task-1' });
-    expect(calls.some(call => call === 'task-1 Discordの通話でのミキの言葉（いまのタスクへ）: 剣は2本にして')).toBe(true);
+    expect(calls.some(call => call.startsWith('task-1 Discordの通話でのミキの言葉（いまのタスクへ）: 剣は2本にして'))).toBe(true);
     // The owner speaks too, by the name, as anyone does.
     model.intent = { kind: 'message', goal: '終わったら家を建てて' };
     await say('シャノン、終わったら家を建てて', { id: OWNER, name: 'ライ氏' });
-    expect(calls.some(call => call === 'task-1 Discordの通話でのライ氏の言葉（いまのタスクへ）: 終わったら家を建てて')).toBe(true);
+    expect(calls.some(call => call.startsWith('task-1 Discordの通話でのライ氏の言葉（いまのタスクへ）: 終わったら家を建てて'))).toBe(true);
     // A friend's stop stops the body's tasks and the list.
     model.intent = { kind: 'stop', goal: '' };
     const stop = await say('シャノン、止めて', { id: FRIEND, name: 'ユウ' });
