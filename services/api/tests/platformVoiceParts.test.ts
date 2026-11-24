@@ -201,6 +201,9 @@ describe('the voice prompt blocks', () => {
     expect(friend).toContain('3人いる');
     expect(friend).toContain('「ユウ」');
     expect(friend).toContain('「えっと、」と声に出している');
+    // Introduced to people who are there: she answers with her name and a short line, with the reason, and keeps what is private out of it.
+    expect(friend).toContain('紹介への返事として');
+    expect(friend).toContain('理由: 初めての人がいる場で紹介されたのに黙ると');
     // A call does not offer the tags that come out 9 dB quieter, and says why; a whisper only on request.
     expect(friend).toContain('[laughs] [giggles] [sighs] [gasps] [excited] [happy] [curious] [pouting]');
     expect(friend).toContain('never use [whispers], [softly], [sleepy], [yawns], [crying] or [tearfully]');

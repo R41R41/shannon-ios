@@ -111,6 +111,11 @@ describe('when Jev is asked at all', () => {
     const questions = addressedQuestions();
     expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'answers_her_question', 'reply_needed']);
     expect(Object.keys(questions.target!.criteria)).toEqual(['shannon', 'about_shannon', 'other_person', 'self', 'unclear']);
+    // Being introduced to the people present is to her (she greets them back); an announcement or a remark about her is not.
+    expect(questions.addressed_to_shannon!.instructions).toContain('introduces Shannon to the people present');
+    expect(questions.addressed_to_shannon!.instructions).toContain('is not an introduction and is not to her');
+    expect(questions.reply_needed!.instructions).toContain('is itself the invitation');
+    expect(questions.target!.criteria.about_shannon).toContain('that one is to her');
   });
 });
 
