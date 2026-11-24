@@ -140,7 +140,7 @@ const THOUGHT_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
     feeling: { type: 'string', enum: [...SHANNON_GAME_THOUGHT_KINDS, 'none'], description: 'The one feeling her own recent acts show now, or none.' },
-    intensity: { type: 'number', minimum: 0, maximum: 1, description: 'How strongly (it sets how long the face shows): 0.5 steady work, 0.4-0.5 a worry or a trouble, 0.65 a joy, a relief or a scare. An annoyed one is 0.4 at most.' },
+    intensity: { type: 'number', minimum: 0, maximum: 1, description: 'How strongly (it sets how long the face shows): 0.5 steady work, 0.4-0.5 a worry or a trouble, 0.55-0.65 a joy, a relief or a surprise. An annoyed one is 0.4 at most.' },
     words: { type: 'string', maxLength: 30, description: 'What she feels it about, in Japanese, to follow 「マイクラで」.' },
   },
   required: ['feeling', 'intensity', 'words'],
