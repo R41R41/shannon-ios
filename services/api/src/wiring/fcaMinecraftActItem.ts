@@ -151,7 +151,7 @@ export async function actGuards(parts: { queue: LlmcQueue; urgent: boolean; inpu
 
 /** Owner 2026-10-26: each act the body ran is handed to her feeling when it ends (the queue tells it). */
 export function feelWhenItsDone(queue: LlmcQueue, feelings: MinecraftFeelingPort, step: TaskStep): void {
-  queue.onRan(({ call, why }, result) => feelings.noted({ scopeKey: step.scopeKey, taskId: step.taskId, goal: step.snapshot.task.goal,
-    why: String((call.input as { why?: unknown } | null)?.why ?? why), ok: result.ok, reflex: result.bodyReflex === true,
+  queue.onRan(({ call, why }, result, receipt) => feelings.noted({ scopeKey: step.scopeKey, taskId: step.taskId, goal: step.snapshot.task.goal,
+    why: String((call.input as { why?: unknown } | null)?.why ?? why), ok: result.ok, reflex: result.bodyReflex === true, stopped: receipt?.outcome === 'cancelled',
     progressed: result.progressed === true, outcome: result.text.split('\n').find(text => !text.startsWith('（頭が形を直して')) ?? '' }));
 }

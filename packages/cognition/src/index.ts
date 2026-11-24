@@ -213,6 +213,7 @@ export {
   gameFeeling,
   gameThoughtWords,
   holdsFeelingThroughGame,
+  replacesGameReading,
   isGameFeeling,
   isShannonGameDanger,
   isShannonGameMilestone,

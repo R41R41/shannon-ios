@@ -96,7 +96,7 @@ const FACE_BY_EMOTION: Readonly<Record<ShannonEmotionKind, ShannonFace>> = Objec
   shy: face('embarrassed'), blushing: face('embarrassed'), bashful: face('bashful'), flustered: FLUSTERED,
   hidingHappiness: face('bashful'),
   cuteAngry: face('annoyed'), seriousAnger: face('annoyed'), annoyed: face('annoyed'), indignant: face('annoyed'),
-  frustrated: face('annoyed'), competitive: PROUD, protectiveAnger: face('annoyed'),
+  frustrated: face('concerned'), competitive: PROUD, protectiveAnger: face('annoyed'),
   jealous: face('jealous'), sulky: face('annoyed'), leftOut: face('sad'), lonely: face('sad'),
   attentionSeeking: face('jealous'), lightPossessive: face('jealous'), reassurance: face('tender'),
   sad: face('sad'), disappointed: face('sad'), hurt: face('sad'), anxious: face('concerned'),

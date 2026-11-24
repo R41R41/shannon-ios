@@ -13,7 +13,7 @@ import type { CompanionStateSnapshot, ShannonEmotion, ShannonEmotionKind, Shanno
  * the resolver a reply uses, so carry-over, decay and the face table apply to it as to any other feeling. Nothing reads it back into
  * what her body does: the Minecraft decisions are given no feeling.
  */
-export const SHANNON_GAME_MOMENT_KINDS = ['died', 'hurt', 'danger', 'milestone', 'stuck', 'nightSurvived', 'ownerNear', 'thought'] as const;
+export const SHANNON_GAME_MOMENT_KINDS = ['died', 'hurt', 'danger', 'milestone', 'stuck', 'nightSurvived', 'ownerNear', 'taskDone', 'thought'] as const;
 export type ShannonGameMomentKind = typeof SHANNON_GAME_MOMENT_KINDS[number];
 /** Firsts of the way to the dragon, as the body names them (closed). */
 export const SHANNON_GAME_MILESTONES = [
@@ -23,10 +23,15 @@ export type ShannonGameMilestone = typeof SHANNON_GAME_MILESTONES[number];
 /** What nearly killed her body (closed). */
 export const SHANNON_GAME_DANGERS = ['lava', 'fall', 'drown', 'fire', 'explosion', 'mob'] as const;
 export type ShannonGameDanger = typeof SHANNON_GAME_DANGERS[number];
-/** The kinds a thought may bring (the parallel appraisal's menu): feelings of playing, none that belong to a person she talks with. */
+/**
+ * The kinds a thought may bring (the parallel appraisal's menu): feelings of playing, none that belong to a person she talks with.
+ * No `frustrated`: its face is the angry one, and a failure of hers is not anger (a stored one still reads). A failure is
+ * flustered, helpless, lamenting or retrying.
+ */
 export const SHANNON_GAME_THOUGHT_KINDS = [
   'happy', 'fun', 'excited', 'relief', 'pride', 'curiosity', 'smug', 'triumphant', 'determined', 'focused', 'cautious',
-  'frustrated', 'annoyed', 'disappointed', 'anxious', 'surprised', 'confused', 'tired', 'blocked', 'retrying',
+  'annoyed', 'disappointed', 'anxious', 'surprised', 'confused', 'tired', 'blocked', 'retrying',
+  'flustered', 'helpless', 'lamenting',
 ] as const satisfies readonly ShannonEmotionKind[];
 
 export interface ShannonGameMoment {
@@ -67,12 +72,14 @@ export const SHANNON_GAME_DANGER_FEELINGS: Readonly<Record<ShannonGameDanger, Ga
   explosion: row('爆発に巻き込まれかけた', 'shocked', 0.60, -0.15, 0.75, 0.38),
   mob: row('敵に囲まれた', 'anxious', 0.50, -0.15, 0.66, 0.38),
 });
-const DIED = row('死んでしまった', 'frustrated', 0.62, -0.30, 0.60, 0.40);
+const DIED = row('死んでしまった', 'lamenting', 0.55, -0.30, 0.55, 0.40);
 const HURT = row('攻撃を受けた', 'surprised', 0.40, 0.00, 0.58, 0.45);
 const HURT_BADLY = row('大けがをした', 'shocked', 0.55, -0.10, 0.68, 0.40);
-const STUCK = row('何度もうまくいかなかった', 'frustrated', 0.45, -0.15, 0.55, 0.40);
-const STUCK_LONG = row('ずっとうまくいかない', 'annoyed', 0.55, -0.25, 0.60, 0.35);
+const STUCK = row('何度もうまくいかなかった', 'helpless', 0.42, -0.15, 0.50, 0.40);
+const STUCK_LONG = row('ずっとうまくいかない', 'disappointed', 0.50, -0.25, 0.50, 0.35);
 const NIGHT = row('夜を越えた', 'relief', 0.40, 0.30, 0.35, 0.60);
+/** A request she was given is done: she is glad, and it shows as the joyful face for a few minutes (what a body that cannot flash gives). */
+const TASK_DONE = row('頼まれたことをやり終えた', 'happy', 0.55, 0.40, 0.55, 0.62);
 const OWNER_NEAR = row(`${SHANNON_OWNER_NAME}がそばに来た`, 'happy', 0.40, 0.35, 0.50, 0.65);
 /** A hit that takes this share of her health or more is a bad one. */
 export const SHANNON_GAME_BAD_HURT = 0.3;
@@ -110,6 +117,7 @@ export function gameFeeling(moment: ShannonGameMoment): (GameRow & { weight: num
     case 'stuck': return stuckRow(moment);
     case 'nightSurvived': return { ...NIGHT, weight: 1 };
     case 'ownerNear': return { ...OWNER_NEAR, weight: 1 };
+    case 'taskDone': return { ...TASK_DONE, weight: 1 };
     case 'thought': return thoughtRow(moment);
   }
 }
@@ -163,6 +171,14 @@ export function holdsFeelingThroughGame(
 }
 
 /**
+ * Whether a new reading of her own acts takes the place of the feeling she has now: when that is itself a feeling of the game that no
+ * override holds. A feeling of the game does not stay past the scene that gave it, however strong it was; what a conversation or a touch
+ * left is still kept by the shared rule (`holdsShannonFeeling`).
+ */
+export const replacesGameReading = (present: ShannonExpressiveEmotion | undefined, moment: Pick<ShannonGameMoment, 'kind'>): boolean =>
+  moment.kind === 'thought' && present !== undefined && isGameFeeling(present) && present.overrideReason === undefined;
+
+/**
  * The emotion state after one game moment. Pure. The mood moves by at most `SHANNON_GAME_MOOD_STEP` per value and never past the row's
  * mood, so any number of moments stays bounded. A moment that names nothing usable changes nothing.
  */
@@ -183,7 +199,7 @@ export function feelGame(
     openness: moment.kind === 'thought' ? state.emotion.openness : clamp(state.emotion.openness + toward(state.emotion.openness, felt.mood.openness), 0, 1),
   };
   const previous = state.expressiveEmotion;
-  if (previous && holdsFeelingThroughGame(state, { primary: felt.primary, intensity: felt.intensity }, now, timing)) {
+  if (previous && !replacesGameReading(previous, moment) && holdsFeelingThroughGame(state, { primary: felt.primary, intensity: felt.intensity }, now, timing)) {
     return { emotion, expressiveEmotion: previous };
   }
   const resolved = resolveShannonEmotionState({

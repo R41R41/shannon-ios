@@ -25,7 +25,7 @@ import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { appraiseChoice, appraiseTouch } from './touchAppraisal.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
-import { feelGame, gameFeeling } from './gameEmotion.js';
+import { feelGame, gameFeeling, replacesGameReading } from './gameEmotion.js';
 import { sameDisclosure, widenAudience } from './disclosure.js';
 import { clamp, cleanText, cleanFact, cleanMemory, cleanRelationship, isCommitmentStatus, cleanControl, cleanProspectiveMemory } from './stateClean.js';
 export { clamp, cleanText, cleanFact, cleanMemory, cleanRelationship, isCommitmentStatus, cleanControl, cleanProspectiveMemory } from './stateClean.js';
@@ -148,6 +148,8 @@ function committedFeeling(
   awakeMs: number,
   nowIso: string,
   timing: ShannonEmotionTiming,
+  /** A new reading of her acts takes the place of a feeling of the game before it (`replacesGameReading`). */
+  replacesReading = false,
 ): Pick<CompanionStateSnapshot, 'expressiveEmotion' | 'lingering'> | null {
   if (event.continued) return null;
   const incoming = normalizeShannonExpressiveEmotion(event);
@@ -172,7 +174,7 @@ function committedFeeling(
   }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   // The reading is made here, from the state being written to: the mood her concern covers holds as well.
-  if (incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)
+  if (!replacesReading && incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)
     || (present.underneath !== undefined && holdsShannonFeeling(present.underneath, incoming, touch && { presentFromTouch: false })))) return null;
   // He eased this feeling a moment ago: unless the stimulus is above the height it had before, it shows no stronger than it is now.
   const easedEntry = (state.lingering ?? []).find(item => item.kind === incoming.primary && item.target === incoming.target && inEasedHold(item, awakeMs, timing));
@@ -259,7 +261,7 @@ export function reduceCompanionState(
       const felt = feelGame(state, event.moment, nowIso, timing);
       if (timing.clock === 'awake') {
         const feeling = !felt.expressiveEmotion || felt.expressiveEmotion === state.expressiveEmotion ? null
-          : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing);
+          : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing, replacesGameReading(state.expressiveEmotion, event.moment));
         if (!feeling && sameEmotion(felt.emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
         next = { ...state, emotion: felt.emotion, ...feeling };
         break;

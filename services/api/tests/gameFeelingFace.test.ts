@@ -26,7 +26,7 @@ describe('a game feeling on the one face', () => {
     const found = reduceCompanionState(start, { type: 'game-felt', moment: { kind: 'milestone', milestone: 'first_diamond' } }, AT);
     expect(mood(found).expression).toBe(faceForEmotionKind('excited').expression);
     const died = reduceCompanionState(start, { type: 'game-felt', moment: gameMomentOf({ type: 'game.died', cause: 'minecraft:lava' })! }, AT);
-    expect(mood(died).expression).toBe(faceForEmotionKind('frustrated').expression);
+    expect(mood(died).expression).toBe(faceForEmotionKind('lamenting').expression);
     // Long after, the feeling has faded and the quiet mood's face is back.
     expect(mood(found, later(24 * 60)).expression).toBe(faceForMood(found.emotion).expression);
   });

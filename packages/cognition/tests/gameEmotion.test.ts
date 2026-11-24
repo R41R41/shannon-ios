@@ -35,8 +35,8 @@ describe('the game → feeling table', () => {
     expect(gameFeeling({ kind: 'hurt', strength: 0.1 })?.primary).toBe('surprised');
     expect(gameFeeling({ kind: 'hurt', strength: 0.4 })?.primary).toBe('shocked');
     expect(gameFeeling({ kind: 'stuck', count: 2 })).toBeNull();
-    expect(gameFeeling({ kind: 'stuck', count: 3 })?.primary).toBe('frustrated');
-    expect(gameFeeling({ kind: 'stuck', count: 6 })?.primary).toBe('annoyed');
+    expect(gameFeeling({ kind: 'stuck', count: 3 })?.primary).toBe('helpless');
+    expect(gameFeeling({ kind: 'stuck', count: 6 })?.primary).toBe('disappointed');
     expect(gameFeeling({ kind: 'danger' })).toBeNull();
     expect(gameFeeling({ kind: 'milestone', milestone: 'first_cake' as never })).toBeNull();
     // A thought brings only a kind of playing, held inside its bounds, with its words as the cause.
@@ -67,16 +67,52 @@ describe('a game moment in the one emotion state', () => {
     expect(hit.expressiveEmotion?.primary).toBe('triumphant');
     // Dying is contrary and strong enough: it takes the place.
     const died = felt(joyful, { kind: 'died' }, later(30));
-    expect(died.expressiveEmotion).toMatchObject({ primary: 'frustrated', cause: 'マイクラで死んでしまった' });
+    expect(died.expressiveEmotion).toMatchObject({ primary: 'lamenting', cause: 'マイクラで死んでしまった' });
   });
 
   it('a thought moves only how pleasant she is, and gently', () => {
     const before = fresh();
-    const after = felt(before, { kind: 'thought', thought: { primary: 'frustrated', intensity: 0.5, words: '同じ所で何度も止まった' } });
+    const after = felt(before, { kind: 'thought', thought: { primary: 'helpless', intensity: 0.5, words: '同じ所で何度も止まった' } });
     expect(after.emotion.arousal).toBe(before.emotion.arousal);
     expect(after.emotion.openness).toBe(before.emotion.openness);
     expect(after.emotion.valence).toBeLessThan(before.emotion.valence);
-    expect(after.expressiveEmotion).toMatchObject({ primary: 'frustrated', cause: 'マイクラで同じ所で何度も止まった' });
+    expect(after.expressiveEmotion).toMatchObject({ primary: 'helpless', cause: 'マイクラで同じ所で何度も止まった' });
+  });
+
+  it('keeps no angry row for her own failures: a death, a run of failures and the menu give flustered, helpless, lamenting or disappointed', () => {
+    for (const moment of [{ kind: 'died' }, { kind: 'stuck', count: 3 }, { kind: 'stuck', count: 6 }] as const) {
+      expect(['frustrated', 'annoyed', 'cuteAngry', 'seriousAnger', 'indignant', 'sulky']).not.toContain(gameFeeling(moment)?.primary);
+    }
+    expect(SHANNON_GAME_THOUGHT_KINDS).not.toContain('frustrated');
+    expect(SHANNON_GAME_THOUGHT_KINDS).toEqual(expect.arrayContaining(['flustered', 'helpless', 'lamenting', 'retrying', 'annoyed']));
+    // A frustrated thought is not read; a stored frustrated feeling still is a kind she can hold.
+    expect(gameFeeling({ kind: 'thought', thought: { primary: 'frustrated', intensity: 0.5, words: '何度も止まった' } })).toBeNull();
+    expect(isShannonEmotionKind('frustrated')).toBe(true);
+  });
+
+  it('shows being frustrated or helpless as a worried face, never the angry one', () => {
+    expect(faceForEmotionKind('frustrated').expression).toBe('concerned');
+    expect(faceForEmotionKind('helpless').expression).toBe('concerned');
+    expect(faceForEmotionKind('annoyed').expression).toBe('annoyed');
+  });
+
+  it('a new reading of her acts replaces the one before it, while a feeling from a conversation is still held', () => {
+    const reading = (primary: 'annoyed' | 'focused' | 'helpless', intensity: number) =>
+      ({ kind: 'thought', thought: { primary, intensity, words: '作業の様子' } }) as const;
+    const worried = felt(fresh(), reading('helpless', 0.65));
+    // A weaker reading a minute later replaces it (before, the stronger one stayed for minutes).
+    const next = felt(worried, reading('focused', 0.5), later(1));
+    expect(next.expressiveEmotion).toMatchObject({ primary: 'focused' });
+    // A feeling that came from a conversation (not the game) is held against a weaker reading, as before.
+    const talked = reduceCompanionState(fresh(), { type: 'game-felt', moment: { kind: 'milestone', milestone: 'dragon_killed' } }, START);
+    const stays = felt({ ...talked, expressiveEmotion: { ...talked.expressiveEmotion!, cause: '話していてうれしい' } }, reading('focused', 0.5), later(1));
+    expect(stays.expressiveEmotion?.primary).toBe('triumphant');
+  });
+
+  it('a finished request is a joy: happy, shown as the joyful face', () => {
+    const done = felt(fresh(), { kind: 'taskDone' });
+    expect(done.expressiveEmotion).toMatchObject({ primary: 'happy', cause: 'マイクラで頼まれたことをやり終えた' });
+    expect(faceForEmotionKind(done.expressiveEmotion!.primary).expression).toBe('joyful');
   });
 
   it('a moment it cannot name changes nothing, and feelGame is pure', () => {
