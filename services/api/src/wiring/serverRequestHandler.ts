@@ -19,6 +19,7 @@ import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from '../contracts/calen
 import { HOST_STEP_CLAIM_PATH, closedSignal, hostStepRequestBytes } from '../infra/http/apiAutonomyHostStepRoutes.js';
 import { SHANNON_NOW_PATH } from '../contracts/shannonNowContract.js';
 import { MOOD_HISTORY_PATH } from '../contracts/moodHistoryContract.js';
+import { ON_AIR_PATH } from '../contracts/onAirContract.js';
 import { isActionThreadPath } from '../infra/http/actionThreadRoutes.js';
 import type { RequestListener } from 'node:http';
 import type { ApiRequestPorts } from '../server.js';
@@ -50,6 +51,7 @@ export function createApiRequestHandler(ports: ApiRequestPorts): RequestListener
     opsRoute,
     shannonNowRoute,
     moodHistoryRoute,
+    onAirRoute,
     skillsRoute,
     valuesRoute,
     fca,
@@ -150,6 +152,10 @@ export function createApiRequestHandler(ports: ApiRequestPorts): RequestListener
         }
         if (url.pathname === SHANNON_NOW_PATH) {
           shannonNowRoute(request, response, principal);
+          return true;
+        }
+        if (url.pathname === ON_AIR_PATH) {
+          await onAirRoute(request, response, principal);
           return true;
         }
         if (url.pathname === MOOD_HISTORY_PATH) {

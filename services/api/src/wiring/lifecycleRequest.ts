@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import type { MinecraftLifecycleAction, MinecraftLifecycleState } from '../contracts/minecraftLifecycleContract.js';
+import { lifecyclePlayerNames, type MinecraftLifecycleAction, type MinecraftLifecycleState } from '../contracts/minecraftLifecycleContract.js';
 import type { LifecycleOutcomeTeller } from './lifecycleOutcomeTellingWiring.js';
 import type { OperatorHandleHooks } from './operatorMinecraftCommandRequests.js';
 import { askWhileBlocked, resolveWaits } from './lifecycleWait.js';
@@ -228,7 +228,8 @@ export function createLifecycleRequests(parts: LifecycleRequestParts) {
         if (!serverId || !parts.available()) return null;
         const state = parts.status(serverId);
         if (!state) return null;
-        return { running: state.running, bot: state.bot, pending: pendingOf(serverId)?.action ?? null };
+        const names = lifecyclePlayerNames(state);
+        return { running: state.running, bot: state.bot, pending: pendingOf(serverId)?.action ?? null, ...(names ? { playerNames: names } : {}) };
       },
       // Never an unresolved refusal at once: her reply has already promised, the words of a late one could not be said after it, and
       // the request itself waits for the receipt (`request`), so that case goes on to it.

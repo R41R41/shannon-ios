@@ -119,6 +119,20 @@ export class PlatformPeople {
     return person && !person.forgottenAt ? person : null;
   }
 
+  /**
+   * The name a person goes by for a platform account (their display name in 人), or null when she cannot place the account (never
+   * seen, forgotten, or not registered). A Minecraft name is matched without regard to case; a Discord account also by the
+   * owner's registry. Only the name her records hold is used (the owner can rename a person there); an account she has no person for stays unnamed.
+   */
+  callName(scopeKey: string, platform: string, account: string): string | null {
+    const wanted = account.trim().toLowerCase();
+    if (!wanted) return null;
+    const link = this.store.platformLinks(scopeKey).find(candidate => candidate.platform === platform && candidate.userId.toLowerCase() === wanted);
+    const registered = link ? null : this.store.registryPersonId(scopeKey, platform, account);
+    const person = link ? this.store.person(scopeKey, link.personId) : registered ? this.store.person(scopeKey, registered) : null;
+    return person && !person.forgottenAt && person.displayName.trim() ? person.displayName.trim().slice(0, 40) : null;
+  }
+
   ingest(scopeKey: string, turn: PlatformPersonTurn): PlatformPersonResult {
     const earlier = this.store.platformReceipt(scopeKey, turn.platform, turn.requestId);
     if (earlier) {

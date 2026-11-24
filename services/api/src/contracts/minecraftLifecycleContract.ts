@@ -21,6 +21,12 @@ export interface MinecraftLifecycleState {
   running: 'running' | 'stopped' | 'unknown'; bot: 'joined' | 'absent' | 'unknown';
   /** Authoritative count after excluding only the configured bot's authenticated UUID. Null means unknown. */
   otherPlayers: number | null;
+  /**
+   * The names of those players (the same ones `otherPlayers` counts), as the game's own player list wrote them. Optional: a body that
+   * predates it sends none, and then who is there is not known. It is never checked as part of a frame (one odd name must not make the
+   * whole poll invalid); `lifecyclePlayerNames` reads it, keeps only what a player's name can be, and says nothing when it is absent.
+   */
+  playerNames?: readonly string[];
 }
 export interface MinecraftLifecycleAuthority {
   scopeKey: string; origin: 'owner_request' | 'own_time';
@@ -153,3 +159,19 @@ export function lifecycleCapabilities(poll: Pick<MinecraftLifecyclePoll, 'capabi
  * promise (`initiativeFreshness.ts`).
  */
 export const LIFECYCLE_OUTCOME_SOURCE_PREFIX = 'lifecycle-outcome:';
+
+/** A player's name in the game: letters, digits and underscore, up to 16. */
+const PLAYER_NAME = /^[A-Za-z0-9_]{1,16}$/u;
+/** The most names read from one frame (a server with more people than this is not the one she lives on). */
+export const LIFECYCLE_PLAYER_NAMES_MAXIMUM = 50;
+/**
+ * The names of the players a frame carries, or null when it carries none (a body that predates the field, or a value that is not a
+ * list). Odd entries are left out one by one; none of this ever refuses a frame.
+ */
+export function lifecyclePlayerNames(state: Pick<MinecraftLifecycleState, 'playerNames'>): readonly string[] | null {
+  const names: unknown = state.playerNames;
+  if (!Array.isArray(names)) return null;
+  const seen = new Set<string>();
+  for (const name of names.slice(0, LIFECYCLE_PLAYER_NAMES_MAXIMUM)) if (typeof name === 'string' && PLAYER_NAME.test(name)) seen.add(name);
+  return [...seen];
+}

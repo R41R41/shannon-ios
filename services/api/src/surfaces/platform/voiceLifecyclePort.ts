@@ -15,7 +15,9 @@ export type LifecycleRequestResult =
 
 export interface VoiceLifecyclePort {
   /** The server's state now, or null when it is not known (no fresh frame, or more than one registered server). Read without waiting. */
-  state(): { running: 'running' | 'stopped' | 'unknown'; bot: 'joined' | 'absent' | 'unknown'; pending: LifecycleRequestAction | null } | null;
+  state(): { running: 'running' | 'stopped' | 'unknown'; bot: 'joined' | 'absent' | 'unknown'; pending: LifecycleRequestAction | null;
+    /** The names of the people in the server besides her (null or absent: not known, e.g. a body that does not send them). */
+    playerNames?: readonly string[] | null } | null;
   /** What the request would be refused for, or answered at once (`already`, `pending`), without starting anything; null: it would go on. */
   check(action: LifecycleRequestAction): LifecycleRequestResult | null;
   request(action: LifecycleRequestAction, options: { threadId?: string | null; actor?: string }): Promise<LifecycleRequestResult>;

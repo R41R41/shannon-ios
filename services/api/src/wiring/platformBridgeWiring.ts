@@ -55,6 +55,8 @@ export function createConfiguredPlatformBridgeRoute(
     voiceMinecraft?: () => VoiceMinecraftPort | null;
     /** Her going into and out of the Minecraft server for the owner's spoken request (`lifecycleRequest.ts`), read at each turn. */
     voiceLifecycle?: () => VoiceLifecyclePort | null;
+    /** 「収録中」 for the spoken reply (`opsOnAirContract.ts`), read at each turn; null when it is not on air. */
+    voiceOnAir?: () => { note: string } | null;
     /** Listening transcription for the voice channel (`POST /v1/platform/voice/transcribe`); null without `GROQ_API_KEY`. */
     listening?: Listening | null;
   } | null = null,
@@ -84,6 +86,7 @@ export function createConfiguredPlatformBridgeRoute(
       chatModel, sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), splitter: () => new ChatSentenceSplitter(VOICE_SENTENCE_CUT),
       environment: () => environment, rooms: voiceRooms, addressed, ...(replies.voiceMinecraft ? { minecraft: replies.voiceMinecraft } : {}),
       ...(replies.voiceLifecycle ? { lifecycle: replies.voiceLifecycle } : {}),
+      ...(replies.voiceOnAir ? { onAir: replies.voiceOnAir } : {}),
     }),
     mouth: voiceMouth, ...callVoices(environment, usageStore), scopeKey: configuration.scopeKey, environment: () => environment,
     listening: replies.listening ?? null,

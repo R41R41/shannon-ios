@@ -29,6 +29,7 @@ import {
   speakerPositionLine, speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
+import { onAirBlock, presenceBlock, presenceFactsOf } from './voicePresencePrompt.js';
 import { warmedAudiences, type VoiceWarmAsk, type WarmAudience } from '../voice/voiceWarm.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
@@ -87,6 +88,8 @@ export interface PlatformVoiceDependencies {
   minecraft?: () => VoiceMinecraftPort | null;
   /** Her going into and out of the Minecraft server, for the owner's own spoken request (`lifecycleOffer`); read at each turn. */
   lifecycle?: () => VoiceLifecyclePort | null;
+  /** 「収録中」 (`contracts/opsOnAirContract.ts`): the owner's note while what is said is being recorded or broadcast; null when it is not on air. Read at each turn. */
+  onAir?: () => { note: string } | null;
   /** The auxiliary model (Haiku) that puts event facts into her words (`wording`). */
   chatModel: Pick<ShannonChatModel, 'generate'>;
   environment?: () => SwitchValues;
@@ -486,11 +489,30 @@ export class PlatformVoiceService {
         viaMod: request.directed === true && request.speakerMinecraftName !== undefined, modOnly: this.modOnly(request),
         speakerPosition: speakerPositionLine(request.speakerPosition),
       }),
+      this.presenceFor(seat, request),
       situationBlock(situation, running, body?.state.resting ?? [], body ? this.rooms.unhanded(roomKey) : []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
       intent, toolGuide, speech, lifecycle, callJoin ? callJoinInstructions({ who }) : '', directedBlock(request.directed === true, who, intent !== '' || toolGuide !== ''),
     ].filter(Boolean).join('\n\n');
+  }
+
+  /** Who is in the call and in the Minecraft server, and 「収録中」, as the two blocks of the prompt (`voicePresencePrompt.ts`). Never throws: what is not known is left out. */
+  private presenceFor(seat: ChannelSeat, request: VoiceTurnRequest): string {
+    try {
+      let server: ReturnType<VoiceLifecyclePort['state']> = null;
+      try { server = this.dependencies.lifecycle?.()?.state() ?? null; } catch { server = null; }
+      let onAir: { note: string } | null = null;
+      try { onAir = this.dependencies.onAir?.() ?? null; } catch { onAir = null; }
+      const facts = presenceFactsOf({
+        names: (platform, accounts) => this.dependencies.bridge.presenceNames(platform, accounts), platform: request.platform, humans: [...seat.humans],
+        ownerAccount: seat.binding.ownerUserId, modOnly: this.modOnly(request), server, onAir,
+        speaker: { account: request.sourceUserId, displayName: request.sourceDisplayName, owner: seat.owner, minecraftName: request.speakerMinecraftName },
+      });
+      return [presenceBlock(facts), onAirBlock(facts.onAir)].filter(Boolean).join('\n\n');
+    } catch {
+      return '';
+    }
   }
 
   /** The owner is the only one in the room (whatever the conversation's binding says): what the reply is told of who is listening follows this. */

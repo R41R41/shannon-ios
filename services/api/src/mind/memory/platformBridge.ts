@@ -282,6 +282,21 @@ export class PlatformBridgeService {
     return { binding, threadId, ownerWrote, present, ownerPresent, gate, snapshot, peopleLines, impressionLines, ...(speaker ? { speaker } : {}) };
   }
 
+  /**
+   * Who a list of platform accounts are, by the names her records give them: the names in order (once each), and how many accounts she
+   * cannot place. With people memory off, none is placed. Read only; it remembers nothing.
+   */
+  presenceNames(platform: string, accounts: readonly string[], maximum = 8): { names: string[]; unnamed: number } {
+    const names: string[] = [];
+    let unnamed = 0;
+    for (const account of accounts) {
+      const name = this.people && this.peopleEnabled() ? this.people.callName(this.configuration.scopeKey, platform, account) : null;
+      if (!name) unnamed += 1;
+      else if (!names.includes(name) && names.length < maximum) names.push(name);
+    }
+    return { names, unnamed };
+  }
+
   /** The binding of a conversation, or null when it is not allowlisted (the voice route reads who the owner is before it decides the audience). */
   bindingOf(request: { platform: ShannonPlatform; conversationId: string }): PlatformBridgeBinding | null {
     return bindingFor(this.configuration, request.platform, request.conversationId)
