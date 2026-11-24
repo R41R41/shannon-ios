@@ -20,7 +20,7 @@ import { slotWordOf, type ActHand } from './minecraftActContract.js';
  *   walk 225,57,63 | walk 1,2,3 4,5,6（path）[sprint] [range=2] | dig x,y,z x,y,z [tool=名] [exposeOk] [takeOk] [collect=false]
  *   place ブロック x,y,z ... [face=down] | pillarUp N [ブロック] | wait 秒 | sneak on|off | jump N | eat [物] | equip 物
  * [slot] | craft 物 [個数]
- *   sleep [ベッド] [seconds=N] | pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
+ *   sleep [ベッド] [seconds=N] [on=false|true] | pickup [range=N] [target=T] | look x,y,z か look yaw=A pitch=B | attack 相手 [hold] [seconds=N] [untilDead=false]
  * | use 物 [x,y,z]
  *   [face=F] [target=T] [count=N]
  *   どの手にも rel（足からの差）、onFail=continue|stop、dependsOn=1,3（頼る前の手の番号。dependsOn=none は何にも頼らない）、note="短い説明" を付けられる。
@@ -146,7 +146,7 @@ const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   sneak: hand => hand.on !== undefined ? [hand.on ? 'on' : 'off'] : null,
   jump: hand => hand.n !== undefined ? [String(hand.n)] : [],
   eat: hand => hand.item ? [hand.item] : [],
-  sleep: hand => [...(hand.item ? [hand.item] : []), ...given('seconds', hand.seconds)],
+  sleep: hand => [...(hand.item ? [hand.item] : []), ...given('seconds', hand.seconds), ...given('on', hand.on)],
   equip: hand => hand.item ? [hand.item, ...(hand.slot ? [hand.slot] : [])] : null,
   craft: hand => hand.item ? [hand.item, ...(hand.count !== undefined ? [String(hand.count)] : [])] : null,
   pickup: hand => [...given('range', hand.range), ...given('target', hand.target), ...listWord('dig', hand.canDig), ...given('maxDig', hand.maxDig)],

@@ -197,7 +197,7 @@ describe('the plan made again for a request of one thing', () => {
 
   it('writes the recipe and the bone meal ways short: five materials, no cocoa beans or bones, the method in one node closed by the thing', () => {
     expect(REQUEST_REPLAN_KNOWLEDGE).toContain('小麦 3・砂糖 2・卵 1・牛乳入りバケツ 3 と作業台');
-    expect(REQUEST_REPLAN_KNOWLEDGE).toContain('カカオ豆・骨・食料・ベッド・石の道具は要らない');
+    expect(REQUEST_REPLAN_KNOWLEDGE).toContain('カカオ豆・骨・食料・石の道具は要らない');
     expect(REQUEST_REPLAN_KNOWLEDGE).toContain('骨を集めない・夜に探しに出ない');
     expect(REQUEST_REPLAN_KNOWLEDGE).toContain('doneWhen は have:bone_meal>=数');
   });

@@ -34,7 +34,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   drop: { needs: [['items']], may: ['target', 'at'] },
   pickup: { needs: [], may: ['target', 'range', 'canDig', 'maxDig'] },
   wait: { needs: [['seconds']], may: [] },
-  sleep: { needs: [], may: ['item', 'seconds'] },
+  sleep: { needs: [], may: ['item', 'seconds', 'on'] },
   obsidian: { needs: [['at']], may: ['count', 'seconds', 'canPlace', 'maxPlace', 'maxDig'] },
   fight: { needs: [['target']], may: ['den', 'stance', 'item', 'retreatHp', 'range', 'seconds'] },
   mine: { needs: [['block'], ['at']], may: ['count', 'tool', 'collect', 'seconds', 'canDig', 'maxDig', 'exposeOk'] },
@@ -104,7 +104,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
   attack: attackProblem,
   go: goProblem,
-  sleep: hand => seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null),
+  sleep: sleepProblem,
   obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源（L）か黒曜石（O）のマス 1〜24 マス' : null)
     ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
   fight: hand => seconds(hand, 5, fightSecondsMax(hand)) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
@@ -119,6 +119,13 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   smelt: hand => seconds(hand, 5, 60) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
     ?? (hand.items!.some(entry => entry.count === undefined) ? 'items には個数が要る' : null) ?? (hand.at !== undefined && hand.at.length > 4 ? 'at は 4 つまで' : null),
 };
+/** sleep: `on=false` is "not tonight" (seconds 60–300 for how long, else until the morning), `on=true` ends it; no `on`: its seconds 10–60 and item as before. */
+function sleepProblem(hand: ActHand): string | null {
+  if (hand.on !== undefined && typeof hand.on !== 'boolean') return 'on は true か false';
+  if (hand.on === false) return hand.seconds !== undefined && (hand.seconds < 60 || hand.seconds > 300) ? 'on=false の seconds は 60〜300（寝ない秒数。省くと朝まで）' : null;
+  if (hand.on === true && hand.seconds !== undefined) return 'on=true（寝ないを解く）に seconds は付けない';
+  return seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null);
+}
 const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] as const;
 const objectOf = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;

@@ -5,6 +5,7 @@ import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstContract.js';
 import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
+import { SLEEP_MODES } from './minecraftSleepWords.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
    VERTICAL_SHAPES, VERTICAL_TOWARDS, VERTICAL_LIQUIDS, EQUIP_SLOTS, slotWordOf, HAND_CONTINUES_BY_DEFAULT, handContinuesOnFail, KEEP_MAX,
       KEEP_FORM } from './minecraftActTypes.js';
@@ -107,7 +108,7 @@ export const ACT_DESCRIPTION = [
     + 'shoot(target か at, item: 弓かクロスボウ, charge: 引く秒, n: 本数) / eat(item) / '
     + 'drop(items, target か at: その方へ投げる。ピグリンへの金など) / pickup(target か range) / wait(seconds: 0.5〜30) / '
     + 'sleep(item: ベッド（省くと持っている物）, seconds: 10〜60、既定 45: 16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す。'
-    + '8m（上下 5）に敵がいる・ネザーとエンドでは止まる。夜まで 10 秒以内なら体が待って寝る。それより前（昼）なら寝る予約になり、夜になり次第、体が次の手の前で寝る（wait で夜を待たない。雷雨は昼でも寝られる）。掘って場所は作らない)。',
+    + '8m（上下 5）に敵がいる・ネザーとエンドでは止まる。夜まで 10 秒以内なら体が待って寝る。それより前（昼）なら寝る予約になり、夜になり次第、体が次の手の前で寝る（wait で夜を待たない。雷雨は昼でも寝られる）。掘って場所は作らない。' + SLEEP_MODES + ')。',
   '座標はブロックの整数。rel: true の手は、その手を始める時の足のブロックからの差（x 東+、z 南+、y 上+）。',
   '形: why は act に 1 つ（手の中に書かない。手の短い説明は note）。at・path・items は 1 つでも配列 [ ] で書く。',
   'かまど（F・燻製器・溶鉱炉）は furnace（op=take で出来上がりを取る、op=put で入れる）。chest は箱・樽（C）だけ。',

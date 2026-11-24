@@ -5,6 +5,7 @@ import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
 import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
+import { SLEEP_EXCEPT, SLEEP_MODES } from './minecraftSleepWords.js';
 
 export { handToLine, lineToHand };
 
@@ -152,9 +153,9 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
   'craft 物 [個数]',
   '  2×2 で作れる物（板・棒・作業台・松明・火打ち金など）は作業台が要らない。3×3 の物（ツルハシ・剣・盾・かまど・バケツ・ハーフブロックなど）は作業台が5m内に要る。',
   'equip 物 [slot] / eat [物] / look X,Y,Z か look yaw=A pitch=B / jump N / sneak on|off / wait 秒（0.5〜30）',
-  'sleep [ベッド] [seconds=N]',
+  'sleep [ベッド] [seconds=N] [on=false]',
   '  16m 内の立っているベッドか、周りに置いて寝て、朝に拾い直す（seconds 10〜60、既定 45）。夜か雷雨なら今寝る。夜まで 10 秒以内なら体が待って寝る。それより前（昼）は寝る予約で、夜になり次第、体が次の手の前で寝る（wait で夜を待たない）。8m（上下 5）に敵がいると寝られない（壁越しでも）。'
-    + 'ネザー・エンドでは爆発する。掘って場所は作らない。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
+    + 'ネザー・エンドでは爆発する。掘って場所は作らない。' + SLEEP_MODES + '。理由: enemy_near・not_night・no_bed・no_bed_spot・bed_explodes・night_went_on・not_slept。',
   'drop 物[:数][,物[:数]…] [target=#id か X,Y,Z]  捨てる（体が深さ2の穴を掘って埋める。target か座標ならその方へ投げる＝ピグリンへの金）',
   'tidy [物[:数],…] [keep=物:数,…] [room=N] [smelt=off]  持ち物に隙間を作る（捨て・hay_block→パン・原石を焼く）。物を省くと体が選ぶ。要る物は keep=',
   'attack 相手(#id か名前) [hold] [seconds=N] [untilDead=false]  hold はその場で待って届いたら打つ（追わない）。食料の動物を何体も狩るのは hunt（どちらも食料の動物は石以上の剣か斧を持ってから）',
@@ -226,7 +227,8 @@ manualPage('vertical', 'vertical（指定形状・向きの長い上り下り）
     + '（同じ作業の続き・次の行き先・作る・焼く・食べる）。結果で選び方が変わる時だけ、足さずに終わりを待つ（探し物が見つかったか、戦いの相手が倒れたか）。'
     + '結果を確かめるためだけの項目（pickup だけ・wait だけ）は足さない（走っている項目の後ろの wait だけは積まれず、その項目の終わりで起こす返事になる）: 拾う物は作業の act に pickup の手を入れ、結果は終わった時に知らせが来る。'
     + 'wait は、他にできる作業が何も無い時だけ（理由: 立って待つ間は計画が止まる。ある実走は全体の約 4 分の 1 を wait で失った）。'
-    + '寝るのは wait で夜を待たず、sleep を 1 手積む（作業の act の先頭か末尾に入れる。夜になり次第、体が次の手の前で寝る。夜まで 10 秒以内なら体がその分だけ待って寝る）。',
+    + '寝るのは wait で夜を待たず、sleep を 1 手積む（作業の act の先頭か末尾に入れる。夜になり次第、体が次の手の前で寝る。夜まで 10 秒以内なら体がその分だけ待って寝る）。'
+    + `${SLEEP_EXCEPT}。`,
   '- かまど: 入れたら待たずに別の作業（採掘・伐採・食料・作る）の act を足す。理由: 立って待つと焼く間の時間がそのまま止まる（実走 5 は 1261 秒中 233 秒）。'
     + 'live の jobs（かまど帳）の「時間は来た」か焼き上がりの出来事で furnace X,Y,Z take を足す（遠くても体が歩く）。take は早めに足してもよい（理由: 残りが 15 秒以内なら体が待って取る。もっと長ければ「まだ」と返るだけで、待たない）。'
     + '焼く間は近くでできる作業を選び（planNow の A/B/C）、離れ切る前に take する。put と take を wait で結ばない。形の例: ["furnace X,Y,Z put raw_iron", "mine …"]、後で ["furnace X,Y,Z take", "make …"]。',
