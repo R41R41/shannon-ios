@@ -146,7 +146,7 @@ function noteHand(seen: Seen, hand: Rec): void {
 function formStop(hand: Rec, form: Form, here: Cell | null, seen: Seen): Found {
   switch (hand.do) {
     case 'dig': case 'use': case 'furnace': case 'chest': return reachProblem(hand, form, seen);
-    case 'go': case 'walk': return airProblem(hand, form, here) ?? (hand.do === 'go' ? longGo(hand, form, seen) : null);
+    case 'go': case 'walk': return airProblem(hand, form, here) ?? (hand.do === 'go' ? climbProblem(hand, here) ?? longGo(hand, form, seen) : null);
     case 'vertical': return wearProblem(form, seen, verticalCost(hand, form));
     case 'mine': return wearProblem(form, seen, typeof hand.count === 'number' ? hand.count * 4 : null);
     case 'eat': return fullProblem(hand, form, seen);
@@ -186,6 +186,26 @@ function airProblem(hand: Rec, form: Form, here: Cell | null): Found {
   const room = count - 32 > 0 ? `＝${count - 32}` : '';
   const via = hand.do === 'walk' ? 'walk は置かない。go に変えて、' : '';
   return { code: 'place_missing', line: `${via}荷の ${name}×${count} を canPlace に足す（maxPlace は持つ数−32 まで${room}）` };
+}
+
+/** What a go gives for blocks to lay when it writes no maxPlace (the body's default). */
+const DEFAULT_MAX_PLACE = 24;
+/** A destination this near (flat) over her head is climbed to level by level (the body's CLIMB_NEAR_M of 6 and the range) and not walked up a slope. */
+const CLIMB_FLAT_M = 8;
+/**
+ * A go to a place straight over her head that is higher than the blocks it may lay: a climb lays one block a level, so it stops half way up at maxPlace (11/25: 44 levels up with
+ * maxPlace 30, then 40 for 56 levels: a stop and a new decision of 4.8 to 7.9 s each, in the middle of a climb). The model writes the number; the line says what the height needs.
+ */
+function climbProblem(hand: Rec, here: Cell | null): Found {
+  if (!list(hand.canPlace).length || !here) return null;
+  const goals = destinations(hand, here);
+  if (!goals?.length) return null;
+  const nearest = goals.reduce((best, cell) => Math.hypot(cell.x - here.x, cell.z - here.z) < Math.hypot(best.x - here.x, best.z - here.z) ? cell : best);
+  const up = nearest.y - here.y;
+  const limit = typeof hand.maxPlace === 'number' ? hand.maxPlace : DEFAULT_MAX_PLACE;
+  if (up <= limit || Math.hypot(nearest.x - here.x, nearest.z - here.z) > CLIMB_FLAT_M) return null;
+  const need = Math.min(100, up + 4);
+  return { code: 'place_missing', line: `行き先 (${nearest.x},${nearest.y},${nearest.z}) は真上 ${up} 段。上り 1 段で置く 1 個で、maxPlace ${limit}${typeof hand.maxPlace === 'number' ? '' : '（既定）'} だと途中で止まる。maxPlace=${need} 以上にする（荷の置く物も ${up} 個以上要る）` };
 }
 
 /** How many blocks a vertical is expected to dig: stairs two a step, a shaft one; from maxDig or the steps to toY. */

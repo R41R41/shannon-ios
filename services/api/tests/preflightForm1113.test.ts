@@ -94,3 +94,21 @@ describe('a make without materials (F3)', () => {
     expect(goStop(act({ do: 'make', item: 'furnace' }), frame([item('cobbled_deepslate', 7)]))?.code).toBe('make_short');
   });
 });
+
+describe('a go straight up higher than the blocks it may lay', () => {
+  const up = (y: number, extra: Record<string, unknown> = {}) => act({ do: 'go', to: { x: 10, y, z: 10 }, canDig: ['stone'], canPlace: ['cobblestone'], ...extra });
+  it('says what the height needs when maxPlace is below the levels (a climb lays one block a level)', () => {
+    const stop = goStop(up(54, { maxPlace: 30 }), frame([item('cobblestone', 90)]));
+    expect(stop).toMatchObject({ hand: 1, kind: 'go', code: 'place_missing' });
+    expect(stop?.line).toContain('真上 44 段');
+    expect(stop?.line).toContain('maxPlace=48 以上');
+  });
+  it('counts the default of 24 when no maxPlace is written', () => {
+    expect(goStop(up(40), frame([item('cobblestone', 90)]))?.line).toContain('maxPlace 24（既定）');
+    expect(goStop(up(30), frame([item('cobblestone', 90)]))).toBeNull();
+  });
+  it('lets a maxPlace that covers the levels, and a place far to the side (a slope is walked, not climbed)', () => {
+    expect(goStop(up(54, { maxPlace: 50 }), frame([item('cobblestone', 90)]))).toBeNull();
+    expect(goStop(act({ do: 'go', to: { x: 60, y: 54, z: 10 }, canDig: ['stone'], canPlace: ['cobblestone'], maxPlace: 24 }), frame([item('cobblestone', 90)]))).toBeNull();
+  });
+});
