@@ -1,5 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { MINECRAFT_QUEUE_LIMITS } from './minecraftQueueContract.js';
+import { adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule } from './minecraftRequestRules.js';
 
 /**
  * What she is told of the owner's list of requests for her Minecraft body (`minecraftIntent`): what each kind does to the list,
@@ -24,13 +25,8 @@ const add = (who: string) => [
   `${who}がマイクラでしてほしいこと（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）をはっきり頼んだら、聞き返さずに引き受けて kind=task にし、`
     + `goal に何をどれだけするかを${MINECRAFT_QUEUE_LIMITS.goalCharacters}字以内で書く（例: 「ケーキを1個作る」「オークの原木を16個集める」）。`
     + '数が言われていなければ、ほどよい数を自分で決める。いま別のことをしていても引き受けてよい。新しい依頼は列に積まれて順番に実行される。',
-  `助言・提案・質問への答えの形（「〜した方がいいよ」「〜しようか」「〜してほしいな」「〜して」、ボクの質問への答え）でも、体でしてほしいことが入っていれば、はっきりした頼みと同じ kind=task にする。聞き返さない・「ケーキを先にやってほしいって言ってたよね」のように相手の言っていないことを足さない。`
-    + '例: 「夜が来る前に先にベッド作った方がいいよ」→ task（placement=now、goal「夜が来る前にベッドを作る」）。'
-    + '「次の夜は寝ずにスケルトンを倒して骨粉を手に入れようか。その骨粉で種の成長を早めよう」→ task（goal「次の夜は寝ずにスケルトンを倒して骨を取り、骨粉にして作物に使う」）。'
-    + '「近くに適当に置いて寝て」（置き場所を聞いた質問への答え）→ task（goal「ベッドを近くに適当に置いて寝る」）。'
-    + `理由: 助言の形のまま聞き返したり、ただ受け答えするだけにすると、${who}はもう一度言い直すことになり、そのたびに20秒以上かかる。違っていたら、引き受けたあとで「やめて」「変えて」と言ってもらえば直せる。`,
-  `goal には、頼まれた条件（いつ・どうやって・何のため・場所・「〜しないで」）を落とさず入れる（例: 「寝ずに」「次の夜」「近くに適当に」「骨粉は作物の成長に使う」）。`
-    + '理由: 体の作業を進める側は、この goal と、渡される言葉の原文だけを手がかりにする。条件が goal から落ちると、体は条件のない作業をしてしまう（「寝ずに」が落ちて、夜に寝てしまうなど）。',
+  adviceIsRequestRule(who, 'kind=task にする'),
+  KEEP_CONDITIONS_RULE,
   'placement は、順番に触れた言葉があるかで選ぶ。順番に触れない新しい頼み（「ベッドを作って」）・「あとで」「ついでに」「それが終わったら」は end（理由: 走っている作業を勝手に止めない）。'
     + '「次に」「その次に」は next。'
     + `「先に」「優先して」「〜からやって」「〜をやる前に」「今のはやめて〜を」は now。理由: 順番を決めるのは頼んだ${who}で、「先に」と言われたのに「いまの作業が終わってから」と返すと、順番を決める権利を取ってしまう。`
@@ -75,7 +71,7 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
   if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
   else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');
-  lines.push('kind=none にする時（雑談・体に頼まない時）は、「〜するね」「やっておくね」「寝てみるね」のような約束を返事に入れない。理由: kind=none は体に何も渡らず、約束しても体は動かないので、頼んだ人が待ち続ける。体でしてほしいことが言われたのに約束だけしたくなった時は、約束せずに kind=task にする。');
+  lines.push(noPromiseRule('kind=none にする時'));
   lines.push('返事の言葉は、minecraftIntent でした順番と合わせる。now なら「先に（いま頼まれた物）を作るね。（いま体がしている作業）は止めておくよ、終わったら続ける」、end なら「（いま体がしている作業）のあとでやるね」の形。'
     + '（）の中は、いま頼まれた言葉と、上の「いま体は…」と [依頼の列] から取り、この形に書いた言葉のまま言わない。'
     + 'now にしたのに「そのあとに」と言ったり、end にしたのに「先にやるね」と言ったりしない。'

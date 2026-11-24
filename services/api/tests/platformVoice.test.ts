@@ -385,7 +385,7 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     await close();
   });
 
-  it('allows a new task with others in the channel too, and leaves the owner alone in his own room to her ordinary tools', async () => {
+  it('allows a new task with others in the channel too, and carries one the owner alone writes in his own room', async () => {
     const { say, model, body, close } = harness();
     model.reply = 'わかった、行ってくるね。';
     model.intent = { kind: 'task', goal: 'パンを3個作る' };
@@ -395,11 +395,11 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     model.requests.length = 0; body.calls.length = 0;
     await say('シャノン、パンを3個作って', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND, OTHER] });
     expect(body.calls[0]).toMatchObject({ intent: { kind: 'task' }, speaker: { owner: true } });
-    // Alone in his own room: tools, not the field.
+    // Alone in his own room the tool is the way she is told to ask, and a task written in the field is carried all the same.
     model.requests.length = 0; body.calls.length = 0;
     await say('パンを3個作って', { participants: [OWNER] });
-    expect(model.requests[0]!.offerMinecraftIntent).toBe(true); // speech only there: the task itself is not carried (her tools do it)
-    expect(body.calls).toHaveLength(0);
+    expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
+    expect(body.calls[0]).toMatchObject({ intent: { kind: 'task' }, speaker: { owner: true } });
     await close();
   });
 
@@ -442,13 +442,17 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[ボクの話し方]');
-    expect(prompt).toContain('kind に使うのは speech と none だけ');
+    // With the body in the game he gets the guide everyone gets, and is told the tool is the other way to the same request (one of the two, not both).
+    expect(prompt).toContain('[マイクラの体への頼みごと]（返答の minecraftIntent）');
+    expect(prompt).toContain('[マイクラの体への頼みごと（道具でも頼める）]');
+    expect(prompt).not.toContain('kind に使うのは speech と none だけ');
+    expect(prompt).toContain('頼まれた条件（いつ・どうやって・何のため・場所・「〜しないで」）を落とさず');
     expect(lines.at(-2)).toEqual({ type: 'speech', mode: 'silent' });
-    // A request kind named there is not carried to the body (her tools do that).
+    // A request kind written there all the same is carried to the body: the same request, by the other way (it was dropped, with her promise left standing).
     model.intent = { kind: 'task', goal: 'パンを3個作る' };
     const task = await say('パンを作って', { participants: [OWNER] });
-    expect(task.some(line => line.type === 'speech' || line.type === 'intent')).toBe(false);
-    expect(body.calls).toHaveLength(0);
+    expect(task.some(line => line.type === 'intent' && line.delivered)).toBe(true);
+    expect(body.calls.map(call => call.intent.goal)).toEqual(['パンを3個作る']);
     await close();
   });
 
@@ -570,17 +574,17 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
       await close();
     });
 
-    it("offers it to the owner alone in his own room, where the request kinds stay her tools'", async () => {
+    it("offers it to the owner alone in his own room, where a request kind written in the field is carried as well", async () => {
       const { say, model, body, lifecycle, close } = harness();
       lifecycle.current = outside;
       model.intent = { kind: 'login', goal: '' };
       await say('マイクラに入ってきて', { participants: [OWNER] });
       expect(model.requests[0]!.offerMinecraftIntent).toBe(true);
-      expect(promptOf(model.requests[0]!)).toContain('kind に使うのは speech と login と none だけ');
+      expect(promptOf(model.requests[0]!)).toContain('[マイクラの体への頼みごと（道具でも頼める）]');
       expect(lifecycle.asked.map(item => item.action)).toEqual(['login']);
       model.intent = { kind: 'task', goal: 'パンを3個作る' };
       await say('パンを作って', { participants: [OWNER] });
-      expect(body.calls).toHaveLength(0);
+      expect(body.calls.map(call => call.intent.goal)).toEqual(['パンを3個作る']);
       await close();
     });
 
