@@ -37,8 +37,11 @@ export interface UsableImpression {
   corrected: boolean;
 }
 
-export const impressionSubject = (row: Pick<PersonImpression, 'personKey'>, people: readonly ImpressionPerson[]) =>
-  row.personKey === OWNER_PERSON_KEY ? OWNER_NAME : `${people.find(person => person.id === row.personKey)?.displayName ?? ''}さん`;
+export const impressionSubject = (row: Pick<PersonImpression, 'personKey'>, people: readonly ImpressionPerson[]): string => {
+  if (row.personKey === OWNER_PERSON_KEY) return OWNER_NAME;
+  const person = people.find(candidate => candidate.id === row.personKey);
+  return person?.companion ? person.displayName : `${person?.displayName ?? ''}さん`;
+};
 
 /** The text the owner sees and may rewrite. */
 export function impressionText(row: PersonImpression, subject: string): string {

@@ -68,15 +68,21 @@ export class SQLiteImpressionStore implements ImpressionStore {
       .all(scopeKey) as unknown as Array<{ person_key: string }>).map(row => row.person_key);
   }
 
-  /** The `people` table belongs to the people store and the identity registry; absent, nobody is known. */
+  /** The `people` table belongs to the people store and the identity registry; absent, nobody is known (and without the registry, nobody is a confirmed friend). */
   people(scopeKey: string): readonly ImpressionPerson[] {
     try {
       const rows = this.database.prepare(`
         SELECT person_id, display_name, aliases_json, forgotten_at FROM people
         WHERE scope_key = ? AND lifecycle_status = 'active' LIMIT 500
       `).all(scopeKey) as unknown as Array<{ person_id: string; display_name: string; aliases_json: string | null; forgotten_at: string | null }>;
+      let confirmed = new Set<string>();
+      try {
+        confirmed = new Set((this.database.prepare(`SELECT DISTINCT person_id FROM person_platform_identities
+          WHERE scope_key = ? AND verification_status = 'confirmed'`).all(scopeKey) as unknown as Array<{ person_id: string }>).map(row => row.person_id));
+      } catch { /* the registry table is absent */ }
       return Object.freeze(rows.map(row => Object.freeze({
         id: row.person_id, displayName: row.display_name, aliases: Object.freeze(strings(row.aliases_json)), forgotten: Boolean(row.forgotten_at),
+        companion: confirmed.has(row.person_id),
       })));
     } catch { return []; }
   }

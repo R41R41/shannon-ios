@@ -125,6 +125,11 @@ export class PlatformPeople {
    * owner's registry. Only the name her records hold is used (the owner can rename a person there); an account she has no person for stays unnamed.
    */
   callName(scopeKey: string, platform: string, account: string): string | null {
+    return this.placed(scopeKey, platform, account)?.name ?? null;
+  }
+
+  /** `callName`, and whether the person is one the owner confirmed in the registry (a friend of hers, called by name alone) or only someone she has met. */
+  placed(scopeKey: string, platform: string, account: string): { name: string; companion: boolean } | null {
     const wanted = account.trim().toLowerCase();
     if (!wanted) return null;
     // A game account's link is keyed by its id but keeps the player's name (`displayName`, as the platform showed it): either one finds the person.
@@ -132,7 +137,13 @@ export class PlatformPeople {
       && (candidate.userId.toLowerCase() === wanted || (platform === 'minecraft' && candidate.displayName.toLowerCase() === wanted)));
     const registered = link ? null : this.store.registryPersonId(scopeKey, platform, account);
     const person = link ? this.store.person(scopeKey, link.personId) : registered ? this.store.person(scopeKey, registered) : null;
-    return person && !person.forgottenAt && person.displayName.trim() ? person.displayName.trim().slice(0, 40) : null;
+    return person && !person.forgottenAt && person.displayName.trim()
+      ? { name: person.displayName.trim().slice(0, 40), companion: this.store.confirmedPerson(scopeKey, person.id) } : null;
+  }
+
+  /** How she says the person's name: a friend the owner confirmed by name alone, anyone she knows less with さん. */
+  private called(scopeKey: string, person: RememberedPerson): string {
+    return this.store.confirmedPerson(scopeKey, person.id) ? person.displayName : `${person.displayName}さん`;
   }
 
   ingest(scopeKey: string, turn: PlatformPersonTurn): PlatformPersonResult {
@@ -159,7 +170,7 @@ export class PlatformPeople {
     this.facts?.speaker?.(scopeKey, `pt-${hash(turn.platform, turn.requestId)}`, person.id, turn.observedAt);
     if (created && this.facts?.identity && this.memory) this.memory.propose({ opId: `identity:${scopeKey}:${person.id}`, scopeKey, kind: 'person.link', origin: 'platform',
       subjectKey: `identity:${person.id}`, payload: { action: 'suggest', personId: person.id, name: person.displayName, link: `${turn.platform}:${turn.sourceUserId}`.slice(0, 200) } });
-    const name = `${person.displayName}さん`;
+    const name = this.called(scopeKey, person);
     const callId = `platform:${turn.threadKey}:${dayKey}`;
     const call = this.store.call(scopeKey, callId);
     const audience = this.audience(turn.conversationKind, turn.threadKey, person.id);
@@ -243,7 +254,7 @@ export class PlatformPeople {
         if (marker && !ownerPresent) return [];
         return [`- ${marker}(${item.observedAt.slice(0, 10)} ${label(item.callId) || '通話'}) ${item.text}`];
       }).slice(0, maximum);
-    return ['[この会話にいる人についての記憶]', `名前はプラットフォームのアカウントで確かめたもの: ${people.map(person => `${person.displayName}さん`).join('、')}`,
+    return ['[この会話にいる人についての記憶]', `名前はプラットフォームのアカウントで確かめたもの: ${people.map(person => this.called(scopeKey, person)).join('、')}`,
       ...(lines.length ? lines : ['- (まだ覚えていることはない)'])];
   }
 

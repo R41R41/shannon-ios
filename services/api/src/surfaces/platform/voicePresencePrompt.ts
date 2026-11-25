@@ -7,7 +7,12 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  */
 
 /** People of one place: the names she can give them, in order, and how many she cannot place. */
-export interface PresenceGroup { names: readonly string[]; unnamed: number }
+export interface PresenceGroup {
+  names: readonly string[];
+  unnamed: number;
+  /** Those of `names` the owner confirmed in her records of people: friends she is with often, called by name alone (absent: none known). */
+  companions?: readonly string[] | undefined;
+}
 
 export interface VoicePresenceFacts {
   /** The Discord call besides her, the owner included when he is there (null: there is no call under this turn, only the game's voice). */
@@ -28,35 +33,46 @@ const MOST_NAMES = 6;
 /** A name the platform showed, made safe to put inside a sentence: no brackets, quotes or line breaks, at most 40 characters. */
 const plainName = (name: string): string => name.replace(/[\s「」『』【】\[\]<>"'`\\]+/gu, ' ').trim().slice(0, 40);
 
-/** A name as it is said: the owner's own name as it is, anyone else's with さん. */
-const called = (name: string): string => (name === SHANNON_OWNER_NAME ? name : `${name}さん`);
+/** A name as it is said: a friend's (the owner's included) as it is, as a child says a friend's name; anyone else's, whom she knows less, with さん. */
+const called = (name: string, friends: ReadonlySet<string>): string => (name === SHANNON_OWNER_NAME || friends.has(name) ? name : `${name}さん`);
 
-function listOf(group: PresenceGroup): string {
-  const names = group.names.slice(0, MOST_NAMES).map(called);
+/** The friends among everyone the facts name, in the call and in the server. */
+const friendsOf = (facts: VoicePresenceFacts): ReadonlySet<string> =>
+  new Set([SHANNON_OWNER_NAME, ...(facts.call?.companions ?? []), ...(facts.server?.people?.companions ?? [])]);
+
+function listOf(group: PresenceGroup, friends: ReadonlySet<string>): string {
+  const names = group.names.slice(0, MOST_NAMES).map(name => called(name, friends));
   const rest = group.unnamed + Math.max(0, group.names.length - MOST_NAMES);
   return [...names, ...(rest > 0 ? [`名前の分からない人が${rest}人`] : [])].join('、') || 'だれもいない';
 }
 
-function serverLine(server: NonNullable<VoicePresenceFacts['server']>): string[] {
+function serverLine(server: NonNullable<VoicePresenceFacts['server']>, friends: ReadonlySet<string>): string[] {
   if (server.running === 'stopped') return ['- マイクラのサーバーは、いま止まっている（だれもいない）。'];
   if (server.running !== 'running' || !server.people) return [];
   const body = server.bodyIn === true ? 'ボクはいまサーバーに入っている。' : server.bodyIn === false ? 'ボクはまだサーバーに入っていない。' : '';
-  return [`- 同じマイクラのサーバーにいる人（ボクのほか）: ${listOf(server.people)}。${body}`];
+  return [`- 同じマイクラのサーバーにいる人（ボクのほか）: ${listOf(server.people, friends)}。${body}`];
 }
 
-/** The owner is one of the people written in the block. */
-const listed = (facts: VoicePresenceFacts): boolean => [facts.call, facts.server?.people ?? null].some(group => group?.names.includes(SHANNON_OWNER_NAME));
+/** Who the block writes, by how she calls them: with no さん (the owner and the other friends), and with さん (anyone she knows less). */
+function howCalled(facts: VoicePresenceFacts): { plain: boolean; polite: boolean } {
+  const friends = friendsOf(facts);
+  const names = [facts.call, facts.server?.people ?? null].flatMap(group => group?.names.slice(0, MOST_NAMES) ?? []);
+  return { plain: names.some(name => called(name, friends) === name), polite: names.some(name => called(name, friends) !== name) };
+}
 
 export function presenceBlock(facts: VoicePresenceFacts): string {
   const lines: string[] = [];
-  if (facts.call) lines.push(`- Discordの通話にいる人（ボクのほか）: ${listOf(facts.call)}。`);
-  if (facts.server) lines.push(...serverLine(facts.server));
+  const friends = friendsOf(facts);
+  if (facts.call) lines.push(`- Discordの通話にいる人（ボクのほか）: ${listOf(facts.call, friends)}。`);
+  if (facts.server) lines.push(...serverLine(facts.server, friends));
   if (!lines.length) return '';
+  const how = howCalled(facts);
   return [
     '[いま誰がどこにいるか]',
     ...lines,
     '- 名前が書いてある人だけ、名前で呼ぶ。名前の書いていない人の名前は、聞くまで推測しない。理由: 名前を間違えて呼ぶと、その人に失礼で、場もしらける。',
-    ...(listed(facts) ? [`- ${SHANNON_OWNER_NAME}は「${SHANNON_OWNER_NAME}」と呼ぶ。「${SHANNON_OWNER_NAME}さん」「${SHANNON_OWNER_NAME}氏」とは呼ばない（ほかの人には「さん」を付ける）。理由: ボクがふだんそう呼んでいる名前で、ほかの呼び方だとよそよそしく聞こえるから。`] : []),
+    ...(how.plain ? ['- 「さん」が付かずに書かれた人は、いつも一緒に遊ぶ仲間。名前だけで呼び、「さん」「氏」は付けない。理由: 仲間はボクにとって友だちなので、「さん」を付けるとよそよそしく聞こえるから。'] : []),
+    ...(how.polite ? ['- 「さん」が付いて書かれた人は、まだよく知らない人。書かれた通り「さん」を付けて呼ぶ。理由: 知らない人を名前だけで呼ぶと、なれなれしくて失礼に聞こえるから。'] : []),
     '- 「挨拶して」「紹介するよ」のように、そこにいる人へ向けて挨拶や紹介をされた時は、ボクへの言葉として受けて、挨拶する。ほかの人どうしの話ではない。'
       + 'ここに書かれた人（通話にいる人も、同じサーバーにいる人も）に、名前で呼びかけてよい。通話にもサーバーにもいる人は、1度だけ呼ぶ。'
       + '理由: 誰がそこにいるかを分かって話すと、挨拶が相手に届くから。'
@@ -78,8 +94,8 @@ export function onAirBlock(onAir: { note: string } | null, greeting = true): str
     'いまの会話は、録画か配信になっていて、あとで多くの視聴者が見て聞く。視聴者はその場にいないので、コメントでは返事できない。',
     ...(note ? [`場面のメモ（持ち主が書いたもの）: ${note}`] : []),
     ...(greeting ? [
-    '- 最初に口を開く時（挨拶・「挨拶して」・紹介への返事）は、「いま誰がどこにいるか」に書かれた人の名前（持ち主のほかの人は全員）と、視聴者に、まとめて呼びかけて挨拶する。紹介されて「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない（名前を呼ばれない人は、自分たちに挨拶されたと感じないから）。'
-      + `形の例は「${SHANNON_OWNER_NAME}、〈名前〉さん、〈名前〉さん、そして視聴者の皆さん！こんにちは、シャノンです！」（${SHANNON_OWNER_NAME}だけは「さん」を付けない）。`
+    '- 最初に口を開く時（挨拶・「挨拶して」・紹介への返事）は、「いま誰がどこにいるか」に書かれた人の名前（持ち主のほかの人は全員）と、視聴者に、まとめて呼びかけて挨拶する。呼び名は、その欄に書かれた通りに言う（「さん」が付いて書かれた人にだけ「さん」を付ける）。紹介されて「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない（名前を呼ばれない人は、自分たちに挨拶されたと感じないから）。'
+      + '形の例は「〈名前〉、〈名前〉、そして視聴者の皆さん！こんにちは、シャノンです！」。'
       + 'この通りには言わず、その時の様子で言い方をかえる（毎回同じ文だと、台詞を再生しているように聞こえるから）。'
       + '理由: 見て聞く人は、その場に誰がいるかを、最初の呼びかけで分かるから。'
       + `「挨拶して」は、頼んだ${SHANNON_OWNER_NAME}ひとりへの返事ではなく、そこにいる全員と見ている人への合図。${SHANNON_OWNER_NAME}だけを呼んだり、名乗りだけで返したりしない（ほかの人と視聴者は、自分たちに挨拶されたと感じないから）。`,
@@ -125,7 +141,7 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
       const shown = plainName(speaker.displayName);
       if (shown && !names.includes(shown)) { names.push(shown); unnamed -= 1; }
     }
-    call = { names, unnamed };
+    call = { names, unnamed, companions: placed.companions };
   }
   let server: VoicePresenceFacts['server'] = null;
   if (input.server) {
@@ -136,7 +152,7 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
       const mine = speaker.owner && speaker.minecraftName ? speaker.minecraftName.toLowerCase() : null;
       const present = accounts.filter(account => account.toLowerCase() !== mine);
       const placed = input.names('minecraft', present);
-      people = { names: [...(mine && accounts.length > present.length ? [SHANNON_OWNER_NAME] : []), ...placed.names], unnamed: placed.unnamed };
+      people = { names: [...(mine && accounts.length > present.length ? [SHANNON_OWNER_NAME] : []), ...placed.names], unnamed: placed.unnamed, companions: placed.companions };
     }
     server = { running: input.server.running, bodyIn: input.server.bot === 'joined' ? true : input.server.bot === 'absent' ? false : null, people };
   }
@@ -148,13 +164,14 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
 /** The names she calls in a greeting: everyone the facts place, in the call and in the server (once each), except the one who is speaking. */
 export function greetNamesOf(facts: VoicePresenceFacts, speakerName: string): string[] {
   const speaker = plainName(speakerName);
+  const friends = friendsOf(facts);
   const seen = new Set<string>();
   const names: string[] = [];
   for (const group of [facts.call, facts.server?.people ?? null]) {
     for (const name of group?.names.slice(0, MOST_NAMES) ?? []) {
       if (name === speaker || seen.has(name)) continue;
       seen.add(name);
-      names.push(called(name));
+      names.push(called(name, friends));
     }
   }
   return names;

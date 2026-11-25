@@ -253,6 +253,13 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     } catch { return null; }
   }
 
+  confirmedPerson(scopeKey: string, personId: string): boolean {
+    try {
+      return this.database.prepare(`SELECT 1 AS found FROM person_platform_identities
+        WHERE scope_key = ? AND person_id = ? AND verification_status = 'confirmed' LIMIT 1`).get(scopeKey, personId) !== undefined;
+    } catch { return false; }
+  }
+
   recordRegistryCandidate(scopeKey: string, platform: string, userId: string, personId: string, at: string): void {
     // Unconfirmed until the owner confirms it in the registry. The registry accepts Discord only; others keep the link alone.
     try {

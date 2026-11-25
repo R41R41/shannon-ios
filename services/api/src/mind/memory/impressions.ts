@@ -63,7 +63,8 @@ export interface PersonImpression {
 }
 
 /** A remembered person as the impression rules need them. */
-export interface ImpressionPerson { id: string; displayName: string; aliases: readonly string[]; forgotten: boolean }
+/** `companion`: the owner confirmed this person in the registry, so she says their name alone (as a friend's), not with さん. */
+export interface ImpressionPerson { id: string; displayName: string; aliases: readonly string[]; forgotten: boolean; companion?: boolean | undefined }
 
 /** What a reply path may read. */
 export interface ImpressionSource {

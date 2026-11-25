@@ -73,6 +73,8 @@ export interface PeopleMemoryStore {
   /** The owner-managed identity registry: the person an account was registered for, and a candidate row for a new one. */
   registryPersonId(scopeKey: string, platform: string, userId: string): string | null;
   recordRegistryCandidate(scopeKey: string, platform: string, userId: string, personId: string, at: string): void;
+  /** The owner has confirmed an account of this person in the registry: she knows them as one of her own friends, not as someone met once. */
+  confirmedPerson(scopeKey: string, personId: string): boolean;
   /** Records one mirrored message once. Returns the earlier record when the request was already seen. */
   platformReceipt(scopeKey: string, platform: string, requestId: string): PlatformTurnReceipt | null;
   recordPlatformReceipt(scopeKey: string, receipt: PlatformTurnReceipt): void;

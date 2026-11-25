@@ -286,15 +286,19 @@ export class PlatformBridgeService {
    * Who a list of platform accounts are, by the names her records give them: the names in order (once each), and how many accounts she
    * cannot place. With people memory off, none is placed. Read only; it remembers nothing.
    */
-  presenceNames(platform: string, accounts: readonly string[], maximum = 8): { names: string[]; unnamed: number } {
+  presenceNames(platform: string, accounts: readonly string[], maximum = 8): { names: string[]; unnamed: number; companions: string[] } {
     const names: string[] = [];
+    const companions: string[] = [];
     let unnamed = 0;
     for (const account of accounts) {
-      const name = this.people && this.peopleEnabled() ? this.people.callName(this.configuration.scopeKey, platform, account) : null;
-      if (!name) unnamed += 1;
-      else if (!names.includes(name) && names.length < maximum) names.push(name);
+      const placed = this.people && this.peopleEnabled() ? this.people.placed(this.configuration.scopeKey, platform, account) : null;
+      if (!placed) unnamed += 1;
+      else if (!names.includes(placed.name) && names.length < maximum) {
+        names.push(placed.name);
+        if (placed.companion) companions.push(placed.name);
+      }
     }
-    return { names, unnamed };
+    return { names, unnamed, companions };
   }
 
   /** The binding of a conversation, or null when it is not allowlisted (the voice route reads who the owner is before it decides the audience). */
