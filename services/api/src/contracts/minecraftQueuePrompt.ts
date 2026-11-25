@@ -77,9 +77,10 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
   if (options.running) lines.push(`いま体は「${options.running}」をしている。`);
   const who = options.who ?? SHANNON_OWNER_NAME;
   lines.push(...add(who), ...others(who, !options.running && options.queueLines.length === 0));
-  if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
-  if (options.queueLines.some(line => line.includes(PREV_WORLD_WORDS))) lines.push(prevWorldRule(who));
-  else lines.push('[依頼の列] いまは空');
+  if (options.queueLines.length) {
+    lines.push('[依頼の列]', ...options.queueLines);
+    if (options.queueLines.some(line => line.includes(PREV_WORLD_WORDS))) lines.push(prevWorldRule(who));
+  } else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');
   lines.push(noPromiseRule('kind=none にする時'));
   lines.push('返事の言葉は、minecraftIntent でした順番と合わせる。now なら「先に（いま頼まれた物）を作るね。（いま体がしている作業）は止めておくよ、終わったら続ける」、end なら「（いま体がしている作業）のあとでやるね」の形。'

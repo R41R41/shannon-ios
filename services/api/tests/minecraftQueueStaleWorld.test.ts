@@ -203,6 +203,9 @@ describe('what is marked, and where it is kept', () => {
     expect(guide).toContain('新しく足す');
     const plain = minecraftQueueGuide({ queueLines: [lines[1]!], running: null }).join('\n');
     expect(plain).not.toContain(MINECRAFT_QUEUE_PREV_WORLD_NOTE);
+    // a list with rows is never said to be empty (the else once hung on the world-before check)
+    expect(plain).not.toContain('いまは空');
+    expect(guide).not.toContain('いまは空');
   });
 
   it('keeps the time in the stored list across a restart, opens a list stored before the column existed, and does not make the epoch from nothing', () => {
