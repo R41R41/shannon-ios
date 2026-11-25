@@ -142,7 +142,8 @@ describe('the names a call summary is written with', () => {
     store.saveCall('owner', { callId: 'c1', status: 'open', personIds: [aki.id, yuu.id], createdPersonIds: [], startedAt: START, updatedAt: START });
     const result = await people.rememberCall('owner', { callId: 'c1', turns: [{ role: 'participant', text: 'こんにちは' }, { role: 'shannon', text: 'やあ' }] }, START,
       async (_turns, names) => { given = names; return '相手: アキ・ユウさん\n話したこと: 挨拶。'; });
-    expect(given).toEqual(['アキ', 'ユウさん']);
+    // Person ids are random UUIDs, so the order of the people may follow them; what matters is how each name is written.
+    expect([...given].sort()).toEqual(['アキ', 'ユウさん'].sort());
     expect(result.summary).toContain('相手: アキ・ユウさん');
     store.close();
   });
@@ -160,7 +161,8 @@ describe('the names a call summary is written with', () => {
     store.replaceCallItems('owner', 'c2', [{ id: 'r1', kind: 'fact', personId: aki.id, text, observedAt: START, disclosure: disclosureFor(text, peopleAudience([aki.id, yuu.id])) }]);
     const recalled = people.recall('owner', createInitialCompanionState('owner', START), '', OWNER_AUDIENCE);
     expect(recalled.items.map(item => item.text)).toEqual(['アキもユウさんも猫が好き']);
-    expect(recalled.items.map(item => item.audienceLabel)).toEqual(['アキ・ユウさんと一緒の時']);
+    // peopleAudience sorts the person ids, which are random UUIDs, so the two names come in either order.
+    expect(recalled.items.map(item => item.audienceLabel)).toEqual([expect.stringMatching(/^(?:アキ・ユウさん|ユウさん・アキ)と一緒の時$/u)]);
     expect(recalled.candidates.map(candidate => candidate.summary).join('')).not.toContain('アキさん');
     store.close();
   });
