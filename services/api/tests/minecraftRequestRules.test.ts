@@ -33,9 +33,15 @@ describe('rules for handing a wish to her Minecraft body', () => {
     expect(adviceForRunningRule('ミナト')).toContain('kind=message');
     expect(adviceForRunningRule('ミナト')).toContain('理由:');
     expect(adviceForRunningRule('ミナト')).toContain('別にほしい物');
+    // The owner's own words (2026-11-26): a request FORM (「〜してほしい」) for the running request's own purpose is message too, ahead of 'a separate wish is a task'.
+    expect(adviceForRunningRule('ミナト')).toContain('ケーキ作るために、スケルトンを狩って骨粉を集めてきてほしいな');
+    expect(adviceForRunningRule('ミナト')).toContain('この規則を先にする');
+    expect(running).toContain('頼む形でも下の規則');
+    expect(running).toContain('いまの作業の目的のためではない、別にしてほしいこと');
     const idle = minecraftQueueGuide({ queueLines: [], running: null, planLines: ['目的: x'] }).join('\n');
     expect(idle).not.toContain('いまの依頼の計画');
     expect(idle).not.toContain('成し遂げるための手段');
+    expect(idle).not.toContain('頼む形でも下の規則');
     expect(guide).not.toContain('いまの依頼の計画]');
   });
 
