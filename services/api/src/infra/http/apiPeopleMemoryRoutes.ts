@@ -174,7 +174,7 @@ const SUMMARY_INSTRUCTIONS = [
   'You write Shannon\'s own short memory of a voice call in which ライ introduced her to a friend (「友人も一緒」). The friend agreed that Shannon remembers their name and what was talked about.',
   'The input is that call only. Lines marked 話し手 were spoken by ライ or the friend; speakers were not identified. Lines marked シャノン are Shannon\'s replies.',
   'Write plain Japanese text with exactly these three lines and nothing else:',
-  '相手: the names given below with さん; if none, 「名前を聞いていない方」',
+  '相手: the names given below, written exactly as given (each already carries the way she calls that person); if none, 「名前を聞いていない方」',
   '話したこと: one or two sentences describing faithfully what was talked about, in your own words',
   '次に話したいこと: only what Shannon herself said she would like to talk about or show next time; otherwise 「特になし」',
   'Rules: paraphrase and never quote anyone\'s words. Use nothing that is not in the input. Do not guess who said what. Do not address anyone and do not add advice.',
@@ -199,7 +199,7 @@ function consumeSummaryAllowance(people: PeopleMemory, scopeKey: string): boolea
 function callSummarizer(people: PeopleMemory, scopeKey: string, chatModel: ShannonChatModel | undefined): CallSummarizer | undefined {
   if (!chatModel || chatModel.mode === 'local-stub' || !consumeSummaryAllowance(people, scopeKey)) return undefined;
   return async (turns, names) => {
-    const message = [`名前: ${names.length ? names.map(name => `${name}さん`).join('、') : '(なし)'}`,
+    const message = [`名前: ${names.length ? names.join('、') : '(なし)'}`,
       ...turns.map(turn => `${turn.role === 'shannon' ? 'シャノン' : '話し手'}: ${turn.text}`)].join('\n');
     const request = { scopeKey, systemPrompt: SUMMARY_INSTRUCTIONS, history: [], message };
     const result = chatModel.generateVoice

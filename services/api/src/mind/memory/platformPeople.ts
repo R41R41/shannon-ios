@@ -15,7 +15,7 @@ import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { localDayKey } from './memoryProjection.js';
 import { periodSummaryText, personMemoryId, platformSummaryId } from './peopleMemory.js';
 import type { MemoryProposals } from './memoryPorts.js';
-import { plainCompanionNames, withHonorific } from './companionNames.js';
+import { plainCompanionNames, withHonorific } from './impressions.js';
 
 export { platformSummaryId };
 import type { PeopleMemoryStore, PersonMemoryItem, RememberedPerson } from './memoryPorts.js';
@@ -245,15 +245,9 @@ export class PlatformPeople {
       return labels.get(callId)!;
     };
     const closed = this.facts?.closedIds(scopeKey);
-    // Older lines wrote a friend with さん; she reads every friend of the call the same way as the name line above.
-    const friends = new Map<string, string[]>();
-    const friendsOfCall = (callId: string) => {
-      if (!friends.has(callId)) friends.set(callId, (this.store.call(scopeKey, callId)?.personIds ?? []).flatMap(id => {
-        const person = this.store.person(scopeKey, id);
-        return person && this.store.confirmedPerson(scopeKey, id) ? [person.displayName] : [];
-      }));
-      return friends.get(callId)!;
-    };
+    // Older lines wrote a friend with さん; she reads every friend (not only those of that call) the same way as the name line above.
+    const friends = this.store.listPeople(scopeKey).filter(person => !person.forgottenAt && this.store.confirmedPerson(scopeKey, person.id))
+      .flatMap(person => [person.displayName, ...person.aliases]);
     const lines = this.store.items(scopeKey)
       .filter(item => item.kind !== 'turn' && item.personId !== undefined && ids.has(item.personId) && !closed?.has(item.id))
       .filter(item => visibleMemoryText(snapshot, personMemoryId(item.id), item.text) !== null && gate.allows(personMemoryId(item.id), item.disclosure)
@@ -262,7 +256,7 @@ export class PlatformPeople {
         const marker = gate.marker(personMemoryId(item.id), item.disclosure);
         // Without the owner there nobody can release a protected line, so it is not given at all.
         if (marker && !ownerPresent) return [];
-        return [`- ${marker}(${item.observedAt.slice(0, 10)} ${label(item.callId) || '通話'}) ${plainCompanionNames(item.text, friendsOfCall(item.callId))}`];
+        return [`- ${marker}(${item.observedAt.slice(0, 10)} ${label(item.callId) || '通話'}) ${plainCompanionNames(item.text, friends)}`];
       }).slice(0, maximum);
     return ['[この会話にいる人についての記憶]', `名前はプラットフォームのアカウントで確かめたもの: ${people.map(person => this.called(scopeKey, person)).join('、')}`,
       ...(lines.length ? lines : ['- (まだ覚えていることはない)'])];

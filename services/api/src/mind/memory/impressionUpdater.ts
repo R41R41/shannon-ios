@@ -11,7 +11,7 @@ import type { ConversationStore } from './store/conversationStore.js';
 import { ImpressionEvidenceCheck, usableImpression } from '../recall/recallPorts.js';
 import {
   FEELING_CHARACTERS, IMPRESSION_KINDS, OWNER_PERSON_KEY, PATTERN_CHARACTERS, applyImpressionAnalysis, comparable, impressionConfig,
-  impressionMemoryId, impressionsEnabled,
+  impressionMemoryId, impressionsEnabled, withHonorific,
   type ImpressionAnalysis, type ImpressionChange, type ImpressionConfig, type ImpressionStore, type PersonImpression,
 } from './impressions.js';
 import type { MemoryProposals } from './memoryWriter.js';
@@ -22,7 +22,6 @@ import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import type { PeopleMemoryStore } from './store/peopleMemoryStore.js';
 import { personMemoryId, platformSummaryId } from './peopleMemory.js';
-import { withHonorific } from './companionNames.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /** What the background model is shown for one person and one turn. */

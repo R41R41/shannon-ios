@@ -19,7 +19,7 @@ import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
 import { establishedGuestName, personNameKey } from '../perception/guestNamesPorts.js';
 import { ownerPeoplePrompt, type VisiblePersonItem } from './peopleMemoryPrompts.js';
 import type { MemoryCommands, MemoryProposals } from './memoryWriter.js';
-import { withHonorific } from './companionNames.js';
+import { plainCompanionNames, withHonorific } from './impressions.js';
 
 /** Recall and memory-control identifier of a person memory item. */
 export const personMemoryId = (itemId: string) => `person:${itemId}`;
@@ -69,6 +69,8 @@ export interface GuestCallPresence {
   newlyNamed?: RememberedPerson;
   /** A name that matches several remembered people: ask, do not guess. */
   ambiguousName?: string;
+  /** Those of `people` she calls by name alone (a friend: confirmed in the registry or in the owner's list); the rest are called with さん. */
+  companionIds?: readonly string[];
   /** False for an old client or a call the owner chose not to keep: nothing of it is stored. */
   recorded: boolean;
 }
@@ -111,6 +113,17 @@ export class PeopleMemory {
   }
 
   listPeople(scopeKey: string): readonly RememberedPerson[] { return this.store.listPeople(scopeKey); }
+
+  /** How a person is named in a field she reads: a friend by name alone, anyone else with さん (`withHonorific`, the one rule). */
+  shownName(scopeKey: string, person: Pick<RememberedPerson, 'id' | 'displayName'>): string {
+    return withHonorific(person.displayName, this.store.confirmedPerson(scopeKey, person.id));
+  }
+
+  /** The names and aliases of the friends, for showing older text (written with さん before they were told apart) as the name alone. */
+  private friendNames(scopeKey: string): readonly string[] {
+    return this.store.listPeople(scopeKey).filter(person => !person.forgottenAt && this.store.confirmedPerson(scopeKey, person.id))
+      .flatMap(person => [person.displayName, ...person.aliases]);
+  }
 
   /**
    * Establishes who is present from the words of the current utterance. A name that matches
@@ -158,7 +171,7 @@ export class PeopleMemory {
       // Someone named earlier who has since been forgotten or merged away is an unknown guest again, not absent.
       present: peopleAudience(people.map(person => person.id),
         people.length === 0 || people.length !== call.personIds.length || Boolean(call.pendingName)),
-      people, returning, recorded: true,
+      people, returning, recorded: true, companionIds: people.filter(person => this.store.confirmedPerson(scopeKey, person.id)).map(person => person.id),
       ...(newlyNamed ? { newlyNamed } : {}),
       ...(call.pendingName ? { ambiguousName: call.pendingName } : {}),
     };
@@ -188,7 +201,7 @@ export class PeopleMemory {
     const audience = peopleAudience(people.map(person => person.id),
       people.length === 0 || people.length !== call.personIds.length || Boolean(call.pendingName));
     const single = people.length === 1 && !call.pendingName ? people[0]! : undefined;
-    const subject = single ? `${single.displayName}さん` : people.length ? people.map(person => `${person.displayName}さん`).join('・') : '同席していた方';
+    const subject = single ? this.shownName(scopeKey, single) : people.length ? people.map(person => this.shownName(scopeKey, person)).join('・') : '同席していた方';
     const items: Omit<PersonMemoryItem, 'callId'>[] = [];
     // The same period saved again yields the same item IDs, so an earlier forget still applies to it.
     const itemId = (kind: string, text: string) => createHash('sha256')
@@ -197,7 +210,7 @@ export class PeopleMemory {
       id: itemId(kind, kind === 'summary' ? '' : text), kind, text: text.replace(/\s+/gu, ' ').trim().slice(0, 600), observedAt: at,
       disclosure: disclosureFor(text, audience, force ? { force } : {}), ...extra,
     });
-    const names = people.map(person => person.displayName);
+    const names = people.map(person => this.shownName(scopeKey, person));
     const summary = (await summarize?.(input.turns, names).catch(() => null)) ?? fallbackCallSummary(input.turns, subject);
     // 「今回は残さない」 may have arrived while the summary was being written. It wins.
     if (this.store.call(scopeKey, input.callId)?.status === 'discarded') {
@@ -282,10 +295,15 @@ export class PeopleMemory {
     candidates: readonly LabelledRecallCandidate[]; prompt: string; ids: readonly string[]; items: readonly VisiblePersonItem[];
   } {
     const gate = new DisclosureGate(present, snapshot, null, scopeKey);
-    const items = this.visibleItems(scopeKey, snapshot).filter(item => gate.allows(item.recallId, item.disclosure));
+    // What reaches a reply shows a friend by name alone, in the older lines and in the label of who was there too.
+    const friends = this.friendNames(scopeKey);
+    const items = this.visibleItems(scopeKey, snapshot).filter(item => gate.allows(item.recallId, item.disclosure))
+      .map(item => ({ ...item, text: plainCompanionNames(item.text, friends), audienceLabel: plainCompanionNames(item.audienceLabel, friends) }));
     const candidates = items.map(item => ({ id: item.recallId, observedAt: item.observedAt, disclosure: item.disclosure,
       summary: `[${item.audienceLabel}] ${item.text}` }));
-    const inquiry = gate.ownerOnly ? ownerPeoplePrompt(message, this.store.listPeople(scopeKey).filter(person => !person.forgottenAt), items) : { prompt: '', ids: [] };
+    const inquiry = gate.ownerOnly
+      ? ownerPeoplePrompt(message, this.store.listPeople(scopeKey).filter(person => !person.forgottenAt), items, person => this.shownName(scopeKey, person))
+      : { prompt: '', ids: [] };
     return { candidates, prompt: inquiry.prompt, ids: inquiry.ids, items };
   }
 

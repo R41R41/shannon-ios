@@ -5,7 +5,7 @@ import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, u
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { platformSummaryId, type PlatformPeople } from '../../mind/memory/platformPeople.js';
-import { withHonorific } from '../../mind/memory/companionNames.js';
+import { withHonorific } from '../../mind/memory/impressions.js';
 
 /** Writes what one platform conversation period was about, from the stored exchanges only. */
 export interface PlatformSummaryWriter {

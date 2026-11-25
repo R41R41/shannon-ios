@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { normalizeDisclosure, type MemoryDisclosure } from '@shannon/cognition';
 import { scrubOutboxFor } from './outboxScrub.js';
 import { closedPersonItemIds } from './closedFacts.js';
-import { companionRoster, onRoster } from '../companionNames.js';
+import { companionRoster, onRoster } from '../impressions.js';
 import type { RememberedPerson, PersonCallStatus, PersonCall, PersonMemoryKind, PersonMemoryItem, PeopleMemoryStore, PlatformPersonLink, PlatformTurnReceipt } from '../peopleMemoryContract.js';
 export { type RememberedPerson, type PersonCallStatus, type PersonCall, type PersonMemoryKind, type PersonMemoryItem, type PeopleMemoryStore, type PlatformPersonLink, type PlatformTurnReceipt } from '../peopleMemoryContract.js';
 

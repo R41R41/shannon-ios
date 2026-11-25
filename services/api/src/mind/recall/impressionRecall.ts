@@ -6,14 +6,13 @@ import {
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience } from '../memory/memoryPorts.js';
 import {
-  IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled,
+  IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled, plainCompanionNames, withHonorific,
   type ImpressionPerson, type ImpressionSource, type PersonImpression,
 } from '../memory/memoryPorts.js';
 import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { localDayKey } from '../memory/memoryPorts.js';
 import { MemoryWithholding, decayedUsable } from '../memory/memoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
-import { plainCompanionNames, withHonorific } from '../memory/companionNames.js';
 
 export const IMPRESSION_HEADER = '[人についての印象 — ボクがやりとりを重ねて気づいてきたこと]';
 /** The one fixed line. The impressions themselves are data she accumulated, not rules. */

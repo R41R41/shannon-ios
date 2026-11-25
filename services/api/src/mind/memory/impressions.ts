@@ -398,3 +398,55 @@ export function applyImpressionAnalysis(
     deleteIds: [...deleted].filter(id => before.has(id)),
   };
 }
+
+/*
+ * How a remembered person's name is shown in a field she reads. It lives here, not in a module of its own, because every process that reads
+ * a person already loads this file (the entry closures stay as they were).
+ */
+
+/**
+ * How a remembered person's name is shown in a field she reads: a friend (confirmed in the registry, or listed in `SHANNON_COMPANION_NAMES`)
+ * by name alone, anyone she knows less with さん. One place, so a field never holds both 「アキ」 and 「アキさん」 for the same person.
+ * Nothing stored is rewritten.
+ */
+export const withHonorific = (name: string, companion: boolean): string => (companion ? name : `${name}さん`);
+
+const escaped = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/** What must not stand just before a name for it to be that whole name: a letter of the kind the name starts with (「マアキ」 is not 「アキ」). */
+function leftBoundary(name: string): string {
+  const first = [...name.trim()][0] ?? '';
+  if (/\p{Script=Katakana}/u.test(first)) return String.raw`(?<![\p{Script=Katakana}ー])`;
+  if (/\p{Script=Hiragana}/u.test(first)) return String.raw`(?<![\p{Script=Hiragana}ー])`;
+  if (/\p{Script=Han}/u.test(first)) return String.raw`(?<!\p{Script=Han})`;
+  if (/[\p{L}\p{N}_]/u.test(first)) return String.raw`(?<![\p{L}\p{N}_])`;
+  return '';
+}
+
+/**
+ * A stored line as she reads it: the friends' names written with さん in older text (made before they were told apart) are shown as the
+ * name alone. Only a whole name is taken (「マアキさん」 is left when 「アキ」 is listed); 「さんぽ」 is left as it is.
+ */
+export function plainCompanionNames(text: string, companions: readonly string[]): string {
+  let shown = text;
+  for (const name of companions) {
+    if (name.trim().length < 1) continue;
+    shown = shown.replace(new RegExp(`${leftBoundary(name)}${escaped(name)}さん(?!ぽ)`, 'gu'), name);
+  }
+  return shown;
+}
+
+/** The names `SHANNON_COMPANION_NAMES` lists (comma-separated, 、 and ， too), trimmed and without blanks. Empty or unset: no list. */
+export function companionRoster(raw: string | undefined = serverEnvironment().SHANNON_COMPANION_NAMES): readonly string[] {
+  return (raw ?? '').split(/[,、，]/u).map(name => name.trim()).filter(name => name.length > 0);
+}
+
+/** Whether one of the person's names or aliases is a listed name, as a whole (trimmed, never a part: 「ライ」 is not 「ライブ」). */
+export function onRoster(roster: readonly string[], names: readonly string[]): boolean {
+  if (!roster.length) return false;
+  const listed = new Set(roster);
+  return names.some(name => listed.has(name.trim()));
+}
+
+/** A name someone said, as she says it back: by name alone when it is a listed name, else with さん (the person is not known, so the registry cannot say). */
+export const calledBack = (name: string): string => withHonorific(name, onRoster(companionRoster(), [name]));

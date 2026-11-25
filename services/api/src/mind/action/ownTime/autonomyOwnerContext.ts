@@ -36,7 +36,7 @@ export interface OwnerContextSources {
   conversations: ConversationStore;
   /** The profile projection a conversation with the owner alone starts from. */
   profile?: { promptProjection(scopeKey: string): string | null };
-  people?: Pick<PeopleMemory, 'recall' | 'listPeople'>;
+  people?: Pick<PeopleMemory, 'recall' | 'listPeople'> & Partial<Pick<PeopleMemory, 'shownName'>>;
   dailyMind?: Pick<DailyMindReader, 'currentFocus'>;
 }
 
@@ -247,7 +247,7 @@ function people(sources: OwnerContextSources, state: CompanionStateSnapshot, sco
     .filter(item => alone || !secret(item))
     .sort((left, right) => right.observedAt.localeCompare(left.observedAt)).slice(0, 4);
   return [
-    ...(known.length ? [`- ${known.map(person => `${person.displayName}さん`).join('、')}`] : []),
+    ...(known.length ? [`- ${known.map(person => sources.people!.shownName?.(scopeKey, person) ?? `${person.displayName}さん`).join('、')}`] : []),
     ...items.map(item => `- ${alone && secret(item) ? OWNER_CONTEXT_SECRET_MARK : ''}(${item.observedAt.slice(0, 10)} ${item.audienceLabel}) ${item.text.replace(/\n/gu, ' / ')}`),
   ];
 }

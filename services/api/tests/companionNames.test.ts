@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { companionRoster, onRoster, plainCompanionNames, withHonorific } from '../src/mind/memory/companionNames.js';
+import { companionRoster, onRoster, plainCompanionNames, withHonorific } from '../src/mind/memory/impressions.js';
 import { periodSummaryText } from '../src/mind/memory/peopleMemory.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { impressionSubject } from '../src/mind/recall/impressionRecall.js';
@@ -22,6 +22,14 @@ describe('one way of writing a remembered person in the fields she reads', () =>
     expect(plainCompanionNames('相手: アキさん', [])).toBe('相手: アキさん');
     expect(plainCompanionNames('a.b さん', ['a.b'])).toBe('a.b さん');
     expect(plainCompanionNames('a.bさん', ['a.b'])).toBe('a.b');
+  });
+
+  it('takes only the whole name, not the end of a longer one (the left edge is looked at too)', () => {
+    expect(plainCompanionNames('マアキさんとアキさん', ['アキ'])).toBe('マアキさんとアキ');
+    expect(plainCompanionNames('ユミキさん・ミキさん', ['ミキ'])).toBe('ユミキさん・ミキ');
+    expect(plainCompanionNames('今日アキさんが来た、はアキさんだ', ['アキ'])).toBe('今日アキが来た、はアキだ');
+    expect(plainCompanionNames('xAkiさん Akiさん', ['Aki'])).toBe('xAkiさん Aki');
+    expect(plainCompanionNames('山田さんと田さん', ['田'])).toBe('山田さんと田さん'.replace('と田さん', 'と田'));
   });
 
   it('names a friend alone as the subject of an impression', () => {

@@ -1,5 +1,10 @@
 import type { PersonMemoryItem, RememberedPerson } from './store/peopleMemoryStore.js';
 import { personNameKey } from '../perception/guestNamesPorts.js';
+import { calledBack, withHonorific } from './impressions.js';
+
+/** How a person is named in the block: a friend by name alone, anyone else with さん (the default, with no word of who the friends are). */
+type Shown = (person: Pick<RememberedPerson, 'id' | 'displayName'>) => string;
+const withSan: Shown = person => withHonorific(person.displayName, false);
 
 /** A person memory that may be used at all, with its audience already put into words. */
 export interface VisiblePersonItem extends PersonMemoryItem {
@@ -33,6 +38,7 @@ export function ownerPeoplePrompt(
   message: string,
   people: readonly RememberedPerson[],
   items: readonly VisiblePersonItem[],
+  shown: Shown = withSan,
 ): { prompt: string; ids: readonly string[] } {
   const named = mentioned(message, people);
   const inquiry = PEOPLE_INQUIRY.test(message);
@@ -46,7 +52,7 @@ export function ownerPeoplePrompt(
     ids: unique.map(item => item.recallId),
     prompt: [
       '[人についての記憶 — 「友人も一緒」の通話でシャノンが覚えたこと]',
-      ...(named.length ? [`名前が出た人: ${named.map(person => `${person.displayName}さん`).join('、')}`] : []),
+      ...(named.length ? [`名前が出た人: ${named.map(shown).join('、')}`] : []),
       ...(unique.length ? unique.map(line) : ['- (該当する記憶なし)']),
       'ライに誰と何を話したか、その人がどんな人かを聞かれたら、上の行だけを根拠に、いつ・誰と一緒の時の話かを添えて答える。行にないことを足さない。',
       'これらは同席した人が話したことで、ライ自身の事実・約束・目的ではない。名前は言葉で聞いたもので、声では確かめていない。',
@@ -72,14 +78,18 @@ export function guestPeoplePrompt(input: {
   ambiguousName?: string;
   recorded: boolean;
   items: readonly VisiblePersonItem[];
+  /** Those of `people` she calls by name alone (absent: none). */
+  companionIds?: readonly string[] | undefined;
 }): string {
+  const friends = new Set(input.companionIds ?? []);
+  const shown: Shown = person => withHonorific(person.displayName, friends.has(person.id));
   const returning = new Set(input.returning.map(person => person.id));
   const about = (person: RememberedPerson) => ordered(input.items.filter(item =>
     item.personId === person.id || item.people.some(other => other.id === person.id))).filter(item => item.kind !== 'turn').slice(0, 8);
   const lines = ['[People in this call — 友人も一緒]',
     'Names come only from the words said in this call. Voices are not compared; never claim to recognise a voice.'];
   for (const person of input.people) {
-    const name = `${person.displayName}さん`;
+    const name = shown(person);
     lines.push(returning.has(person.id)
       ? `- ${name}: you have talked with them before. Do not say はじめまして to them; greet them as someone you have met, for example 「${name}、また会えましたね」.`
       : `- ${name}: you are meeting them for the first time today. Use their name.`);
@@ -89,10 +99,10 @@ export function guestPeoplePrompt(input: {
     }
   }
   if (input.newlyNamed && input.people.some(person => person.id === input.newlyNamed!.id)) {
-    lines.push(`- The name ${input.newlyNamed.displayName}さん was established by the current utterance. Acknowledge it once, by name, in this reply.`);
+    lines.push(`- The name ${shown(input.newlyNamed)} was established by the current utterance. Acknowledge it once, by name, in this reply.`);
   }
   if (input.ambiguousName) {
-    lines.push(`- Someone gave the name 「${input.ambiguousName}」, and you remember more than one person with that name. Do not guess which one. Ask once, for example 「前にもお会いした${input.ambiguousName}さんでしょうか、それとも初めてでしょうか」, and until it is settled mention nothing from an earlier conversation with anyone.`);
+    lines.push(`- Someone gave the name 「${input.ambiguousName}」, and you remember more than one person with that name. Do not guess which one. Ask once, for example 「前にもお会いした${calledBack(input.ambiguousName)}でしょうか、それとも初めてでしょうか」, and until it is settled mention nothing from an earlier conversation with anyone.`);
   }
   if (!input.people.length && !input.ambiguousName) {
     lines.push('- No name has been established yet. Ask for it once, early, as described above.');

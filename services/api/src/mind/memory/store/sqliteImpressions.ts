@@ -1,8 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { normalizeDisclosure } from '@shannon/cognition';
-import { companionRoster, onRoster } from '../companionNames.js';
 import {
-  IMPRESSION_KINDS, type ImpressionPerson, type ImpressionStore, type PersonImpression,
+  IMPRESSION_KINDS, companionRoster, onRoster, type ImpressionPerson, type ImpressionStore, type PersonImpression,
 } from '../impressions.js';
 
 /** Receipts older than this are removed when a new one is written. */

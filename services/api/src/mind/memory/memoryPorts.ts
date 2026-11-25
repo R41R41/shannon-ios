@@ -17,7 +17,7 @@ export type { PatternLogEntry, SkillActor, SkillAuditEntry, SkillRevision, Skill
 export { SKILL_LINEAGE, chosenBase, parentBaseline, rankedNodes, scoredLineage, versionRevisionId, type LineageNode, type ScoredNode } from './skillLineage.js';
 export { checkedSkillBody, checkedSkillText } from './skillMemoryParts.js';
 export { copyDeleted, copyEdit, copyWritesRead, noteCopyWrite } from './skillCopies.js';
-export { IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled, type ImpressionPerson, type ImpressionSource, type PersonImpression } from './impressions.js';
+export { IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled, plainCompanionNames, withHonorific, type ImpressionPerson, type ImpressionSource, type PersonImpression } from './impressions.js';
 export { localDayKey } from './memoryProjection.js';
 export { type SleepChange, type SleepContradiction } from './memoryService.js';
 export { MemoryWithholding, conversationStoreOf, isForgottenCommitmentEvidence, replaySummaryFor, replaySummaryRawRange, usableReplaySummary, visibleReplayMessages, type VisibleMessage } from './memoryVisibility.js';
