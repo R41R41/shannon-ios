@@ -23,13 +23,13 @@ extension ShannonConversationView {
             let emotion = model.messages.last(where: { $0.role == .shannon })?.emotionSnapshot
             model.messages = [
                 ConversationMessage(role: .user, text: "明日の朝、プレゼンの練習しよう。あと僕は寿司は光り物が好き、覚えておいて。30分後に教えて。", sentAt: Date()),
-                ConversationMessage(role: .shannon, text: "了解です、ライ氏。明日の朝ですね。光り物、ボクも覚えました。", sentAt: Date(), emotionSnapshot: emotion)
+                ConversationMessage(role: .shannon, text: "了解です、ライ。明日の朝ですね。光り物、ボクも覚えました。", sentAt: Date(), emotionSnapshot: emotion)
                     .with(captures: [
                         .init(id: "preview-commitment", kind: .commitment, text: "プレゼンの練習", itemId: "preview-c", dueHint: "明日の朝"),
                         .init(id: "preview-knowledge", kind: .knowledge, text: "寿司は光り物が好き", itemId: "preview-k"),
                         .init(id: "preview-notice", kind: .notice, text: "時刻ぴったりのお知らせはできません"),
                     ], reminder: nil),
-                ConversationMessage(role: .shannon, text: "ライ氏、「プレゼンの練習」の約束が残っています。今、続けますか？", sentAt: Date(), emotionSnapshot: emotion)
+                ConversationMessage(role: .shannon, text: "ライ、「プレゼンの練習」の約束が残っています。今、続けますか？", sentAt: Date(), emotionSnapshot: emotion)
                     .with(captures: [], reminder: .init(commitmentId: "preview-c", state: "pending", text: "プレゼンの練習")),
             ]
         }

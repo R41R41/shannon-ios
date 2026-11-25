@@ -280,8 +280,8 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(notices.map(\.title), ["シャノン · 許可待ち", "シャノン · 完了", "シャノン", "シャノン"])
         XCTAssertEqual(notices[0].body, "「資料を集める」を続けるには、外部接続の許可が必要です。")
         XCTAssertEqual(notices[0].target, .task(waiting.id))
-        XCTAssertEqual(notices[1].body, "ライ氏、「要約」の作業が終わりました。")
-        XCTAssertEqual(notices[2].body, "ライ氏、部屋のことでひとことあります。")
+        XCTAssertEqual(notices[1].body, "ライ、「要約」の作業が終わりました。")
+        XCTAssertEqual(notices[2].body, "ライ、部屋のことでひとことあります。")
         XCTAssertEqual(notices[3].body, "面白い記事がありました")
         XCTAssertEqual(notices[3].target, .thread("t3"))
 

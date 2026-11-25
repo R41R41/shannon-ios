@@ -142,13 +142,13 @@ public enum ShannonGeneratedStrings {
     /// `notification.body.approval`
     public static func notificationBodyApproval(title: String, approval: String) -> String { "「\(title)」を続けるには、\(approval)が必要です。" }
     /// `notification.body.needsOwner`
-    public static func notificationBodyNeedsOwner(title: String, next: String) -> String { "ライ氏、「\(title)」は続きが必要です。次：\(next)" }
+    public static func notificationBodyNeedsOwner(title: String, next: String) -> String { "ライ、「\(title)」は続きが必要です。次：\(next)" }
     /// `notification.body.needsOwnerNoNext`
-    public static func notificationBodyNeedsOwnerNoNext(title: String) -> String { "ライ氏、「\(title)」は続きが必要です。作業画面で次の一手を確認してください。" }
+    public static func notificationBodyNeedsOwnerNoNext(title: String) -> String { "ライ、「\(title)」は続きが必要です。作業画面で次の一手を確認してください。" }
     /// `notification.body.completed`
-    public static func notificationBodyCompleted(title: String) -> String { "ライ氏、「\(title)」の作業が終わりました。" }
+    public static func notificationBodyCompleted(title: String) -> String { "ライ、「\(title)」の作業が終わりました。" }
     /// `notification.body.failed`
-    public static func notificationBodyFailed(title: String) -> String { "ライ氏、「\(title)」の作業を最後まで進められませんでした。作業画面で状況を確認できます。" }
+    public static func notificationBodyFailed(title: String) -> String { "ライ、「\(title)」の作業を最後まで進められませんでした。作業画面で状況を確認できます。" }
     /// `notification.body.roomLook`
-    public static let notificationBodyRoomLook = "ライ氏、部屋のことでひとことあります。"
+    public static let notificationBodyRoomLook = "ライ、部屋のことでひとことあります。"
 }

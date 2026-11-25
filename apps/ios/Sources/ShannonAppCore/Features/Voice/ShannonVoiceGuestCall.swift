@@ -57,7 +57,7 @@ struct ShannonVoiceGuestCallState: Equatable, Sendable {
     static let followUpWindow: TimeInterval = 12
     static let companionAnswerWindow: TimeInterval = 30
     /// Sent as the first turn when the owner switches by the control, so Shannon greets the friend.
-    static let introductionCue = "（ライ氏が「友人も一緒」に切り替えました。そばにいるお友達に、はじめましての挨拶をしてください。）"
+    static let introductionCue = "（ライが「友人も一緒」に切り替えました。そばにいるお友達に、はじめましての挨拶をしてください。）"
 
     private(set) var turns: [ShannonVoiceCallContextTurnDTO] = []
     private(set) var hadGuestPeriod = false

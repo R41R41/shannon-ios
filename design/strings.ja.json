@@ -8,7 +8,7 @@
     "verbatim が true の文は、所有者との約束の文。言い回しを変えない。",
     "apple は、その文がいま書かれている Apple 側の場所。「branch:」で始まるものは、まだ main に入っていない作業中のブランチ。",
     "windows は shannon-desktop の中の場所（このリポジトリからは確かめられない。読んだ日は windowsRead）。",
-    "状態と結果の文は中立に書く。シャノンの台詞にする文は、ボク・ライ氏・です・ますの声にする（packages/cognition/src/persona.ts）。",
+    "状態と結果の文は中立に書く。シャノンの台詞にする文は、ボク・ライ・です・ますの声にする（packages/cognition/src/persona.ts）。",
     "decided がある文は、所有者が決めた言葉。windowsNow は Windows がいま出している言葉、macNow は Mac がいま出している言葉（違うなら直す）。apple が new のものは、まだどのコードにも無い新しい言葉。",
     "only が \"apple\" の文は、Apple 側（iPhone・Mac）にだけある文（Windows にまだ置き場所が無いもの）。windows は書かず、apple に書いてある場所にあることだけを確かめる。新しい画面の文は、まずここに入れる。",
     "only が \"windows\" の文は、Windows にだけある文（多くは、iPhone の文のポインターの形。例「タップ」→「クリック」）。apple は書かず、windows に場所を書く。Swift には出さない。Mac に同じ文が要るようになったら、only を外して apple を書く。"
@@ -3812,35 +3812,35 @@
     },
     {
       "key": "notification.body.needsOwner",
-      "text": "ライ氏、「{title}」は続きが必要です。次：{next}",
+      "text": "ライ、「{title}」は続きが必要です。次：{next}",
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/surfaces/outreach/pushNotifications.ts）と同じ文。"
     },
     {
       "key": "notification.body.needsOwnerNoNext",
-      "text": "ライ氏、「{title}」は続きが必要です。作業画面で次の一手を確認してください。",
+      "text": "ライ、「{title}」は続きが必要です。作業画面で次の一手を確認してください。",
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/surfaces/outreach/pushNotifications.ts）と同じ文。"
     },
     {
       "key": "notification.body.completed",
-      "text": "ライ氏、「{title}」の作業が終わりました。",
+      "text": "ライ、「{title}」の作業が終わりました。",
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/surfaces/outreach/pushNotifications.ts）と同じ文。"
     },
     {
       "key": "notification.body.failed",
-      "text": "ライ氏、「{title}」の作業を最後まで進められませんでした。作業画面で状況を確認できます。",
+      "text": "ライ、「{title}」の作業を最後まで進められませんでした。作業画面で状況を確認できます。",
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/surfaces/outreach/pushNotifications.ts）と同じ文。"
     },
     {
       "key": "notification.body.roomLook",
-      "text": "ライ氏、部屋のことでひとことあります。",
+      "text": "ライ、部屋のことでひとことあります。",
       "apple": "apps/macos-app/ShannonDesk/Features/Notifications/ShannonDesktopNotificationPlan.swift",
       "only": "apple",
       "note": "Mac の通知（A13）。iPhone の push（services/api/src/surfaces/outreach/pushNotifications.ts）と同じ文。"
