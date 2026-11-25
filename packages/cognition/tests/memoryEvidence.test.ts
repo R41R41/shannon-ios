@@ -49,7 +49,7 @@ const WORDS = ['紅茶', '太宰府', '写真の整理', 'ギター', '京都', 
 
 function world(seed: number): { state: CompanionStateSnapshot; quotes: string[]; ids: string[] } {
   const next = random(seed), pick = <T>(rows: readonly T[]) => rows[Math.floor(next() * rows.length)]!;
-  const sentence = () => `${pick(['僕は', '私は', 'ライ氏は', ''])}${pick(WORDS)}${pick(['が好き', 'の話', 'を忘れて', '、。 です'])}`;
+  const sentence = () => `${pick(['僕は', '私は', 'ライは', ''])}${pick(WORDS)}${pick(['が好き', 'の話', 'を忘れて', '、。 です'])}`;
   const at = '2026-10-14T00:00:00.000Z';
   const facts = Array.from({ length: 12 }, (_, index) => ({ id: `fact-${index}`, statement: sentence(), confidence: 0.8, observedAt: at,
     ...(next() < 0.8 ? { evidence: sentence() } : {}), ...(next() < 0.5 ? { sourceExperienceId: `turn-${index % 5}` } : {}) }));
@@ -100,7 +100,7 @@ describe('remembered evidence verdicts', () => {
 
   it('never serves a verdict remembered before a forget, and gives the earlier one back after the restore', () => {
     const at = '2026-10-14T00:00:00.000Z';
-    const base = { ...createInitialCompanionState('owner', at), userFacts: [{ id: 'fact-tea', statement: 'ライ氏は紅茶が好き', confidence: 0.9,
+    const base = { ...createInitialCompanionState('owner', at), userFacts: [{ id: 'fact-tea', statement: 'ライは紅茶が好き', confidence: 0.9,
       observedAt: at, evidence: '僕は紅茶が好きです' }] };
     const control = (status: MemoryControl['status'], extra: Partial<MemoryControl> = {}): MemoryControl => ({ memoryId: 'fact-tea',
       kind: 'user-fact', status, pinned: false, updatedAt: at, changeReason: 'owner', ...extra });
@@ -174,7 +174,7 @@ describe('remembered evidence verdicts', () => {
     const quote = '僕は紅茶が好きです';
     const controls: MemoryControl[] = [{ memoryId: 'turn-9', kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at,
       changeReason: 'owner', sourceEvidence: '散歩コースの話' }];
-    const facts = [{ id: 'fact-tea', statement: 'ライ氏は紅茶が好き', confidence: 0.9, observedAt: at, evidence: '猫の名前の話' }];
+    const facts = [{ id: 'fact-tea', statement: 'ライは紅茶が好き', confidence: 0.9, observedAt: at, evidence: '猫の名前の話' }];
     const state = { ...createInitialCompanionState('owner', at), memoryControls: controls, userFacts: facts } as CompanionStateSnapshot;
     expect(isMemoryEvidenceVisible(state, quote)).toBe(true);
     expect(isMemoryEvidenceVisible(state, quote)).toBe(true);

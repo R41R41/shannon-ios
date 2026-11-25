@@ -17,7 +17,7 @@ import {
 const NOW = '2026-10-05T03:00:00.000Z';
 const MOOD = { valence: 0.1, arousal: 0.4, openness: 0.4 };
 const feeling = (primary: ShannonExpressiveEmotion['primary'], visibility: ShannonExpressiveEmotion['visibility'] = 'expressed'): ShannonExpressiveEmotion => ({
-  primary, secondary: [], intensity: 0.6, target: 'ライ氏', cause: 'テスト', arousal: 0.5, valence: 0.2,
+  primary, secondary: [], intensity: 0.6, target: 'ライ', cause: 'テスト', arousal: 0.5, valence: 0.2,
   visibility, startedAt: NOW, decay: 0.5, carryover: 0.5,
 });
 const reply = (text: string, userMessage = 'もうできたの？') => resolveReplyEmotion({

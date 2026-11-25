@@ -59,7 +59,7 @@ function note(overrides: Partial<InnerNote> = {}): InnerNote {
   const day = innerNoteDay(START, 'Asia/Tokyo');
   return {
     id: 'n1', sequence: 1, dayId: 'n1', dayKey: day.dayKey, dayEndsAt: day.endsAt,
-    text: { honne: 'SENTINEL-HONNE 本当は戻ってきてくれて嬉しい', tatemae: 'べつに待ってなかった顔', reason: '簡単になびくのはいや', plan: 'しばらくはツンとしておく', bottom: 'ライ氏のことは大事' },
+    text: { honne: 'SENTINEL-HONNE 本当は戻ってきてくれて嬉しい', tatemae: 'べつに待ってなかった顔', reason: '簡単になびくのはいや', plan: 'しばらくはツンとしておく', bottom: 'ライのことは大事' },
     hooks: { shown: 'pouting', tell: 'blush', until: later(START, 40), scale: 'ordinary', dayReason: null, intent: 'keep', routeSummary: 'a little sulky' },
     triggers: ['touch'], changeReason: null, summary: null, flags: {}, createdAt: later(START, -5), replacedAt: null, closedAt: null, coreVersion: 'v1',
     episodeStartedAt: later(START, -5), ...overrides,
@@ -212,7 +212,7 @@ describe('she decides herself at a moment (SHANNON_PROACTIVE_SELF)', () => {
 
   it('is given her core, her inner note, her own day and their recent talk, and the moment last; one Haiku call with its system cached', async () => {
     const block = momentInnerNoteBlock(note(), START, 'Asia/Tokyo');
-    const w = speakingWorld({ innerNote: () => block, ownerContext: '[ライ氏のこと・最近のふたりのこと]\n〈最近のふたりの会話（古い順）〉\n- ライ氏: SENTINEL-TALK' });
+    const w = speakingWorld({ innerNote: () => block, ownerContext: '[ライのこと・最近のふたりのこと]\n〈最近のふたりの会話（古い順）〉\n- ライ: SENTINEL-TALK' });
     const dayKey = '2026-10-14';
     w.store.activity.append(scope, dayKey, later(START, -60), { kind: 'action', actor: 'shannon', summary: 'SENTINEL-READ 公開ページを一つ読みました。', domain: 'public_read', tool: 'study.read', outcome: 'done', approval: 'not_needed' });
     w.store.activity.append(scope, dayKey, later(START, -50), { kind: 'action', actor: 'shannon', summary: 'SENTINEL-MINECRAFT マイクラにログインしました。', domain: 'conversation', tool: 'minecraft.login', outcome: 'done', approval: 'not_needed' });
@@ -430,11 +430,11 @@ describe('a promise is told on time (SHANNON_PROMISE_ON_TIME)', () => {
   it('asks her choice again when it waited, and always states the lateness of the moment it is told', async () => {
     const f = fixture({ onTime: true });
     let n = 0;
-    const writer: CommitmentLineWriter = { write: async (_scopeKey, facts) => { n += 1; return promisePhraseChoice({ phrase: 'ライ氏、', position: 'before' }, facts); } };
+    const writer: CommitmentLineWriter = { write: async (_scopeKey, facts) => { n += 1; return promisePhraseChoice({ phrase: 'ライ、', position: 'before' }, facts); } };
     const lines = commitmentLinePreparer({ writer, scopeKey: 'owner', timeZone: 'Asia/Tokyo', snapshot: key => f.state.snapshot(key),
       delivered: (key, item) => f.sources.delivered(key, item), others: () => false });
-    expect([...(await lines(DUE)).values()]).toEqual(['ライ氏、9時20分の約束：「起こして」']);
-    expect([...(await lines(later(DUE, 5))).values()]).toEqual(['ライ氏、9時20分の約束：「起こして」（5分遅れのお知らせ）']);
+    expect([...(await lines(DUE)).values()]).toEqual(['ライ、9時20分の約束：「起こして」']);
+    expect([...(await lines(later(DUE, 5))).values()]).toEqual(['ライ、9時20分の約束：「起こして」（5分遅れのお知らせ）']);
     expect(n).toBe(1);
     await lines(later(DUE, 11));
     expect(n).toBe(2);

@@ -34,7 +34,7 @@ describe('sentences authored as Shannon', () => {
     expect(empty).toEqual([]);
   });
 
-  it('stay in です・ます, call the owner ライ氏, and never say あなた', () => {
+  it('stay in です・ます, call the owner ライ, and never say あなた', () => {
     const offenders: string[] = [];
     expect(SHANNON_VOICE_SOURCES.length).toBeGreaterThan(0);
     for (const file of SHANNON_VOICE_SOURCES) {

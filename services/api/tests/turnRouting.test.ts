@@ -47,7 +47,7 @@ describe('the turn verifier', () => {
     expect(verifyWriteClaims('こんにちは。', [])).toBe('ok');
     expect(verifiedReply('メモを保存しました。', 'claim_without_write')).toBe(`メモを保存しました。\n${WRITE_CLAIM_CORRECTION}`);
     expect(verifiedReply('はい。', 'ok')).toBe('はい。');
-    expect(WRITE_CLAIM_CORRECTION).toMatch(/ライ氏/u);
+    expect(WRITE_CLAIM_CORRECTION).toMatch(/ライ/u);
   });
 });
 

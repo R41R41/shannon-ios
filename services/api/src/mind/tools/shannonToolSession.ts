@@ -115,7 +115,7 @@ export function conversationTools(
     const tool = runner.knownTool(providerName);
     const refusal = !tool ? { why: 'そういう名前の道具はない', wouldWork: '出してある道具の名前（folder_list のような形）で呼ぶ' }
       : !toolFromProviderName(providerName) ? { why: '道具の名前の形が違う', wouldWork: `${providerToolName(tool.name)} という名前で呼ぶ` }
-        : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' }
+        : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライがはっきり確かめた次の返事で' }
           : { why: 'この返事ではその道具は出していない', wouldWork: '出してある道具だけを使う' };
     // A rule stopped it (ADR-0008 §14): her words not trusted to write, or someone else here; a name she got wrong is not withheld.
     const reason = !tool || !toolFromProviderName(providerName) ? null : !writes && tool.effect === 'write' ? 'unreliable_words' as const

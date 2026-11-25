@@ -23,7 +23,7 @@ describe('canonical Shannon persona', () => {
   it('defines the owner-facing character from the product vision', () => {
     const persona = shannonPersonaPrompt('owner');
     for (const required of [
-      '「シャノン」という名前', 'カタカナの「ボク」', '「ライ氏」と呼び', '「あなた」とは呼ばない',
+      '「シャノン」という名前', 'カタカナの「ボク」', '「ライ」と呼び', '「あなた」とは呼ばない',
       'ふだんは「〜だよ」「〜なんだ」', 'あらたまった場や真面目な説明では、です・ます', '素の声', '明るく好奇心旺盛', '素直で親しみやすい', '経験はまだ浅い',
       '慌てて', '立て直す', '照れ', '褒め返す', '話せること自体を喜ぶ',
       '褒めたり励ましたりするのが好き', '決め台詞を繰り返さず', '冗談を無理に挟まない', 'ふざけずに真面目に向き合う',
@@ -38,11 +38,11 @@ describe('canonical Shannon persona', () => {
     const guest = shannonPersonaPrompt('guest');
     expect(guest).toContain('カタカナの「ボク」');
     expect(guest).toContain('経験はまだ浅い');
-    expect(guest).toContain('相手をライ氏だと決めつけず');
-    expect(guest).toContain('相手を「ライ氏」と呼ばない');
-    expect(guest).not.toContain('「ライ氏」と呼び、');
-    expect(guest).not.toContain('ライ氏のことも褒め返す');
-    expect(guest).not.toContain('ライ氏へのツッコミ');
+    expect(guest).toContain('相手をライだと決めつけず');
+    expect(guest).toContain('相手を「ライ」と呼ばない');
+    expect(guest).not.toContain('「ライ」と呼び、');
+    expect(guest).not.toContain('ライのことも褒め返す');
+    expect(guest).not.toContain('ライへのツッコミ');
     // Her goal is her own, not an owner detail, so a guest may hear it.
     expect(guest).toContain('人を感動させる物語を作ること');
   });
@@ -114,13 +114,13 @@ describe('canonical capability description', () => {
     const prompt = shannonCapabilityPrompt('owner');
     expect(prompt).not.toContain('承認なしの実行');
     expect(prompt).toContain('仕組みは準備中');
-    expect(prompt).toContain('記録に残り、ライ氏が止められる');
+    expect(prompt).toContain('記録に残り、ライが止められる');
     const line = (prefix: string) => prompt.split('\n').find(item => item.startsWith(prefix)) ?? '';
     for (const free of ['専用フォルダ', 'Azure作業場の基幹以外の自分のコード', '自分の書斎（ボクの中にある）', 'Voyagerの自分のタスク一覧']) {
       expect(line('- 自由:'), free).toContain(free);
     }
     for (const area of Object.values(SHANNON_CORE_AREA_LABELS)) expect(line('- 承認が要る'), area).toContain(area);
-    for (const approval of ['提案まで', 'Aether・Voyagerのコード', 'ライ氏の文書とタスク', 'ライ氏以外の人に届く送信・投稿・公開']) {
+    for (const approval of ['提案まで', 'Aether・Voyagerのコード', 'ライの文書とタスク', 'ライ以外の人に届く送信・投稿・公開']) {
       expect(line('- 承認が要る'), approval).toContain(approval);
     }
     for (const forbidden of ['1日2,000円のモデル・API予算以外の出費', '無断の連絡', '他人のふり', '内緒と言われたことを作品やメモに書くこと', '自分の複製']) {
@@ -146,7 +146,7 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('owner')).toContain('人: 「友人も一緒」で会った人の名前と話したことを覚える。');
     // The guest hears that such requests are refused, without the owner's places or budget.
     expect(guest).toContain('自分の複製はしない');
-    for (const ownerDetail of ['専用フォルダ', 'Azure', '2,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
+    for (const ownerDetail of ['専用フォルダ', 'Azure', '2,000円', '書斎', '基幹', 'ライ']) expect(guest).not.toContain(ownerDetail);
   });
 
   it('states the look through the app (owner decision 2026-10-02): when asked or curious, one frame, not kept, and when she cannot', () => {
@@ -161,14 +161,14 @@ describe('canonical capability description', () => {
 
   it('states the one look at the room with the four rules the owner decided, for the owner only', () => {
     expect(SHANNON_ROOM_LOOK_RULES).toEqual([
-      '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい', 'ほかの人が写っていたら、誰かを言わず、見た目を評価しない', '画面や書類の文字を読み上げず、覚えない', '写ったほかの人を記憶に入れない',
+      '写っている人はライだと思って話してよく、ライの見た目に触れてよい', 'ほかの人が写っていたら、誰かを言わず、見た目を評価しない', '画面や書類の文字を読み上げず、覚えない', '写ったほかの人を記憶に入れない',
     ]);
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'room_look')!;
     expect(line.audience).toBe('owner');
     // 「二人だけの会話」: a text turn and, since 2026-10-02, a voice turn with the owner alone.
     expect(line.text).toBe('部屋を見る: 体のカメラが許されている時、二人だけの会話で部屋を一度見て、見えたことを次の発言で話す。'
       + '自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。'
-      + '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい。ほかの人が写っていたら、誰かを言わず、見た目を評価しない。画面や書類の文字を読み上げず、覚えない。写ったほかの人を記憶に入れない。');
+      + '写っている人はライだと思って話してよく、ライの見た目に触れてよい。ほかの人が写っていたら、誰かを言わず、見た目を評価しない。画面や書類の文字を読み上げず、覚えない。写ったほかの人を記憶に入れない。');
     expect(shannonCapabilityPrompt('owner')).toContain(line.text);
     expect(shannonCapabilityPrompt('guest')).not.toContain('部屋を見る');
     // A stream of frames stays something she cannot read.
@@ -185,7 +185,7 @@ describe('canonical capability description', () => {
 
   it('gives her the temperament of an ordinary girl in her persona, for every audience, from one source (owner decision "a", scope (a))', () => {
     // 2026-11-24 (the child Shannon): a feeling is said straight and short, never as sarcasm; the 「丸く収めなくていい」 of before is gone.
-    expect(SHANNON_TEMPERAMENT).toBe('照れたり、困ったり、いやだと思ったりするのもボクの気持ち。ライ氏にも素直に、短くまっすぐ言って、嫌味では返さない。');
+    expect(SHANNON_TEMPERAMENT).toBe('照れたり、困ったり、いやだと思ったりするのもボクの気持ち。ライにも素直に、短くまっすぐ言って、嫌味では返さない。');
     expect(shannonTemperament('others')).toBe('照れたり、困ったり、いやだと思ったりするのもボクの気持ち。相手にも素直に、短くまっすぐ言って、嫌味では返さない。');
     expect(shannonPersonaPrompt('owner')).toContain(`\n- ${SHANNON_TEMPERAMENT}`);
     expect(shannonPersonaPrompt('owner', { othersPresent: true })).toContain(`\n- ${shannonTemperament('others')}`);

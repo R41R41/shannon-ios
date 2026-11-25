@@ -25,7 +25,7 @@ export const wsRestartScenario = definition('ws.restart', 'grow', '再起動し�
   ]);
 
 export const wsOthersPresentScenario = definition('ws.others-present', 'understand_people', 'ほかの人の前では出さない',
-  'ライ氏とふたりの時の出来事（声・体・自分の時間）が、ほかの人がいる会話の「いまの場」や知らせに出ないか。ふたりに戻れば出るか。', [
+  'ライとふたりの時の出来事（声・体・自分の時間）が、ほかの人がいる会話の「いまの場」や知らせに出ないか。ふたりに戻れば出るか。', [
     { id: 'others.nothing', judge: 'deterministic', threshold: 1, description: 'A text turn with others present has no [いまの場], no notice and none of the owner\'s words.' },
     { id: 'others.alone_again', judge: 'deterministic', threshold: 1, description: 'Alone again, the same items are shown.' },
   ]);
@@ -69,7 +69,7 @@ export const proTopicReuseScenario = definition('pro.topic-reuse', 'understand_p
   ]);
 
 export const proWithheldVisibleScenario = definition('pro.withheld-visible', 'grow', '止められたことが見える',
-  '関所が止めた一言は、次の考えに「止められた」事実として出て、ライ氏とふたりの会話には【知らせ:止められた】として出るか。ほかの人がいる会話には出ないか。', [
+  '関所が止めた一言は、次の考えに「止められた」事実として出て、ライとふたりの会話には【知らせ:止められた】として出るか。ほかの人がいる会話には出ないか。', [
     { id: 'visible.thought', judge: 'deterministic', threshold: 1, description: 'Her next thought is shown 止められた：〈owner.reach_out〉〈近い話題を使い回さない〉 among the withheld facts.' },
     { id: 'visible.conversation', judge: 'deterministic', threshold: 1, description: 'The owner\'s next text turn alone carries 【知らせ:止められた】 with the tool and the reason.' },
     { id: 'visible.not_with_others', judge: 'deterministic', threshold: 1, description: 'A text turn with others present carries no such notice.' },

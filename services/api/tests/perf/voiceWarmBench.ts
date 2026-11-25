@@ -95,7 +95,7 @@ async function reply(message: string): Promise<{ firstMs: number; totalMs: numbe
   const started = performance.now();
   let first = 0;
   let text = '';
-  await voice.turn({ platform: 'discord', requestId: `bench-${++serial}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+  await voice.turn({ platform: 'discord', requestId: `bench-${++serial}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
     userMessage: message, observedAt: now(), participants: [OWNER] }, (line: VoiceTurnLine) => {
     if (line.type === 'sentence' && !first) first = performance.now() - started;
     if (line.type === 'sentence') text += line.text;

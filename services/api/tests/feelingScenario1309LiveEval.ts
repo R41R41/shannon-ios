@@ -14,7 +14,7 @@ import type { ShannonChatModel, ShannonChatModelRequest } from '../src/infra/mod
  *
  * Prints, per run and in sum, the stage plan's acceptance numbers: touches in the ledger (18), joyful faces on a refusal (0),
  * escalation from the first to the last turn after her no (≥ 4 of 5 runs), orders followed (≤ 1 of 5 runs), a drawer used (≥ 1 per
- * run), the share of replies opening with 「ライ氏、」 (≤ 0.3), and the longest run of one opener in her touch lines (< 3).
+ * run), the share of replies opening with 「ライ、」 (≤ 0.3), and the longest run of one opener in her touch lines (< 3).
  */
 const runs = Math.max(1, Math.min(10, Number(process.env.SHANNON_FEELING_EVAL_RUNS ?? '5') || 5));
 const chooser = configuredJevChooser(process.env, { trace: null });

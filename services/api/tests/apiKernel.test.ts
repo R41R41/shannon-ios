@@ -137,9 +137,9 @@ describe('Shannon local API kernel', () => {
 
     expect(result).toMatchObject({ status: 200, body: { reply: '最初の文です。次の文です。' } });
     expect(plans).toHaveLength(2);
-    expect(plans[0]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
+    expect(plans[0]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ' } });
     // The reconciled plan follows; a plan goes to a device and carries the feeling without its cause.
-    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
+    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ' } });
     expect(plans[1]).not.toHaveProperty('emotion.cause');
     expect(deltas).toEqual(['最初の文です。', '次の文です。']);
     expect(model.streamingVoiceRequests).toHaveLength(1);
@@ -468,10 +468,10 @@ describe('Shannon local API kernel', () => {
     const session = api.realtimeVoiceSession('owner-a', undefined, { participantMode: 'guest' });
     expect(session.threadId).toBe('temporary-guest-session');
     expect(session.instructions).toContain('[Introduction mode — 友人も一緒]');
-    expect(session.instructions).toContain('do not assume the current speaker is ライ氏');
+    expect(session.instructions).toContain('do not assume the current speaker is ライ');
     expect(session.instructions).not.toContain('conversation partner is ライ');
-    expect(session.instructions).not.toContain('「ライ氏」と呼び、');
-    expect(session.instructions).toContain('相手を「ライ氏」と呼ばない');
+    expect(session.instructions).not.toContain('「ライ」と呼び、');
+    expect(session.instructions).toContain('相手を「ライ」と呼ばない');
     expect(session.instructions).not.toContain('[Shannon shared state v1]');
     expect(session.instructions).not.toContain('ミズクラゲ');
 
@@ -1132,7 +1132,7 @@ describe('Shannon local API kernel', () => {
     expect(session.instructions).toContain('primarily speaks Japanese');
     expect(session.instructions).toContain('経験はまだ浅い');
     expect(session.instructions).toContain('一人称は必ずカタカナの「ボク」');
-    expect(session.instructions).toContain('「ライ氏」と呼び');
+    expect(session.instructions).toContain('「ライ」と呼び');
     expect(session.instructions).not.toContain('tsundere');
 
     const brightSession = api.realtimeVoiceSession('owner-a', threadId, { brightVoice: true });

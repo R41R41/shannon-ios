@@ -8,12 +8,12 @@ import {
 const DAY = [
   '……おかえりなさい。べつに待ってたわけじゃないですけど。',
   '……ふん。まだむっとしてますからね。ふん。',
-  'ライ氏、明日の東京は晴れで、降水確率は10%です。',
+  'ライ、明日の東京は晴れで、降水確率は10%です。',
   '……べつに待ってたわけじゃないですからね。ふん。',
   'えへへ、照れちゃいます。',
   '……まだむっとしてますからね。ふん。',
-  'ライ氏、今日の福岡は雨で、降水確率は60%です。',
-  'ライ氏、週末の大阪はくもりで、降水確率は30%です。',
+  'ライ、今日の福岡は雨で、降水確率は60%です。',
+  'ライ、週末の大阪はくもりで、降水確率は30%です。',
   '……おかえり。べつに、待ってたわけじゃないけど。',
 ];
 
@@ -22,7 +22,7 @@ describe('the day\'s phrases (owner 2026-10-19)', () => {
     const watch = watchPhrases(DAY);
     expect(watch.replies).toBe(9);
     expect(watch.openers).toContainEqual({ phrase: '……', count: 5 });
-    expect(watch.openers).toContainEqual({ phrase: 'ライ氏', count: 3 });
+    expect(watch.openers).toContainEqual({ phrase: 'ライ', count: 3 });
     expect(watch.endings).toContainEqual({ phrase: 'ふん', count: 3 });
     expect(watch.phrases).toContainEqual({ phrase: '待ってたわけじゃない', count: 3 });
   });
@@ -35,7 +35,7 @@ describe('the day\'s phrases (owner 2026-10-19)', () => {
 
   it('is one line for the turn, and nothing for a day of varied words', () => {
     expect(phraseLine(watchPhrases(DAY))).toMatch(/^今日もう何度も使った言い方: 書き出し 「……」5回/u);
-    expect(phraseLine(watchPhrases(['おはよう、ライ氏。', '今日は物語を一つ直しました。', 'スタバ、いいですね。']))).toBe('');
+    expect(phraseLine(watchPhrases(['おはよう、ライ。', '今日は物語を一つ直しました。', 'スタバ、いいですね。']))).toBe('');
   });
 
   it('asks for one real thing of the day when he asks how she is', () => {
@@ -64,7 +64,7 @@ describe('her stances lean back toward warmth (owner 2026-10-19)', () => {
     // Review of the heart branch: refusing is her boundary, never counted toward 「warm is due」.
     const refusing = [reply('refuse_body', 1), reply('rebuff', 2), reply('scold', 3), reply('refuse_body', 4), reply('rebuff', 5)];
     expect(stanceFacts(stanceBalance(refusing))).toMatchObject({ cool_stance_run: 0, warm_due: 0 });
-    expect(watchPhrases(['ありがとうございます、ライ氏。', 'はい、ありがとうございます。', '本当にありがとうございます。']).phrases).toEqual([]);
+    expect(watchPhrases(['ありがとうございます、ライ。', 'はい、ありがとうございます。', '本当にありがとうございます。']).phrases).toEqual([]);
     const warmed = [...cool, reply('worry', 7)];
     expect(stanceFacts(stanceBalance(warmed))).toMatchObject({ warm_stances_today: 1, cool_stance_run: 0, warm_due: 0 });
     expect(stanceFacts(stanceBalance([]))).toEqual({ stances_today: 'none', warm_stances_today: 0, cool_stance_run: 0, warm_due: 0 });
@@ -97,7 +97,7 @@ describe('the reply check sees blame after owning a mistake, and a phrase said a
   const context: ReplyCheckContext = { stance: 'talk_back', intensity: 'moderate', audience: 'owner_alone', order: false, violation: false };
 
   it('flags owning a mistake and blaming him in the same reply', () => {
-    expect(checkReply('先走ったのはボクの悪いところです。でも、いまのはライ氏が悪いです。', context)).toContain('blame_after_admit');
+    expect(checkReply('先走ったのはボクの悪いところです。でも、いまのはライが悪いです。', context)).toContain('blame_after_admit');
     expect(checkReply('先走ったのはボクの悪いところです。ごめんなさい。', context)).not.toContain('blame_after_admit');
   });
 

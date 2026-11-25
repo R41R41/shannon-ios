@@ -44,7 +44,7 @@ function world(options: { shadow: boolean; start?: string }) {
     touches.observe(scope, { id: `touch-${touchId += 1}`, type: kind, audience: 'owner', occurredAt: clock.at, ...(region ? { region } : {}), surface: 'windows' });
   const feel = (primary: ShannonEmotionKind, intensity: number) => store.apply(scope, {
     type: 'expressive-emotion-updated',
-    emotion: resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', reply: 'ボクはそう思います。', now: clock.at, target: 'ライ氏' }),
+    emotion: resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', reply: 'ボクはそう思います。', now: clock.at, target: 'ライ' }),
   });
   const apply = (event: CompanionStateEvent) => store.apply(scope, event);
   return { store, shadow, touches, touch, feel, apply, advance, clock, lines, path };
@@ -269,12 +269,12 @@ describe('the taps', () => {
 
   it('reads a reply\'s decided feeling as sign × strength, and leaves out a touch\'s feeling and a feeling that only goes on', () => {
     const at = '2026-10-05T00:00:00.000Z';
-    const make = (primary: ShannonEmotionKind, intensity: number) => resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', now: at, target: 'ライ氏' });
+    const make = (primary: ShannonEmotionKind, intensity: number) => resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', now: at, target: 'ライ' });
     expect(decidedFeelingOutcome(make('hurt', 0.9))).toBeCloseTo(-0.9, 12);
     expect(decidedFeelingOutcome(make('happy', 0.6))).toBeCloseTo(0.6, 12);
     expect(decidedFeelingOutcome(make('neutral', 0.5))).toBeNull();
     expect(decidedFeelingOutcome({ ...make('happy', 0.6), continued: true })).toBeNull();
-    expect(decidedFeelingOutcome({ ...make('happy', 0.6), cause: 'ライ氏に頭をなでてもらった' })).toBeNull();
+    expect(decidedFeelingOutcome({ ...make('happy', 0.6), cause: 'ライに頭をなでてもらった' })).toBeNull();
   });
 });
 

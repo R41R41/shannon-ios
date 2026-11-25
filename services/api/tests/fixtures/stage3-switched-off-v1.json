@@ -3,16 +3,16 @@
  "scenarios": {
   "text-two-turns": {
    "openai": [
-    "08678911661f195eb1a48134",
-    "499a827cbcbee938ca96706c"
+    "e8cee5e2225906e5a7b7593f",
+    "3b968336afcec70f9f1bedd9"
    ],
    "jev": [
-    "37334e3f589502d4e2334d5e",
-    "aae2e72ccea0dd7ded76b5d2"
+    "f2bc7b48beb45dd012966a63",
+    "193aaf7d85ff320b8d0bb90e"
    ],
    "prompts": [
-    "9cd619b5329bbee60118b9b9",
-    "412592d8698a7d58d18662ef"
+    "8e883e317f4b66ae42e73b06",
+    "6f1186dfaebeea92fc970ee3"
    ],
    "state": [
     "activity_events:b74d0a5cc83c8d1d160c3c47",
@@ -67,7 +67,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:bfbf99a017fb0a31acb64bf3",
+    "prompt_projections:0279e920254c707c619d0805",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -104,16 +104,16 @@
   },
   "text-promise": {
    "openai": [
-    "0bf1d11810630300bfce6e8c",
-    "f23aa73939717b9ba5814d41"
+    "4c88aa47e7e3a542e3f4c160",
+    "4810bdce710be091917bd881"
    ],
    "jev": [
-    "f17a979f3ecda4026575be1d",
-    "8debbd694b40119bef3d7355"
+    "d72788671570b36a6b2bc87f",
+    "68a48368db127662c833ed87"
    ],
    "prompts": [
-    "6dde4bc1fed5b1c03d9f7c73",
-    "85cff673f4879ec987bafacb"
+    "e21e879a1629956513f37f4d",
+    "65d7cb3789c3ed65c0c69021"
    ],
    "state": [
     "activity_events:7c98c7c696b0cf2ada25f531",
@@ -168,7 +168,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:3a06c6dab8010e0de38ccb59",
+    "prompt_projections:f4cb5bbd256256dffb7ed096",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -205,7 +205,7 @@
   },
   "text-others": {
    "openai": [
-    "89dd92c66e2d651277903f91"
+    "70439ecb40fd26fc856786fa"
    ],
    "jev": [
     "954fe3ca6ff263a5af09c254"
@@ -303,16 +303,16 @@
   },
   "text-name": {
    "openai": [
-    "1a3d192c660ac5da30f8234b",
-    "a7196c55f363faa8a7e09c32"
+    "6fdae6f18770e7a7199d2f98",
+    "3e6536f22f050a27987f62b2"
    ],
    "jev": [
-    "b3258a6bb42e158aa1e35702",
-    "bb0e3589712ada5f54d8ecb7"
+    "06bd88f075d880ff35e96637",
+    "e42dbb516793a73229c28dbc"
    ],
    "prompts": [
-    "94ebb8b18ac746ef80b42e36",
-    "1e2a5cb7d6e972fe6462cb49"
+    "da2d73abe0422b63ae4f1f93",
+    "868ab85fa01243f033c5ec2e"
    ],
    "state": [
     "activity_events:37a51289c4a72939038ec998",
@@ -367,7 +367,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:a8cebf8a46c6a9448cab4d73",
+    "prompt_projections:32b1a7f9865850ea20b8b1f3",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -404,14 +404,14 @@
   },
   "tool-round": {
    "openai": [
-    "5261c49a00fdcd27ea062e16",
-    "0b9d2a06603f5986d61a9c39"
+    "c32fb417955dd5f20f039d47",
+    "7993428a410e20e5496e1e48"
    ],
    "jev": [
-    "9aa9f69ea2dc1c095d498b7e"
+    "51cf61d54fc04e9a3edefa9b"
    ],
    "prompts": [
-    "ac9b56d71b29e49103b3530c"
+    "bd61b83ab7423cbc80f497a3"
    ],
    "state": [
     "activity_events:a4f35d55fe009bb9ab17ac99",
@@ -466,7 +466,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:272fbc87d8562a6d658b7019",
+    "prompt_projections:7802d3a3d151dc6269c70039",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -503,8 +503,8 @@
   },
   "voice-greeting": {
    "openai": [
-    "b127554796dc91beb58395f6",
-    "0eb1e006843e071b16ab11a9"
+    "0490c5f514ef7d6ddccc9bda",
+    "cfbaa7265e262e23be386502"
    ],
    "jev": [
     "a607e80c5520ef51281819e3",
@@ -513,8 +513,8 @@
     "44b5628a43b660542df09e94"
    ],
    "prompts": [
-    "2c7c6099c5ada75ccdebf2f8",
-    "eedca0968cbd2568fe939529"
+    "7dce6bb1b4654757211cd44e",
+    "1c7b4cbcf646ee6bce5b9d2b"
    ],
    "state": [
     "activity_events:86b0248d79430b77d9cc0abb",
@@ -542,12 +542,12 @@
     "autonomy_pursuits:5019ea6f2f95883894f74400",
     "autonomy_spend:e54a6c9bf6b2aab3681ef0de",
     "background_jobs:530c5fe4bfadf9a0042249ba",
-    "companion_states:c88e3da67307929908b1465d",
+    "companion_states:eba1d373771ff4a7620848e7",
     "conversation_messages:e0becb924e872abb42020c8b",
     "conversation_replay_summaries:433fb866f7346d6523d89f1f",
     "conversation_threads:6200418aa8af3f6ebfbecdce",
     "conversation_tool_traces:009d7a3529ab1209906f35b2",
-    "experience_events:31710e97f6dbcc13565ae415",
+    "experience_events:15eb2183a1b6f17ef17e49b1",
     "knowledge_answers:47c78b76d409ad8632417160",
     "knowledge_evidence:18278ff882c2a9fe269cdb0f",
     "knowledge_revisions:e578b552fe5cfb20a58df050",
@@ -569,7 +569,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:9467ef3638b8b3564ccc323d",
+    "prompt_projections:30559864e713a9af1b83af5c",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -606,14 +606,14 @@
   },
   "voice-name": {
    "openai": [
-    "6d6e588f55a4e9e2f79f6f86"
+    "783d2ec0b5f83f0fd8446cd1"
    ],
    "jev": [
     "9f04077bc3a576a6cef410de",
     "f4f763b0039d38c308e9fb09"
    ],
    "prompts": [
-    "2c7c6099c5ada75ccdebf2f8"
+    "7dce6bb1b4654757211cd44e"
    ],
    "state": [
     "activity_events:86b0248d79430b77d9cc0abb",
@@ -641,12 +641,12 @@
     "autonomy_pursuits:5019ea6f2f95883894f74400",
     "autonomy_spend:e54a6c9bf6b2aab3681ef0de",
     "background_jobs:530c5fe4bfadf9a0042249ba",
-    "companion_states:399dcef7e96f4964e7c144d4",
+    "companion_states:375a2ae56d948197f2b54f82",
     "conversation_messages:e0becb924e872abb42020c8b",
     "conversation_replay_summaries:433fb866f7346d6523d89f1f",
     "conversation_threads:6200418aa8af3f6ebfbecdce",
     "conversation_tool_traces:009d7a3529ab1209906f35b2",
-    "experience_events:356d830a5aa17e32ccf7e332",
+    "experience_events:41d3bb0cab86fc5bf2ed1863",
     "knowledge_answers:47c78b76d409ad8632417160",
     "knowledge_evidence:18278ff882c2a9fe269cdb0f",
     "knowledge_revisions:e578b552fe5cfb20a58df050",
@@ -668,7 +668,7 @@
     "person_platform_turns:f285ab49095ec45f223458cb",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:1b96a242abf2d66f411967cd",
+    "prompt_projections:937cc671c001fe8dab70dc6b",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -710,7 +710,7 @@
     "c8c22f580c1f22730f1642f9"
    ],
    "prompts": [
-    "402e4173a317821d754ef3e2"
+    "365c3f4c068bca8a8aa5438b"
    ],
    "state": [
     "activity_events:86b0248d79430b77d9cc0abb",
@@ -802,16 +802,16 @@
   },
   "body-touch": {
    "openai": [
-    "cea0a65c07e21b765f7b0c03",
-    "cbd570023259ced6542b5c49",
-    "fbd88f89fe9549be1caee608"
+    "d37c81d7e62d09b2e00814c2",
+    "82951b1238d5bcf36bb113a3",
+    "6b0bf3c9067cdf521845d596"
    ],
    "jev": [],
    "prompts": [
     "64cefa166473e60f40e51b22",
-    "5714f5df9d6118a597b9df18",
-    "065d0e93d37be5d778f84b29",
-    "fa7368a4e0fc4a523f2b771a"
+    "a69362efd8ad492a3c08ceaa",
+    "9b94553d2b6f2a142fd1277e",
+    "eb8545f2585615cbe91ed8d3"
    ],
    "state": [
     "activity_events:76e3655923cd2894dbb46164",
@@ -842,16 +842,16 @@
     "body_audience:9848fc8d873fbba52e8f09ce",
     "body_capabilities:13a3a51e64480544677482b9",
     "body_events:6666aed6a1667f28ca762fcc",
-    "body_reactions:9a2a75c170e5b07d63fa62cd",
-    "body_touch_bursts:524da79e9e18d2714787c70a",
+    "body_reactions:136f357f22b80a58db058916",
+    "body_touch_bursts:02f2272d2a71e43c62c1edae",
     "body_touch_outcomes:0629624ef79e3d29d9c73d14",
     "body_touches:6dec0511b8972beb884be366",
-    "companion_states:e926dc515339009d1fdcb255",
+    "companion_states:ccd230f54d2af4338688d453",
     "conversation_messages:bd88f11a2b9b700d54be6bac",
     "conversation_replay_summaries:433fb866f7346d6523d89f1f",
     "conversation_threads:6163be08d716c8c875b85791",
     "conversation_tool_traces:009d7a3529ab1209906f35b2",
-    "experience_events:fc42b9058625060bae39ae51",
+    "experience_events:8aa013983b23ef60d6637f81",
     "knowledge_answers:47c78b76d409ad8632417160",
     "knowledge_evidence:18278ff882c2a9fe269cdb0f",
     "knowledge_revisions:e578b552fe5cfb20a58df050",
@@ -868,7 +868,7 @@
     "person_impressions:0da23c1a8d0c73870108e1f0",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:b547a4383cc4082b35a3b713",
+    "prompt_projections:7781b89b532cffa1d3c810ab",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -897,16 +897,16 @@
   },
   "body-touch-others": {
    "openai": [
-    "c432a1357435c409292c988b",
-    "6f2896993e4faf772db3e6c1",
-    "34e98da2fe44953c1634fb63"
+    "a43cbc28fadcb7f3ad416db8",
+    "4671d0931c127a2db7e9b04c",
+    "091d3c9851112a8c766a173f"
    ],
    "jev": [],
    "prompts": [
     "64cefa166473e60f40e51b22",
-    "5714f5df9d6118a597b9df18",
-    "065d0e93d37be5d778f84b29",
-    "3f2f2c90f1dcc4d32860dab2"
+    "a69362efd8ad492a3c08ceaa",
+    "9b94553d2b6f2a142fd1277e",
+    "32e55353680ccd9dca475b77"
    ],
    "state": [
     "activity_events:76e3655923cd2894dbb46164",
@@ -937,8 +937,8 @@
     "body_audience:9848fc8d873fbba52e8f09ce",
     "body_capabilities:13a3a51e64480544677482b9",
     "body_events:6666aed6a1667f28ca762fcc",
-    "body_reactions:5c66011d897b41e7ef2cb348",
-    "body_touch_bursts:62226b4e35940cf12b63d488",
+    "body_reactions:33bebc08aa8bd566214f33e4",
+    "body_touch_bursts:672e51a640940a7c04ce47ca",
     "body_touch_outcomes:8a7c461459a11974f23ec156",
     "body_touches:a6c7b3ff659565cdc0e47c4d",
     "companion_states:28fb814987e0aa0a576a748b",
@@ -963,7 +963,7 @@
     "person_impressions:0da23c1a8d0c73870108e1f0",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:f2c86215a0f28b2c4e6564e4",
-    "prompt_projections:2e8c17680228d144c3fdfecb",
+    "prompt_projections:880e4704fc29d11ee2de1d98",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -992,10 +992,10 @@
   },
   "platform": {
    "openai": [
-    "61610b0800cb06118bf7a354",
-    "f2446bacb038d45777e3d6c1",
-    "63c32528c05406c0c7c66c1c",
-    "fa5860c249111b69d2164eae"
+    "afb9e6d0cc192534535a6078",
+    "d231acffaee780ec97f6e93b",
+    "d96e83e29bc86309ef345683",
+    "5d056a3f953ed1e4162b22c1"
    ],
    "jev": [],
    "prompts": [
@@ -1033,7 +1033,7 @@
     "companion_states:52403c72f93f42c8f5cd8a18",
     "conversation_messages:52f1f5b6a60325732efa942c",
     "conversation_replay_summaries:433fb866f7346d6523d89f1f",
-    "conversation_threads:324460b570da10eb30d6d272",
+    "conversation_threads:f52fbbac2ad338a39ed7c826",
     "conversation_tool_traces:009d7a3529ab1209906f35b2",
     "experience_events:c5349d61d39e9a8de5808f7d",
     "knowledge_answers:47c78b76d409ad8632417160",
@@ -1041,11 +1041,11 @@
     "knowledge_revisions:e578b552fe5cfb20a58df050",
     "llm_usage_events:b47e0c1200900f0930fa3f46",
     "memory_embeddings:25f7ae8f66cc5a552526cba8",
-    "memory_search_documents:1551d85c4005d69a68db348c",
-    "memory_search_fts:003f2e00eaff17e4e38cae1a",
+    "memory_search_documents:8fbfa261d4f37baa618a7b13",
+    "memory_search_fts:a5016f4777301a05e3ccc2a8",
     "memory_search_fts_config:ea41d6a458a07593b8f5b7f8",
-    "memory_search_fts_data:2c3dcf2c7285daa659d7cbca",
-    "memory_search_fts_docsize:51163e663ad224c835532a4c",
+    "memory_search_fts_data:b202dfe2ed4c75c2a5fee192",
+    "memory_search_fts_docsize:459d5965b8076d089dd2832d",
     "memory_search_fts_idx:9f848c5f69eeb06f19c066f0",
     "owner_informed_documents:f5f923fd91b19cf47f17368c",
     "people:5a9ae0229ccb7878a29ee2c5",
@@ -1058,7 +1058,7 @@
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_reply_turns:7516418e989f2ff1d728b7b8",
     "platform_turn_receipts:092b2dd52ea09b117bb3ff41",
-    "prompt_projections:f717a61a52911cd3dcc4bce9",
+    "prompt_projections:c574fbc692b050f513048566",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -1087,9 +1087,9 @@
   },
   "minecraft": {
    "openai": [
-    "a56991d1aa8ef719fc528223",
-    "f84327dea26a9faae156cb7e",
-    "97b80d1e0d94b00aac3e321a"
+    "1bdbdbe2332959997352c11a",
+    "d82c1f3f3a6d13b6837e98c6",
+    "3f2315eb2d8d33ed90fc7b66"
    ],
    "jev": [],
    "prompts": [
@@ -1133,7 +1133,7 @@
     "person_platform_turns:872c5edd8cc0208620efab43",
     "personality_profiles:9b064cf42e843aa0cad99975",
     "platform_turn_receipts:a9604d52e50338c2f2f50f46",
-    "prompt_projections:37350e61bb82665a4e579963",
+    "prompt_projections:e72d0510c5e3cac63c976f6d",
     "question_definitions:30399becea539530c0aebee1",
     "realtime_voice_allowance_extensions:9fb939718d31830635a0dbc2",
     "realtime_voice_session_reservations:ee7e57675d79e72b3bcfbc5a",
@@ -1157,12 +1157,12 @@
    "openai": [],
    "jev": [],
    "prompts": [
-    "59c10c59cf1a1d45c61dbc87",
-    "feb7079d6ab682bde23055fc",
-    "7c45691a2fcbd68529c6cc5f",
-    "f5575b31f5aff3fa9e9a0953",
-    "067aa720d9b86a932c304f7a",
-    "e8e90132505e5f4abd6c4168"
+    "3b840d448252de3e33dc3618",
+    "f5b12bc7beedd502b55c668c",
+    "c5a2b3a1e0a84e135351112c",
+    "6117afe91734ef1645f4039d",
+    "c0c49fe09c6f0601a19a1bde",
+    "3007564404c0a84ecb54751b"
    ],
    "state": [
     "activity_events:86b0248d79430b77d9cc0abb",
@@ -1174,13 +1174,13 @@
     "agent_workspace_resource_requests:9eb70dad2b69f004b77c695e",
     "background_jobs:530c5fe4bfadf9a0042249ba",
     "companion_states:44717780e9b4a71b3a208b77",
-    "conversation_messages:119735644b11aa3c92c95fea",
+    "conversation_messages:296e248389a5d01d31f78b3c",
     "conversation_replay_summaries:433fb866f7346d6523d89f1f",
     "conversation_threads:888c94407af095f4ea5aad8b",
     "conversation_tool_traces:009d7a3529ab1209906f35b2",
     "experience_events:be46d45e8ca6cf595cbaedd7",
     "initiative_loop_runs:a43386cf1fa0e5ad5fad4988",
-    "initiative_messages:9c34ae932c691e0e414911e7",
+    "initiative_messages:79eaafcf25438288898f2aba",
     "knowledge_answers:47c78b76d409ad8632417160",
     "knowledge_evidence:18278ff882c2a9fe269cdb0f",
     "knowledge_revisions:e578b552fe5cfb20a58df050",
@@ -1214,7 +1214,7 @@
     "shannon_value_versions:2cee4c7a0b01ce5a72b7a2a1",
     "sleep_runs:d783f78ce38264f6eb3bb77b",
     "turn_captures:2f4150f303ae768033d3f62a",
-    "autonomy/autonomy_activity:0ceae31195c0df5837166b91",
+    "autonomy/autonomy_activity:265343b3c8df7e297b6b0b77",
     "autonomy/autonomy_budget_requests:c6142d68cc3aaf1f3f7e625f",
     "autonomy/autonomy_control:866cd851b0b39c73ce45ab70",
     "autonomy/autonomy_host_operations:ce9802f1ca8270c67d05b63d",
@@ -1226,7 +1226,7 @@
     "autonomy/autonomy_loop_readings:0b466093cda3af503d6e5287",
     "autonomy/autonomy_loop_schedule:bb07f48966d6effbbb9d6026",
     "autonomy/autonomy_loop_sessions:1305c63937cc72a54c726341",
-    "autonomy/autonomy_loop_steps:2f31a08c15ab864f171448b5",
+    "autonomy/autonomy_loop_steps:8254cfa03382d05fc770f168",
     "autonomy/autonomy_model_preferences:e9f35574de48ade857c7a670",
     "autonomy/autonomy_proposals:6b38c2e0ef6a4c917262c027",
     "autonomy/autonomy_pursuits:929b5baee5f6a5b3ebfa7f1d",

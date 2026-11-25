@@ -5,6 +5,7 @@ import {
 } from './types.js';
 import { accuracyOverrideApplies, supportOverrideFor } from './emotionOverrides.js';
 import { SHANNON_EMOTION_CONTINUITY } from './emotionTime.js';
+import { SHANNON_OWNER_NAME, ownerNameOf } from './persona.js';
 
 const EMOTION_SET = new Set<string>(SHANNON_EMOTION_KINDS);
 const PLAYFUL = new Set<ShannonEmotionKind>([
@@ -162,7 +163,7 @@ export function normalizeShannonExpressiveEmotion(
   return Object.freeze({
     primary: isShannonEmotionKind(emotion.primary) ? emotion.primary : 'neutral',
     secondary: Object.freeze(secondary), intensity: clamp(emotion.intensity, 0, 1),
-    target: compact(emotion.target, 80) || '会話', cause: compact(emotion.cause, 240) || '会話文脈',
+    target: ownerNameOf(compact(emotion.target, 80)) || '会話', cause: compact(emotion.cause, 240) || '会話文脈',
     arousal: clamp(emotion.arousal, 0, 1), valence: clamp(emotion.valence, -1, 1), visibility,
     startedAt: Number.isFinite(Date.parse(emotion.startedAt)) ? emotion.startedAt : new Date(0).toISOString(),
     decay: clamp(emotion.decay, 0, 1), carryover: clamp(emotion.carryover, 0, 1),
@@ -194,7 +195,7 @@ export function restoreShannonExpressiveEmotion(
       ? row.secondary.filter((item): item is ShannonEmotionKind => typeof item === 'string' && isShannonEmotionKind(item))
       : [],
     intensity: number(row.intensity, fallback.intensity),
-    target: typeof row.target === 'string' ? row.target : fallback.target,
+    target: typeof row.target === 'string' ? ownerNameOf(row.target) : fallback.target,
     cause: typeof row.cause === 'string' ? row.cause : fallback.cause,
     arousal: number(row.arousal, fallback.arousal), valence: number(row.valence, fallback.valence),
     visibility: row.visibility === 'subtle' || row.visibility === 'expressed' ? row.visibility : 'hidden',
@@ -327,7 +328,7 @@ export function resolveShannonEmotionState(
     primary,
     secondary: Object.freeze(secondary),
     intensity,
-    target: compact(input.target ?? 'ライ氏', 80) || 'ライ氏',
+    target: ownerNameOf(compact(input.target ?? SHANNON_OWNER_NAME, 80)) || SHANNON_OWNER_NAME,
     cause,
     arousal: profile.arousal,
     valence: profile.valence,
@@ -392,7 +393,7 @@ function resurfacedShannonEmotion(previous: ShannonExpressiveEmotion, kind: Shan
   const intensity = clamp(strength, 0, 1);
   const secondary = previous.primary !== 'neutral' && previous.primary !== kind && !unsafeCombination(kind, previous.primary) ? [previous.primary] : [];
   return Object.freeze({
-    primary: kind, secondary: Object.freeze(secondary), intensity, target: 'ライ氏', cause: CARRIED_CAUSE,
+    primary: kind, secondary: Object.freeze(secondary), intensity, target: SHANNON_OWNER_NAME, cause: CARRIED_CAUSE,
     ...emotionProfile(kind, intensity), visibility: visibilityFor(intensity), startedAt: validTimestamp(now),
     decay: decayFor(kind), carryover: intensity, updatedAt: validTimestamp(now),
     ...(previous.awakeAt !== undefined ? { awakeAt: previous.awakeAt } : {}),
@@ -458,8 +459,8 @@ export function buildExpressiveEmotionPrompt(
     `primary=${emotion.primary}; secondary=${emotion.secondary.join(',') || 'none'}; intensity=${emotion.intensity.toFixed(2)}; visibility=${emotion.visibility}`,
     `target=${emotion.target}; cause=${audience === 'others' ? 'withheld while others can hear' : emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
     audience === 'guest'
-      ? 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.'
-      : `Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.${audience === 'others' ? ' Do not say why you feel this way while others can hear.' : ''}`,
+      ? 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ and do not address them as ライ. Let emotion shape wording and rhythm without naming the label.'
+      : `Keep first person as ボク and address the owner as ライ when natural. Let emotion shape wording and rhythm without naming the label.${audience === 'others' ? ' Do not say why you feel this way while others can hear.' : ''}`,
     'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');

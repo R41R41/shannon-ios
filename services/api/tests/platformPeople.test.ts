@@ -90,7 +90,7 @@ describe('contract: the requests in docs/platform-people-contract.md', () => {
     expect(Object.keys(first).sort()).toEqual(['duplicate', 'experienceId', 'threadId']);
     expect(first).toMatchObject({ duplicate: false, threadId: platformBridgeThreadId('discord', 'discord:111:222') });
     expect(bridge.ingest(request)).toEqual({ ...first, duplicate: true });
-    expect(store.conversationHistory('owner', first.threadId).map(message => message.content)).toEqual(['今日はここまでにするね', 'お疲れさまでした、ライ氏。']);
+    expect(store.conversationHistory('owner', first.threadId).map(message => message.content)).toEqual(['今日はここまでにするね', 'お疲れさまでした、ライ。']);
     expect(peopleStore.listPeople('owner')).toEqual([]);
     // Today's context request, without any of the new fields.
     const context = bridge.context({ platform: 'discord', conversationId: 'discord:111:222', sourceUserId: OWNER });
@@ -304,7 +304,7 @@ describe('using it', () => {
     expect(context.projection).toContain('- (2026-10-02 友人グループ（Discord）) ミキさんは辛いものが苦手');
     expect(context.projection).toContain('ケンさんは猫が好き');
     // The owner's protected item is marked, his secret is absent.
-    expect(context.projection).toContain('【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    expect(context.projection).toContain('【機微:健康・ライだけが知っている】ユーザーは病院が苦手');
     expect(context.projection).not.toContain('ウォンバット会');
     expect(context.projection.length).toBeLessThanOrEqual(2_400);
     // Another channel of the same guild is another audience: what was said there stays there (final review of 2026-10-06:

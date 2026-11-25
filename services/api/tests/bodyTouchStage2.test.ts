@@ -27,7 +27,7 @@ async function world(options: { record?: boolean } = {}) {
   const harness = await reactionHarness({ stage2: true, prediction: record, experiences });
   const rows = () => new SQLitePredictionStore(database, { createSchema: false }).rows(scope).filter(row => row.domain === 'body_stance');
   const decide = (stance: BodyReactionDecision['stance'], feeling: BodyReactionDecision['feeling'] = 'neutral', say = false) => {
-    harness.speaker.decision = { say, text: say ? 'もう、ライ氏。' : '', feeling, ...(stance ? { stance } : {}) };
+    harness.speaker.decision = { say, text: say ? 'もう、ライ。' : '', feeling, ...(stance ? { stance } : {}) };
   };
   const apply = (event: Parameters<typeof harness.stateStore.apply>[1]) => harness.stateStore.apply(scope, event);
   return { ...harness, record, rows, decide, memories, apply };
@@ -236,7 +236,7 @@ describe('the request path with a real record (deferred, as in production)', () 
     await w.send('POST', '/v1/body/reactions', { id: 'forgotten-1', touch: { type: 'poke', durationMs: 300, ongoing: false, part: 'neck', region: 'body', gesture: 'poke' }, audience: 'owner', occurredAt: w.clock.at });
     const burst = w.reactionStore.burstOfTouch(scope, 'forgotten-1')!;
     w.stateStore.apply(scope, { type: 'memory-control-upserted', control: {
-      memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライ氏が忘れてと言った',
+      memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライが忘れてと言った',
     } });
     w.flush();
     expect(w.rows()).toHaveLength(0);
@@ -267,7 +267,7 @@ describe('what she is told and what she remembers', () => {
     w.advance(MINUTE);
     await w.said({ type: 'poke', part: 'neck', region: 'body', gesture: 'poke' }, { audience: 'others' });
     const [first, second, third] = w.speaker.prompts;
-    expect(first).toContain('ライ氏との親密さ: ');
+    expect(first).toContain('ライとの親密さ: ');
     expect(first).toContain('首に触れられてボクが受け取りを決めるのは、これが初めて');
     expect(second).toContain('これまで首に触れられた時のボクの受け取り: いや 1回');
     expect(third).not.toContain('親密さ');
@@ -289,7 +289,7 @@ describe('what she is told and what she remembers', () => {
     w.decide('fine');
     await w.said({ type: 'pet' });
     await w.said({ type: 'poke', part: 'cheek', region: 'face', gesture: 'poke' }, { audience: 'others' });
-    // Worded for who is there (scope (a)): 「ライ氏に」 with the owner alone, 「相手に」 with others present; once in each prompt.
+    // Worded for who is there (scope (a)): 「ライに」 with the owner alone, 「相手に」 with others present; once in each prompt.
     expect(w.speaker.prompts[0]).toContain(`- ${SHANNON_TEMPERAMENT}`);
     expect(w.speaker.prompts[1]).toContain(`- ${shannonTemperament('others')}`);
     for (const prompt of w.speaker.prompts) expect(prompt.split('嫌味では返さない').length - 1).toBe(1);
@@ -327,7 +327,7 @@ describe('what she is told and what she remembers', () => {
     w.speaker.script = () => {
       const burst = w.reactionStore.burstOfTouch(scope, 'touch-1')!;
       w.stateStore.apply(scope, { type: 'memory-control-upserted', control: {
-        memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライ氏が忘れてと言った',
+        memoryId: burst.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: w.clock.at, changeReason: 'ライが忘れてと言った',
       } });
       return { say: false, text: '', feeling: 'indignant', stance: 'refuse' };
     };

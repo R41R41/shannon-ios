@@ -118,7 +118,7 @@ export function personImpressionViews(
       text: `シャノンの印象: ${impressionText(row, impressionSubject(row, people))}／${described(row, state, check, people)}`,
       observedAt: row.lastSeenAt, audience: describeAudience(resolved.audience, nameOf),
       sensitivity: resolved.sensitivity ?? 'sensitive', decidedBy: resolved.decidedBy === 'owner' ? 'owner' as const : 'rule' as const,
-      reason: resolved.decidedBy === 'owner' ? 'ライ氏が選んだ扱い' : resolved.category ? `${SENSITIVITY_CATEGORY_LABELS[resolved.category]}（${resolved.reason ?? ''}）` : resolved.reason ?? '',
+      reason: resolved.decidedBy === 'owner' ? 'ライが選んだ扱い' : resolved.category ? `${SENSITIVITY_CATEGORY_LABELS[resolved.category]}（${resolved.reason ?? ''}）` : resolved.reason ?? '',
       status: (control?.status ?? 'active') === 'active' ? 'active' as const : 'forgotten' as const,
     };
   });

@@ -32,7 +32,7 @@ const scope = 'owner';
 const at = '2026-10-06T01:00:00.000Z';
 const SECRET = 'ウォンバット会の集まりに毎月出ている';
 const HEALTH = '最近胃の調子が悪くて病院に通っている';
-const NOTE = `今日はライ氏と灯台の話をした。ライ氏は${SECRET}らしい。ライ氏は${HEALTH}そうだ。\n灯台の光は夜に十二回まわる。`;
+const NOTE = `今日はライと灯台の話をした。ライは${SECRET}らしい。ライは${HEALTH}そうだ。\n灯台の光は夜に十二回まわる。`;
 const servers: FakeAether[] = [];
 const directories: string[] = [];
 afterEach(async () => {
@@ -56,7 +56,7 @@ async function harness(options: { aether?: boolean } = {}) {
   const server: ConversationToolServer = conversationToolServer(null, { snapshot: () => state as never },
     { experienceCandidates: () => [], conversationHistory: () => [], recentMessages: () => [] }, () => at);
   const note = fake.put({ title: '灯台の話', body: NOTE, projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
-  const owners = fake.ownerDocument('ライ氏の灯台メモ', '灯台はライ氏の文書にもある。');
+  const owners = fake.ownerDocument('ライの灯台メモ', '灯台はライの文書にもある。');
   const contexts: ToolExecutionContext[] = [];
   const call = service.tools.call.bind(service.tools);
   vi.spyOn(service.tools, 'call').mockImplementation((name, input, context, signal) => { contexts.push(context); return call(name, input, context, signal); });
@@ -86,7 +86,7 @@ describe('a guest-only turn (owner decision 2026-10-06)', () => {
       expect(offered.tools!.definitions.every(tool => tool.effect === 'read')).toBe(true);
       // Said without presuming the owner is there, and without naming his documents.
       expect(toolInstructions(offered.tools!, surface === 'voice')).toBe(TOOLS_GUESTS_INSTRUCTIONS);
-      expect(TOOLS_GUESTS_INSTRUCTIONS).not.toContain('ライ氏の文書');
+      expect(TOOLS_GUESTS_INSTRUCTIONS).not.toContain('ライの文書');
       expect(TOOLS_GUESTS_INSTRUCTIONS).not.toContain('二人だけ');
       expect(await result(offered.tools, 'aether_search', { query: '灯台' })).toMatchObject({ ok: false, failure: 'refused' });
       const found = await result(offered.tools, 'aether_search', { query: '灯台', scope: 'shannonFolder' });
@@ -135,14 +135,14 @@ describe('what she reads of her folder in front of others', () => {
     expect(toolInstructions(turn('others').tools!, false)).toBe(TOOLS_OTHERS_INSTRUCTIONS);
     // ADR-0007 revised: her works, unshown drafts included, may be read aloud with others present, without his approval first.
     for (const words of [TOOLS_OTHERS_INSTRUCTIONS, TOOLS_GUESTS_INSTRUCTIONS]) {
-      expect(words).toContain('まだライ氏に見せていない下書きも、ここで読み上げたり話したりしてよい');
+      expect(words).toContain('まだライに見せていない下書きも、ここで読み上げたり話したりしてよい');
       expect(words).not.toContain('承認');
     }
     for (const offered of [turn('others'), turn('others', 'voice'), turn('shared'), turn('guests', 'voice')]) {
       const text = (await read(offered)).text;
       expect(text).not.toContain('ウォンバット');
       expect(text).not.toContain('胃の調子');
-      expect(text).toContain('今日はライ氏と灯台の話をした。');
+      expect(text).toContain('今日はライと灯台の話をした。');
       expect(text).toContain('灯台の光は夜に十二回まわる。');
       expect(text).toContain(LEFT_OUT_LINE);
       // With him there, all of what she read is unlabelled derived text: marked as a whole, for the speak-time check.
@@ -186,7 +186,7 @@ describe('what she reads of her folder in front of others', () => {
     // A secret written with another separator is cut there too: a space, an emoji, 、 (review of 2c95adff).
     for (const secret of ['来月に手術 病院は東大病院', '来月に手術🏥病院は東大病院', '来月に手術、病院は東大病院', '来月に手術．病院は東大病院']) {
       const separated = { withheld: runCheckOf([secret]), guarded: runCheckOf([]), openOnly: true };
-      expect(textForOthers('ライ氏は来月に手術。灯台を見た。', separated)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+      expect(textForOthers('ライは来月に手術。灯台を見た。', separated)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
       // An ordinary sentence that only shares a short word of it (病院) stays.
       expect(textForOthers('病院の前を通った。', separated)).toBe('病院の前を通った。');
     }
@@ -203,7 +203,7 @@ describe('what she reads of her folder in front of others', () => {
     }
     // A sentence of a secret in hiragana alone is matched too; only short filler of a secret is skipped.
     const hiragana = { withheld: runCheckOf(['うつになった。そうなんだ。病院は東大病院']), guarded: runCheckOf([]), openOnly: true };
-    expect(textForOthers('ライ氏はうつになった。灯台を見た。', hiragana)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
+    expect(textForOthers('ライはうつになった。灯台を見た。', hiragana)).toBe(`灯台を見た。\n${LEFT_OUT_LINE}`);
     expect(textForOthers('そうなんだ。灯台を見た。', hiragana)).toBe('そうなんだ。灯台を見た。');
   });
 });
@@ -247,7 +247,7 @@ describe('turns with others present on a platform and in app text (owner decisio
       // What the owner told her alone, and her note that repeats his words (a run of ten characters; a retelling in other words is not caught).
       await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'app-talk', message: 'これは内緒だけど、来月転職するつもり' } });
       await api.waitForBackground(scope);
-      model.documentId = fake.put({ title: '今日のこと', body: 'ライ氏が「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
+      model.documentId = fake.put({ title: '今日のこと', body: 'ライが「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
       const turnsWithOthers: Array<[string, boolean, () => Promise<unknown>]> = [
         // Someone else's turn (openOnly): his private things are left out, and nothing is marked.
         ['friend', false, () => service.reply({ platform: 'discord', requestId: `f-${configured}`, conversationId: 'discord:111:222', conversationKind: 'channel',
@@ -292,7 +292,7 @@ describe('a friend in 「友人も一緒」 (voice)', () => {
     const api = createLocalApiKernel(now, { chatModel: model, autonomy });
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'talk', message: 'これは内緒だけど、来月転職するつもり' } });
     await api.waitForBackground(scope);
-    model.documentId = fake.put({ title: '今日のこと', body: 'ライ氏が「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
+    model.documentId = fake.put({ title: '今日のこと', body: 'ライが「これは内緒だけど、来月転職するつもり」と話してくれた。灯台の本を読んだ。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' }).id;
     const say = (transcript: string, callContext: boolean) => api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
       scopeKey: scope, threadId: 'talk', transcript, participantMode: 'guest',
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,

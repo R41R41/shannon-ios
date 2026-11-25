@@ -194,11 +194,11 @@ export const INNER_NOTE_HONESTY_LINE = 'Playful lies and hiding her own feelings
 
 /**
  * The address line of the same block, which asked her to name him 「when natural」 while the voice's own line asks her not to open
- * every reply with 「ライ氏、」 (2026-10-14: seven of seven voice replies began 「ライ氏、」).
+ * every reply with 「ライ、」 (2026-10-14: seven of seven voice replies began 「ライ、」).
  */
-export const ADDRESS_WHEN_NATURAL = 'Keep first person as ボク and address the owner as ライ氏 when natural.';
+export const ADDRESS_WHEN_NATURAL = 'Keep first person as ボク and address the owner as ライ when natural.';
 /** Its place while her inner note is on: his name when naming him means something, never as an opener. */
-export const INNER_NOTE_ADDRESS_LINE = 'Keep first person as ボク. When you name the owner he is ライ氏; name him only when it means something '
+export const INNER_NOTE_ADDRESS_LINE = 'Keep first person as ボク. When you name the owner he is ライ; name him only when it means something '
   + '(calling to him, a feeling toward him, a joke), never as the opening of a reply.';
 
 /** `buildExpressiveEmotionPrompt` with those three lines in their inner-note wording; every other line as it is. */

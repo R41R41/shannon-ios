@@ -27,8 +27,8 @@ const NEWS_QUERY = '今日の日本の主なニュース';
 
 function failure(error: unknown): ToolResult {
   const code = error instanceof WeatherError ? error.code : 'UNAVAILABLE';
-  if (code === 'NO_PLACE') return toolFailure('invalid_input', 'ライ氏の家の場所が設定されていないので、場所を書いて呼び直すか、どこのことかをライ氏に聞く。', { retryable: false });
-  if (code === 'NOT_FOUND') return toolFailure('not_found', 'その場所が見つからなかった。市や駅の名前で書き直すか、どこのことかをライ氏に聞く。', { retryable: false });
+  if (code === 'NO_PLACE') return toolFailure('invalid_input', 'ライの家の場所が設定されていないので、場所を書いて呼び直すか、どこのことかをライに聞く。', { retryable: false });
+  if (code === 'NOT_FOUND') return toolFailure('not_found', 'その場所が見つからなかった。市や駅の名前で書き直すか、どこのことかをライに聞く。', { retryable: false });
   if (code === 'TIMEOUT') return toolFailure('timeout', '予報の取得が時間内に終わらなかった。', { retryable: true });
   return toolFailure('unavailable', 'いまは予報を取得できなかった。', { retryable: true, refusal: { why: '天気の取得先に届かなかった', wouldWork: '少しあとでもう一度' } });
 }
@@ -104,7 +104,7 @@ export function dailyToolExecutors(ports: DailyToolPorts | undefined): Readonly<
             `声で言う2文（声ではこれだけを自然に言う）: ${brief.spoken}`,
             'アプリで見せるカード（Markdown、そのまま見せてよい）:',
             brief.card,
-            ...(missingHome ? ['ライ氏の家の場所が設定されていないので、天気は入っていない。place を書けば入る。'] : []),
+            ...(missingHome ? ['ライの家の場所が設定されていないので、天気は入っていない。place を書けば入る。'] : []),
           ].join('\n')),
           documents: { sourceIds },
         };

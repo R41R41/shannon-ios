@@ -56,7 +56,7 @@ export interface MemoryItem {
 }
 
 export interface MemoryDisclosureView {
-  /** 「ライ氏と二人の時」「ミキさんと一緒の時」「グループの会話」 */
+  /** 「ライと二人の時」「ミキさんと一緒の時」「グループの会話」 */
   audience: string;
   sensitivity: 'sensitive' | 'ordinary';
   /** `default`: recorded before labels existed, so it is treated as sensitive. */

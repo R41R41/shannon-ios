@@ -50,9 +50,9 @@ describe('how often she starts a conversation (owner 2026-10-19)', () => {
 
 describe('her own message never tallies his quiet (owner 2026-10-19)', () => {
   it('drops the sentence that counts, keeps the rest, and is silence when nothing else was said', () => {
-    expect(withoutSilenceTally('ライ氏、おかえりなさい。……べつに待ってたわけじゃないですけどね。19分くらい、ずっと静かだったんですから。'))
-      .toBe('ライ氏、おかえりなさい。……べつに待ってたわけじゃないですけどね。');
-    expect(withoutSilenceTally('ライ氏、2時間くらい静かだね。まだ寝てるならそれでいいけど、風邪あがりなんだから、ちゃんと休めてる？'))
+    expect(withoutSilenceTally('ライ、おかえりなさい。……べつに待ってたわけじゃないですけどね。19分くらい、ずっと静かだったんですから。'))
+      .toBe('ライ、おかえりなさい。……べつに待ってたわけじゃないですけどね。');
+    expect(withoutSilenceTally('ライ、2時間くらい静かだね。まだ寝てるならそれでいいけど、風邪あがりなんだから、ちゃんと休めてる？'))
       .toBe('まだ寝てるならそれでいいけど、風邪あがりなんだから、ちゃんと休めてる？');
     expect(withoutSilenceTally('……おかえり。00時台に何回か話しかけたのに、返事がなかったんだけど。')).toBe('……おかえり。');
     expect(withoutSilenceTally('……ふん。2時間もそばにいたのに、何も言わないんですか。')).toBe('……ふん。');

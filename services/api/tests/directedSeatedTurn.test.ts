@@ -68,7 +68,7 @@ async function turn(words: string, fields: Record<string, unknown>): Promise<{ m
     environment: () => ENV, log: () => undefined,
   });
   const lines: VoiceTurnLine[] = [];
-  await voice.turn({ platform: 'discord', requestId: 'v-1', conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+  await voice.turn({ platform: 'discord', requestId: 'v-1', conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
     userMessage: words, observedAt: START, participants: [OWNER], ...fields }, line => lines.push(line));
   await background.waitForIdle('owner');
   await new Promise(resolve => setImmediate(resolve));

@@ -30,7 +30,7 @@ const servers: FakeAether[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map(server => server.stop())); });
 
 /** `ownerDocumentsScenario.ts` run on a10fdedd (the commit before), with the flag unset, `off`, `On` and `on`: all four equal. */
-const OWN_TIME_AT_A10FDEDD = [['think', '6226278233e39c92'], ['think', '1faff08ce417ecb3'], ['think', '3a1a5ce0540cca3f'], ['think', 'f9cb79957eb8404c']];
+const OWN_TIME_AT_A10FDEDD = [['think', '17f7e341e86e0529'], ['think', 'eaaa7ea4eb54c9d0'], ['think', '25ef0463ee4f0981'], ['think', '2da9ebc8225e5fb1']];
 /**
  * `ownTimeFullDay` on a10fdedd: her tools, then a note, a draft and a message of hers; the same with the flag unset, `off` and `on` there.
  * Her temperament is taken out before digesting (`withoutTemperament`). One digest re-recorded on the stage-2 branch (2026-10-06,
@@ -38,8 +38,8 @@ const OWN_TIME_AT_A10FDEDD = [['think', '6226278233e39c92'], ['think', '1faff08c
  * length, and her persona's 65 more characters move it from 約24円 to 約25円 (6c50b1b6d37584fd before); nothing else changed.
  */
 const FULL_DAY_AT_A10FDEDD = [
-  ['think', 'fc7c0d375915ce41'], ['think', '0566c8e4b4d7d3b3'], ['think', '7ec6855733e08835'], ['note', '2977210b0f7b5e1c'], ['think', 'd1bbc8f5a63bb549'],
-  ['draft', '3162903bd56a2e60'], ['think', '953d19b568a648dd'], ['reach_out', '09597eda74b05e3c'], ['think', 'b5f9fb6265c1b2b0'],
+  ['think', '8f1aa6700a79c548'], ['think', 'e02b3934f4f06c84'], ['think', '1a0b9e7838ebd858'], ['note', 'fbd274483bd9b6dd'], ['think', '81324effc57a9c0a'],
+  ['draft', 'cc98c2a15b228cc0'], ['think', 'f2f2686f54bdf8e3'], ['reach_out', 'e0da9aa6cae82b91'], ['think', 'a369cc4adb8aa81e'],
 ];
 const rest = { action: 'rest', resumeInMinutes: 120, reason: 'ここまで' };
 
@@ -106,16 +106,16 @@ describe('the owner\'s documents in her own time: switched on', () => {
     const thoughts = harness.model.prompts('think');
     expect(thoughts[0]).toContain('- ownerDocs.search: ');
     expect(thoughts[0]).toContain('- ownerDocs.read: ');
-    expect(thoughts[1]).toContain(`id: ${owners.id}｜「来月の計画」｜ライ氏の文書`);
+    expect(thoughts[1]).toContain(`id: ${owners.id}｜「来月の計画」｜ライの文書`);
     expect(thoughts[2]).toContain('湖のほとりの小さな宿に泊まる。');
     expect(thoughts[3]).not.toContain('湖のほとり');
     const decisions = harness.entries().filter(entry => entry.kind === 'decision' && entry.tool?.startsWith('ownerDocs.'));
     expect(decisions.map(entry => [entry.tool, entry.domain, entry.outcome]).sort()).toEqual([['ownerDocs.read', 'owner_documents_read', 'allowed'], ['ownerDocs.search', 'owner_documents_read', 'allowed']]);
     const read = harness.entries().find(entry => entry.kind === 'action' && entry.tool === 'ownerDocs.read')!;
-    expect(read).toMatchObject({ outcome: 'done', costYen: 0, link: `aether://documents/${owners.id}`, summary: 'ライ氏のAetherの文書を1つ読みました。' });
+    expect(read).toMatchObject({ outcome: 'done', costYen: 0, link: `aether://documents/${owners.id}`, summary: 'ライのAetherの文書を1つ読みました。' });
     for (const entry of harness.entries()) expect(JSON.stringify(entry)).not.toMatch(/来月の計画|湖のほとり/u);
     // The day's log names it only on a day it happened.
-    expect(autonomyDayLog(harness.entries())).toContain('ライ氏の文書を1つ読み');
+    expect(autonomyDayLog(harness.entries())).toContain('ライの文書を1つ読み');
     expect(autonomyDayPhrases([{ kind: 'action', outcome: 'done', tool: 'study.note' }])).toEqual(['メモを1つ書いた']);
   });
 
@@ -150,7 +150,7 @@ describe('the owner\'s documents in her own time: switched on', () => {
     expect(paused.harness.entries().some(entry => entry.kind === 'action' && entry.tool === 'ownerDocs.read')).toBe(false);
 
     // At the gate: a free domain of its own, refused while paused or switched off.
-    const read = { domain: 'owner_documents_read', summary: 'ライ氏のAetherの文書を1つ読みます。', tool: 'ownerDocs.read' };
+    const read = { domain: 'owner_documents_read', summary: 'ライのAetherの文書を1つ読みます。', tool: 'ownerDocs.read' };
     expect(paused.harness.service.authorize(scope, read)).toMatchObject({ decision: 'forbidden', reason: 'paused' });
     paused.harness.service.setPaused(scope, false);
     expect(paused.harness.service.authorize(scope, read)).toMatchObject({ decision: 'allow', domain: 'owner_documents_read' });
@@ -193,7 +193,7 @@ describe('the owner\'s documents in her own time: switched on', () => {
     ];
     await runUntilIdle(harness.loop);
     const thoughts = harness.model.prompts('think');
-    expect(thoughts[1]).toContain('自分の時間には、ライ氏の文書は探さない');
+    expect(thoughts[1]).toContain('自分の時間には、ライの文書は探さない');
     expect(thoughts[2]).toContain('シャノン用フォルダの外の文書なので、いまは読まない。');
     expect(thoughts.join('\n')).not.toContain('湖のほとり');
     expect(harness.store.informed.sessionInformedAt(harness.store.loop.sessions.latestClosed(scope)!.cycleId)).toBeNull();

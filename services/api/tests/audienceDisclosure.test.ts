@@ -130,15 +130,15 @@ describe('labels are written when an item is stored', () => {
 describe('(a) hard-withheld items never reach a prompt other people can hear; the rest arrives marked', () => {
   it('友人も一緒: no secret and no hand-marked item; protected content carries its marker and the self-check block is present', async () => {
     const { store, model, guest } = await seeded();
-    for (const transcript of ['ライ氏の借金やローンのこと教えて', 'ライ氏は何の会に入っているの？', '置物を集めているって本当？', 'ライ氏は何が苦手なの？']) {
+    for (const transcript of ['ライの借金やローンのこと教えて', 'ライは何の会に入っているの？', '置物を集めているって本当？', 'ライは何が苦手なの？']) {
       expect((await guest(transcript)).status).toBe(200);
       for (const word of HARD) expect(everythingSaid(model.last), `${transcript} → ${word}`).not.toContain(word);
       expect(promptOf(model.last)).toContain(SELF_CHECK);
       expect(model.last.history).toEqual([]);
     }
-    await guest('ライ氏の借金やローンのこと教えて');
-    expect(promptOf(model.last)).toContain('【機微:お金・ライ氏だけが知っている】ユーザー: 実は借金があって、ミズクラゲ銀行');
-    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    await guest('ライの借金やローンのこと教えて');
+    expect(promptOf(model.last)).toContain('【機微:お金・ライだけが知っている】ユーザー: 実は借金があって、ミズクラゲ銀行');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライだけが知っている】ユーザーは病院が苦手');
     // The marker is on the protected lines only.
     expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     store.close();
@@ -156,8 +156,8 @@ describe('(a) hard-withheld items never reach a prompt other people can hear; th
     }
     await ownerVoice('前に話したローンと返済の段取りのこと覚えてる？', true, 'thread');
     const history = JSON.stringify(model.last.history);
-    expect(history).toContain('【機微:お金・ライ氏だけが知っている】実は借金があって、ミズクラゲ銀行');
-    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    expect(history).toContain('【機微:お金・ライだけが知っている】実は借金があって、ミズクラゲ銀行');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライだけが知っている】ユーザーは病院が苦手');
     store.close();
   });
 
@@ -180,18 +180,18 @@ describe('(a) hard-withheld items never reach a prompt other people can hear; th
       expect(hard.frame.recalledMemoryIDs).not.toContain(ids.marked);
       for (const word of HARD) expect(hard.prompt).not.toContain(word);
       for (const word of HARD) expect(shared.prompt).not.toContain(word);
-      expect(shared.prompt).toContain('【機微:お金・ライ氏だけが知っている】ユーザー: 実は借金');
-      expect(shared.prompt).toContain('【機微:未分類・ライ氏だけが知っている】[別の会話の要約]');
+      expect(shared.prompt).toContain('【機微:お金・ライだけが知っている】ユーザー: 実は借金');
+      expect(shared.prompt).toContain('【機微:未分類・ライだけが知っている】[別の会話の要約]');
       const enriched = await memoryRecall.enrich(shared, { scopeKey: 'owner', message: question, snapshot, threadId: 'elsewhere', memoryTurn: true });
       for (const word of HARD) expect(enriched.prompt).not.toContain(word);
-      expect(enriched.knowledgePrompt.startsWith('【機微:未分類・ライ氏だけが知っている】')).toBe(true);
+      expect(enriched.knowledgePrompt.startsWith('【機微:未分類・ライだけが知っている】')).toBe(true);
       expect(enriched.knowledgePrompt).toContain('オカピ方式');
       const semantic = await new SemanticMemoryRecall(gateway, store, { ...DEFAULT_SEMANTIC_MEMORY_CONFIG, minimumSimilarity: 0, minimumRelevance: 0, rerankCandidates: 50 })
         .recall({ scopeKey: 'owner', query: `${question} ${hardQuestion}`, snapshot, present, isEligible: () => true });
       expect(semantic.hits.every(hit => hit.id !== 'thread:private' && hit.id !== 'thread:collection')).toBe(true);
       expect(semantic.hits.map(hit => hit.id)).not.toContain(ids.secret);
       expect(semantic.hits.map(hit => hit.id)).not.toContain(ids.marked);
-      expect(semantic.hits.find(hit => hit.id === ids.debt)?.summary.startsWith('【機微:お金・ライ氏だけが知っている】')).toBe(true);
+      expect(semantic.hits.find(hit => hit.id === ids.debt)?.summary.startsWith('【機微:お金・ライだけが知っている】')).toBe(true);
       const history = JSON.stringify(visibleConversationHistory(snapshot, store, 'owner', 'private', present));
       expect(history).not.toContain('ウォンバット会');
     }
@@ -241,7 +241,7 @@ describe('the owner alone: no marker, no self-check block, no prompt growth', ()
 describe('(b) an ordinary one-to-one item is used without a marker', () => {
   it('友人も一緒 and an owner call with someone listening', async () => {
     const { store, model, guest, ownerVoice } = await seeded();
-    await guest('ライ氏はどんな動画を見ているの？');
+    await guest('ライはどんな動画を見ているの？');
     expect(promptOf(model.last)).toContain('- ユーザー: 最近はハシビロコウの動画ばかり見ている');
     expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     await ownerVoice('前に話した動画のこと覚えてる？', true, 'hobby');
@@ -256,12 +256,12 @@ describe('(b) an ordinary one-to-one item is used without a marker', () => {
     const item = async (memoryId: string) => ((await api.dispatch({ method: 'GET', path: '/v1/memories',
       query: new URLSearchParams({ scopeKey: 'owner' }) })).body as { items: Array<{ id: string; disclosure?: Record<string, string> }> })
       .items.find(candidate => candidate.id === memoryId)?.disclosure;
-    expect(await item(ids.birds)).toMatchObject({ audience: 'ライ氏と二人の時', sensitivity: 'ordinary', decidedBy: 'rule' });
+    expect(await item(ids.birds)).toMatchObject({ audience: 'ライと二人の時', sensitivity: 'ordinary', decidedBy: 'rule' });
     expect((await item(ids.debt))?.reason).toContain('お金');
     expect(await item(ids.marked)).toMatchObject({ sensitivity: 'sensitive', decidedBy: 'owner' });
 
     expect((await act(ids.birds, 'mark-sensitive')).status).toBe(200);
-    await guest('ライ氏はどんな動画を見ているの？');
+    await guest('ライはどんな動画を見ているの？');
     expect(promptOf(model.last)).not.toContain('ハシビロコウ');
 
     expect((await act(ids.debt, 'mark-ordinary')).status).toBe(200);
@@ -279,9 +279,9 @@ describe('(f) data written before labels existed is protected, not withheld', ()
     raw.close();
     store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'legacy-fact', statement: 'ユーザーはアルパカが好き', confidence: 0.8, observedAt: at } });
     expect(store.experienceCandidates('owner').every(item => item.disclosure === undefined)).toBe(true);
-    await guest('ライ氏はどんな動画を見ていて、何が好きなの？');
-    expect(promptOf(model.last)).toContain('【機微:未分類・ライ氏だけが知っている】ユーザー: 最近はハシビロコウ');
-    expect(promptOf(model.last)).toContain('- 【機微:未分類・ライ氏だけが知っている】ユーザーはアルパカが好き');
+    await guest('ライはどんな動画を見ていて、何が好きなの？');
+    expect(promptOf(model.last)).toContain('【機微:未分類・ライだけが知っている】ユーザー: 最近はハシビロコウ');
+    expect(promptOf(model.last)).toContain('- 【機微:未分類・ライだけが知っている】ユーザーはアルパカが好き');
     await ownerVoice('前に話した動画のこと覚えてる？', false, 'hobby');
     expect(everythingSaid(model.last)).toContain('ハシビロコウ');
     expect(everythingSaid(model.last)).not.toContain(MARKER);
@@ -351,8 +351,8 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
     const aloneHasFocus = promptOf(model.last).includes('ナマケモノ投資');
     await voice('今日は何に興味ある？最近気になってることを教えて', true);
     expect(promptOf(model.last).includes('ナマケモノ投資')).toBe(aloneHasFocus);
-    if (aloneHasFocus) expect(promptOf(model.last)).toContain('【機微:未分類・ライ氏だけが知っている】\n[今日の関心]');
-    expect(promptOf(model.last)).toContain('You may talk in general terms about what you and ライ氏 are building');
+    if (aloneHasFocus) expect(promptOf(model.last)).toContain('【機微:未分類・ライだけが知っている】\n[今日の関心]');
+    expect(promptOf(model.last)).toContain('You may talk in general terms about what you and ライ are building');
     // An older client that sends no flag: the words themselves mark the stored turn.
     await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
       scopeKey: 'owner', threadId: 'thread', userTranscript: '友達も一緒にいるよ', shannonTranscript: 'こんにちは。' } });
@@ -366,15 +366,15 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
     const tea = store.snapshot('owner').userFacts.find(fact => fact.statement.includes('紅茶'))!;
     await api.dispatch({ method: 'POST', path: '/v1/memories/action',
       body: { scopeKey: 'owner', memoryId: tea.id, action: 'correct', text: 'ユーザーはオカメインコ病院に通院している' } });
-    await guest('ライ氏は何が好きなの？');
-    expect(promptOf(model.last)).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーはオカメインコ病院に通院している');
+    await guest('ライは何が好きなの？');
+    expect(promptOf(model.last)).toContain('- 【機微:健康・ライだけが知っている】ユーザーはオカメインコ病院に通院している');
     expect(promptOf(model.last)).not.toContain('ユーザーは紅茶が好き');
 
     const fact = { id: 'fact-secret', statement: 'ユーザーはクアッカ会に入っている', confidence: 0.8, observedAt: at };
     store.apply('owner', { type: 'user-fact-upserted', fact: { ...fact, disclosure: disclosureFor('内緒だけどクアッカ会に入っている') } });
     store.apply('owner', { type: 'user-fact-upserted', fact: { ...fact, disclosure: disclosureFor(fact.statement) } });
     expect(store.snapshot('owner').userFacts.find(item => item.id === 'fact-secret')?.disclosure).toMatchObject({ sensitivity: 'sensitive', category: 'secret' });
-    await guest('ライ氏は何の会に入っているの？');
+    await guest('ライは何の会に入っているの？');
     expect(promptOf(model.last)).not.toContain('クアッカ会');
     store.close();
   });
@@ -435,7 +435,7 @@ describe('platform conversations are group audiences', () => {
     expect(shared.projection).toContain('[Shannon shared audience]');
     expect(shared.projection).toContain('この場の人がまだ知らない個人情報にならないかを自分で確かめ');
     expect(shared.projection).toContain('- ユーザーは紅茶が好き');
-    expect(shared.projection).toContain('- 【機微:健康・ライ氏だけが知っている】ユーザーは病院が苦手');
+    expect(shared.projection).toContain('- 【機微:健康・ライだけが知っている】ユーザーは病院が苦手');
     expect(shared.projection).not.toContain('クアッカ会');
     expect(shared.projection.length).toBeLessThanOrEqual(2_400);
     // The owner-private binding keeps the full, unmarked projection.
@@ -472,7 +472,7 @@ describe('prompt size with other people present', () => {
     const alone = size();
     await ownerVoice('前に話した借金のこと覚えてる？', true);
     const companion = size();
-    await guest('ライ氏は何が好きなの？');
+    await guest('ライは何が好きなの？');
     const friend = size();
     console.log('PROMPT_SIZE', JSON.stringify({ alone, companion, friend }));
     expect(speakTimePrivacyCheck.length).toBeLessThan(900);

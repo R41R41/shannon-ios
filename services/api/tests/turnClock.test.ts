@@ -30,7 +30,7 @@ describe('the owner\'s clock in a turn (owner decision 2026-10-13)', () => {
 
   it('says whose 「〜してた」 his words are, only for such a statement of his (owner test 2026-10-13)', () => {
     const clock = { at: '2026-10-13T13:46:00.000Z', timeZone: 'Asia/Tokyo' };
-    expect(ownerSubjectLine('シャノンのことを考えてた')).toContain('ライ氏がボクのことを考えていた');
+    expect(ownerSubjectLine('シャノンのことを考えてた')).toContain('ライがボクのことを考えていた');
     for (const words of ['今日は会社でずっと会議してたよ', '待ってました！']) expect(ownerSubjectLine(words), words).not.toBe('');
     for (const words of ['何してた？', '何してた', 'シャノンは何を考えてた？', 'シャノンが寝てた', 'おはよう', '明日の予定は？', undefined,
       // Review of 1a647abc: addressed to her, a second person, or someone else as the subject.

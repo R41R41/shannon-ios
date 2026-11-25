@@ -26,9 +26,9 @@ describe('the game → feeling table', () => {
   it('words every cause after 「マイクラで」, and tells a game feeling by it', () => {
     expect(gameCause({ kind: 'milestone', milestone: 'nether_entered' })).toBe('マイクラでネザーに着いた');
     expect(gameCause({ kind: 'died' })).toBe('マイクラで死んでしまった');
-    expect(gameCause({ kind: 'ownerNear' })).toBe('マイクラでライ氏がそばに来た');
+    expect(gameCause({ kind: 'ownerNear' })).toBe('マイクラでライがそばに来た');
     expect(isGameFeeling({ cause: 'マイクラでダイヤを見つけた' })).toBe(true);
-    expect(isGameFeeling({ cause: 'ライ氏に頭をなでてもらった' })).toBe(false);
+    expect(isGameFeeling({ cause: 'ライに頭をなでてもらった' })).toBe(false);
   });
 
   it('takes a bad hit, a long run of failures and a thought by their own rows, and nothing it cannot name', () => {

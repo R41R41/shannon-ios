@@ -150,14 +150,14 @@ describe('the 「可愛い」 case from the first sighting to 「また」', () 
     expect(second.prompt).not.toContain(IMPRESSION_HEADER);
     expect(h.rows()).toMatchObject([{ status: 'active', supportCount: 2, supportDays: 2 }]);
     // The model was shown what she already held, with its counts, and only a bounded slice of the turn.
-    expect(h.calls.at(-1)).toMatchObject({ person: 'ライ氏（持ち主）', maximumNew: 2,
-      impressions: [{ key: 'i1', pattern: `ライ氏は、${CUTE}`, seen: 1, contradicted: 0, status: 'candidate' }] });
+    expect(h.calls.at(-1)).toMatchObject({ person: 'ライ（持ち主）', maximumNew: 2,
+      impressions: [{ key: 'i1', pattern: `ライは、${CUTE}`, seen: 1, contradicted: 0, status: 'candidate' }] });
 
     h.nextDay();
     const third = await h.chat('シャノン、今日も可愛いね');
     expect(impressionBlock(third.prompt)).toBe([
       IMPRESSION_HEADER,
-      `- ライ氏は、${CUTE}（これまでに2回・最初は2日前・前回は昨日）／ボクの気持ち: ${PLEASED} ←いまの発言に重なっていそう`,
+      `- ライは、${CUTE}（これまでに2回・最初は2日前・前回は昨日）／ボクの気持ち: ${PLEASED} ←いまの発言に重なっていそう`,
       IMPRESSION_INSTRUCTION,
     ].join('\n'));
     // The reply's provenance names the impression, so forgetting it later withholds this reply too.
@@ -353,16 +353,16 @@ describe('forgetting', () => {
     await cuteFor(h, 2);
     const id = impressionMemoryId(h.rows()[0]!.id);
     const item = (await h.dashboard()).items.find(candidate => candidate.id === id)!;
-    expect(item).toMatchObject({ kind: 'relationship', status: 'active', text: `ライ氏は、${CUTE}／ボクの気持ち: ${PLEASED}`,
-      disclosure: { audience: 'ライ氏と二人の時', sensitivity: 'sensitive', decidedBy: 'rule' } });
+    expect(item).toMatchObject({ kind: 'relationship', status: 'active', text: `ライは、${CUTE}／ボクの気持ち: ${PLEASED}`,
+      disclosure: { audience: 'ライと二人の時', sensitivity: 'sensitive', decidedBy: 'rule' } });
     expect(item.changeReason).toBe('印象として使っています（気づいた回数 2回・最初 2026-09-20・最後 2026-09-21）');
     expect(item.evidence.map(entry => entry.quote)).toEqual(['シャノンは今日も可愛いね', 'シャノンは今日も可愛いね']);
     // The dashboard's own generic path never names a turn as the impression's evidence.
 
-    const corrected = await h.memory(id, 'correct', 'ライ氏は、照れ隠しでボクを可愛いと言う');
-    expect(corrected.dashboard.items.find(candidate => candidate.id === id)!.text).toBe('ライ氏は、照れ隠しでボクを可愛いと言う');
+    const corrected = await h.memory(id, 'correct', 'ライは、照れ隠しでボクを可愛いと言う');
+    expect(corrected.dashboard.items.find(candidate => candidate.id === id)!.text).toBe('ライは、照れ隠しでボクを可愛いと言う');
     h.nextDay();
-    expect(impressionBlock((await h.chat('可愛いね')).prompt)).toContain('- ライ氏は、照れ隠しでボクを可愛いと言う（これまでに2回・最初は2日前・前回は昨日） ←いまの発言に重なっていそう');
+    expect(impressionBlock((await h.chat('可愛いね')).prompt)).toContain('- ライは、照れ隠しでボクを可愛いと言う（これまでに2回・最初は2日前・前回は昨日） ←いまの発言に重なっていそう');
 
     const turnsBefore = h.store.experienceCandidates('owner').length;
     const forgotten = await h.memory(id, 'forget');
@@ -400,7 +400,7 @@ describe('audience', () => {
     const h = harness();
     await cuteFor(h, 2);
     const shared = (await h.chat('可愛いね', { audience: 'others' })).prompt;
-    expect(impressionBlock(shared)).toContain(`- 【機微:未分類・ライ氏だけが知っている】ライ氏は、${CUTE}`);
+    expect(impressionBlock(shared)).toContain(`- 【機微:未分類・ライだけが知っている】ライは、${CUTE}`);
     expect(shared).toContain('[Speak-time privacy check');
     await h.close();
   });
@@ -589,11 +589,11 @@ describe('voice', () => {
     h.nextDay();
     const alone = await h.ownerVoice('シャノン、今日も可愛いね');
     expect(impressionBlock(alone)).toBe([IMPRESSION_HEADER,
-      `- ライ氏は、${CUTE}（これまでに2回・最初は2日前・前回は昨日）／ボクの気持ち: ${PLEASED} ←いまの発言に重なっていそう`, IMPRESSION_INSTRUCTION].join('\n'));
+      `- ライは、${CUTE}（これまでに2回・最初は2日前・前回は昨日）／ボクの気持ち: ${PLEASED} ←いまの発言に重なっていそう`, IMPRESSION_INSTRUCTION].join('\n'));
     expect(alone).not.toContain('[Recalled memories');
     // With someone listening she answers only when addressed (voiceSilence.ts), so he says her name.
     const listening = await h.ownerVoice('シャノン、今日も可愛いね', true);
-    expect(impressionBlock(listening)).toContain(`- 【機微:未分類・ライ氏だけが知っている】ライ氏は、${CUTE}`);
+    expect(impressionBlock(listening)).toContain(`- 【機微:未分類・ライだけが知っている】ライは、${CUTE}`);
     await h.close();
   });
 });
@@ -650,7 +650,7 @@ describe('her own thinking and the worker', () => {
     const h = harness();
     await cuteFor(h, 2);
     expect(ownerImpressionLines(h.store, h.store.snapshot('owner'), 'owner', { at: h.now() }))
-      .toEqual([`- ライ氏は、${CUTE}（これまでに2回・最初は昨日・前回は今日）／ボクの気持ち: ${PLEASED}`]);
+      .toEqual([`- ライは、${CUTE}（これまでに2回・最初は昨日・前回は今日）／ボクの気持ち: ${PLEASED}`]);
     expect(ownerImpressionLines(h.store, h.store.snapshot('owner'), 'owner', { at: h.now(), present: groupAudience('g') })[0]).toContain('【機微:');
     await h.close();
   });
@@ -688,7 +688,7 @@ describe('the background call', () => {
         requests.push(JSON.parse(init.body) as Record<string, unknown>);
         return new Response(JSON.stringify({ output_text: JSON.stringify({ observations: [], candidates: [] }), usage: { input_tokens: 900, output_tokens: 40 } }), { status: 200 });
       }) as unknown as typeof fetch });
-    expect(await analyzer.analyze('owner', { person: 'ライ氏（持ち主）', localDate: '2026-10-02', lines: ['ライ氏: 可愛いね'], impressions: [], maximumNew: 2 }))
+    expect(await analyzer.analyze('owner', { person: 'ライ（持ち主）', localDate: '2026-10-02', lines: ['ライ: 可愛いね'], impressions: [], maximumNew: 2 }))
       .toEqual({ observations: [], candidates: [] });
     expect(requests[0]).toMatchObject({ model: 'gpt-5.6-terra', instructions: IMPRESSION_INSTRUCTIONS, max_output_tokens: 800, store: false });
     expect(usage).toMatchObject([{ lane: 'memory_background', inputTokens: 900, outputTokens: 40 }]);

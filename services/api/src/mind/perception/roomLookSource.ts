@@ -12,7 +12,7 @@ export const ROOM_SEEN_SOURCE_PREFIX = 'reach-out:saw:';
 /** Mirrors `REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX`: her second call after an unanswered message, worded with her note of a look in front of her. */
 export const ROOM_SEEN_FOLLOW_UP_SOURCE_PREFIX = 'reach-out:follow_up:seen:';
 /** What a notice outside the Talk says instead of such a message. */
-export const ROOM_LOOK_NOTICE_LINE = 'ライ氏、部屋のことでひとことあります。';
+export const ROOM_LOOK_NOTICE_LINE = 'ライ、部屋のことでひとことあります。';
 
 export function isRoomLookSource(sourceItemId: unknown): boolean {
   const source = typeof sourceItemId === 'string' ? sourceItemId : '';

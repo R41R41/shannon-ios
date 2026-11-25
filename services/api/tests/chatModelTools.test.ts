@@ -535,7 +535,7 @@ describe('the second waiting phrase after her own lead-in', () => {
 
 describe('one waiting phrase a spoken turn (2026-10-13)', () => {
   it('tells an announcement of a look from an answer', () => {
-    for (const said of ['ちょっと調べてみますね、ライ氏。', '少し確認してみますね。', 'ライ氏、ちょっと見てきますね！', 'うん、書いてみますね。',
+    for (const said of ['ちょっと調べてみますね、ライ。', '少し確認してみますね。', 'ライ、ちょっと見てきますね！', 'うん、書いてみますね。',
       '調べますね。', '確認しますね。', '検索してみますね！', '見てみますね。', 'では、天気を調べてみましょう。']) {
       expect(isWaitingAnnouncement(said), said).toBe(true);
     }
@@ -549,7 +549,7 @@ describe('one waiting phrase a spoken turn (2026-10-13)', () => {
     expect(echo.take('先に')).toBe('先に');
     echo.arm();
     expect(echo.take('ちょっと調べて')).toBe('');
-    expect(echo.take('みますね、ライ氏。メモが')).toBe('メモが');
+    expect(echo.take('みますね、ライ。メモが')).toBe('メモが');
     expect(echo.take('1つあります。')).toBe('1つあります。');
     echo.arm();
     expect(echo.take('晴れです。')).toBe('晴れです。');

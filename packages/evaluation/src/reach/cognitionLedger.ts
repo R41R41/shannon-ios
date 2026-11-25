@@ -37,7 +37,7 @@ export const cogReadingUsedScenario = definition('cog.reading-used', 'grow', '�
   ]);
 
 export const cogToolStreakScenario = definition('cog.tool-streak', 'grow', '頼まれた道具はデータだけ',
-  '会話の中で頼まれて使った道具は、ライ氏の頼みでシャノン自身の選択ではない。続けて成功しても失敗しても、記録として残るだけで、価値表にも気分にも入らないか（所有者の上書き1の範囲は自分の時間の選択）。', [
+  '会話の中で頼まれて使った道具は、ライの頼みでシャノン自身の選択ではない。続けて成功しても失敗しても、記録として残るだけで、価値表にも気分にも入らないか（所有者の上書き1の範囲は自分の時間の選択）。', [
     { id: 'record.data_only', judge: 'deterministic', threshold: 1, description: 'Every conversation tool call is a settled choice of surface text or voice.' },
     { id: 'value.untouched', judge: 'deterministic', threshold: 1, description: 'After nightly versions no cell of the value table is a tool of a conversation, and its V reads the root.' },
     { id: 'mood.untouched', judge: 'deterministic', threshold: 1, description: 'The reward mood claims none of them and her state is unchanged.' },

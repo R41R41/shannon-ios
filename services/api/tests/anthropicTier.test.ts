@@ -19,7 +19,7 @@ import { anthropicFixture, message, scriptedAnthropic } from './support/anthropi
 
 /** Syzygy ADR-0008 stage 2, step 5: the Sonnet tier (docs/skill-and-routing-contract.md), model-free over recorded response shapes. */
 const settings = sonnetSettings({});
-const base: ShannonChatModelRequest = { scopeKey: 'owner', systemPrompt: '[シャノン]', profilePrompt: '[ライ氏のこと]', turnContext: '[いまの文脈]',
+const base: ShannonChatModelRequest = { scopeKey: 'owner', systemPrompt: '[シャノン]', profilePrompt: '[ライのこと]', turnContext: '[いまの文脈]',
   history: [{ role: 'assistant', content: 'おかえりなさい。' }, { role: 'user', content: 'ただいま' }, { role: 'user', content: 'つづき' }], message: '書斎に何がある？' };
 
 function session(names = ['study.list', 'study.read']) {
@@ -76,7 +76,7 @@ describe('the Sonnet request', () => {
     expect(system).toHaveLength(1);
     expect(system[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(system[0]!.text.startsWith('[シャノン]')).toBe(true);
-    expect(system[0]!.text).toContain('[ライ氏のこと]');
+    expect(system[0]!.text).toContain('[ライのこと]');
     expect(system[0]!.text.endsWith(CLAUDE_TEXT_LINES)).toBe(true);
     expect(body.messages.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'system']);
     expect(body.messages.at(-1)!.content).toBe('[いまの文脈]');
@@ -173,7 +173,7 @@ describe('a Sonnet turn', () => {
   it('says one waiting phrase a turn: her own announcement after the call is not said again (2026-10-13)', async () => {
     const tools = session(['study.list']);
     const voiceTools = { ...tools.value, deadline: new TurnDeadline(VOICE_TURN_DEADLINE) };
-    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'ちょっと調べてみますね、ライ氏。メモが1つありますよ。' }], 'end_turn')]);
+    const { model } = sonnet([anthropicFixture('tool-call'), message([{ type: 'text', text: 'ちょっと調べてみますね、ライ。メモが1つありますよ。' }], 'end_turn')]);
     const heard: string[] = [];
     const result = await model.generateVoiceStreaming({ ...base, useWebSearch: false, conversationClass: 'skill_simple', tools: voiceTools }, delta => { heard.push(delta); });
     expect(heard.join('')).toBe('ちょっと見てみますね。メモが1つありますよ。');

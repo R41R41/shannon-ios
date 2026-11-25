@@ -76,7 +76,7 @@ export function addressedInputOf(
   }));
   return {
     scopeKey: input.scopeKey, transcript: request.userMessage, speaker: { id: request.sourceUserId, name: request.sourceDisplayName },
-    humans: input.humans, recent, owner: input.owner, bodyRunning: input.bodyRunning, ...(input.guestsMayStop ? { guestsMayStop: true } : {}),
+    humans: input.humans, recent, owner: input.owner, bodyRunning: input.bodyRunning, presentation: true, ...(input.guestsMayStop ? { guestsMayStop: true } : {}),
     ...(input.work ? { work: input.work } : {}),
     shannonSpeaking: request.speakingNow || request.shannonSpokeMsAgo === 0,
     shannon: {

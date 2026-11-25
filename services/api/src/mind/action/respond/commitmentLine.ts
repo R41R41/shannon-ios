@@ -180,14 +180,14 @@ export type PromisePhrasePosition = 'before' | 'after';
  */
 export interface PromisePhrase { text: string; positions: readonly PromisePhrasePosition[]; only?: 'late' | 'on_time' | 'wake' }
 export const PROMISE_PHRASES_V1: readonly PromisePhrase[] = Object.freeze<PromisePhrase[]>([
-  { text: 'ライ氏、', positions: ['before'] },
+  { text: 'ライ、', positions: ['before'] },
   { text: 'お知らせです！', positions: ['before'] },
   { text: 'はい、', positions: ['before'] },
   { text: 'よし、', positions: ['before'] },
   { text: 'ほら、', positions: ['before'] },
   { text: 'えへへ、', positions: ['before'], only: 'on_time' },
   { text: 'ねえねえ、', positions: ['before'], only: 'on_time' },
-  { text: 'ライ氏、お知らせですよ。', positions: ['before'] },
+  { text: 'ライ、お知らせですよ。', positions: ['before'] },
   { text: 'えへへ、ちゃんと覚えてたよ！', positions: ['before', 'after'], only: 'on_time' },
   { text: '忘れてませんよね？', positions: ['after'] },
   { text: 'ボク、覚えてましたからね。', positions: ['after'] },

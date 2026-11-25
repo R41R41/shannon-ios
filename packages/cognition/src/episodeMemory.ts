@@ -47,7 +47,7 @@ function whenWord(dayKey: string, today: string): string {
   return `${Number(month)}月${Number(date)}日`;
 }
 
-/** One episode in words: 「昨日の胸の件（ライ氏）: 「いや」と言ったあとも何度も触れられた、謝られていない」. */
+/** One episode in words: 「昨日の胸の件（ライ）: 「いや」と言ったあとも何度も触れられた、謝られていない」. */
 export function episodeMemoryLine(episode: Episode, today: string, partWord: (subject: string) => string, who: string): string {
   const when = whenWord(episode.dayKey, today);
   const apology = episode.apologized ? '謝られた' : '謝られていない';
@@ -62,7 +62,7 @@ export function episodeMemoryLine(episode: Episode, today: string, partWord: (su
  */
 export function recallEpisodes(days: readonly RelationshipDay[], personKey: string, today: string, words: string,
   partWord: (subject: string) => string): string {
-  const who = personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人';
+  const who = personKey === OWNER_PERSON_KEY ? 'ライ' : 'この人';
   const all = [...days].filter(day => day.dayKey < today).sort((a, b) => b.dayKey.localeCompare(a.dayKey)).flatMap(day => episodesOf(day, personKey));
   const latest = all[0]?.dayKey;
   const near = latest !== undefined && dayNumber(today) - dayNumber(latest) <= EPISODE_MEMORY_LIMITS.nearDays;

@@ -485,7 +485,7 @@ function minutesAgo(at: string, now: string): string {
   return minutes < 1 ? 'さっき' : `${minutes}分前`;
 }
 
-/** 「- 2分前: ライ氏に胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ」（直前のボクの言葉）」 */
+/** 「- 2分前: ライに胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ」（直前のボクの言葉）」 */
 function voiceTouchLine(fact: TouchFact, now: string, answering: string | null): string {
   const phrase = touchDetailPhrase(fact.type, fact, 'done') ?? touchPartPhrase(fact.type, fact.region, 'done') ?? BODY_TOUCH_PHRASES[fact.type].done;
   const stance = fact.stance ? `。${SHANNON_FIRST_PERSON}の受け取り（本音）: ${BODY_TOUCH_STANCE_WORDS[fact.stance]}` : '';

@@ -1,5 +1,4 @@
 import { CHARACTER_CORE, CHARACTER_CORE_V2, type CharacterCore } from './characterCore.js';
-import { SHANNON_OWNER_NAME } from './persona.js';
 
 /**
  * Her character core while her character space is on (owner 2026-10-20; `SHANNON_CHARACTER_SPACE`): v2 with the temperament (§6), the
@@ -10,7 +9,8 @@ import { SHANNON_OWNER_NAME } from './persona.js';
  *
  * A **draft** until the owner approves the wording (a new version of the core: `status` and `hash`, pinned by the test).
  */
-const OWNER = SHANNON_OWNER_NAME;
+/** The retired v3 texts stay word for word as they were approved (hashes pinned by the tests), with the name they were written with. */
+const OWNER = 'ライ氏';
 
 const TEMPER = `6. 気質
 - 基本は、ちょっとツンデレ。

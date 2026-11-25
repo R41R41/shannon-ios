@@ -394,10 +394,10 @@ const quoted = (text: string | undefined, label: string) => text ? `${label}「$
 const exchange = (event: InnerNoteEvent) => `${quoted(event.words, ': ')}${quoted(event.reply, ' → ボク')}`;
 /** What a turn about touching her said, as a fact. */
 export const TOUCH_CONSENT_WORDS: Readonly<Record<TouchConsent, string>> = Object.freeze({
-  asked: 'ライ氏が触れていいか尋ねた', permitted: 'ボクが触れるのを許した', refused: '触れることを断った（または、ライ氏がもう触れないと言った）',
+  asked: 'ライが触れていいか尋ねた', permitted: 'ボクが触れるのを許した', refused: '触れることを断った（または、ライがもう触れないと言った）',
 });
 const consentNote = (event: InnerNoteEvent) => (event.consent ? `〔触れることの話: ${TOUCH_CONSENT_WORDS[event.consent]}〕` : '');
-const DAY_END_WORDS: Readonly<Record<InnerNoteDayEnd, string>> = Object.freeze({ sleep: '夜の眠りの処理が走った', goodnight: 'ライ氏がおやすみと言った', three: '3:00' });
+const DAY_END_WORDS: Readonly<Record<InnerNoteDayEnd, string>> = Object.freeze({ sleep: '夜の眠りの処理が走った', goodnight: 'ライがおやすみと言った', three: '3:00' });
 
 function touchLine(event: InnerNoteEvent): string {
   const touch = event.touch;
@@ -408,9 +408,9 @@ function touchLine(event: InnerNoteEvent): string {
 
 const EVENT_WORDS: Readonly<Record<InnerNoteTrigger, (event: InnerNoteEvent) => string>> = Object.freeze({
   touch: touchLine,
-  apology: event => `ライ氏が謝った${exchange(event)}${consentNote(event)}`,
-  kindness: event => `ライ氏のやさしい言葉${exchange(event)}${consentNote(event)}`,
-  teasing: event => `ライ氏にからかわれた${exchange(event)}${consentNote(event)}`,
+  apology: event => `ライが謝った${exchange(event)}${consentNote(event)}`,
+  kindness: event => `ライのやさしい言葉${exchange(event)}${consentNote(event)}`,
+  teasing: event => `ライにからかわれた${exchange(event)}${consentNote(event)}`,
   strong_reply: event => `気持ちが動いた（${event.feeling ? `${event.feeling.kind} ${event.feeling.intensity.toFixed(2)}` : '?'}）${exchange(event)}`,
   until: () => '前のメモで決めた時刻が来た',
   day_end: event => `今日が終わる（${DAY_END_WORDS[event.dayEnd ?? 'three']}）`,

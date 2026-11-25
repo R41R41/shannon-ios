@@ -274,7 +274,7 @@ describe('daily budget and the request to raise it', () => {
     expect(unread).toHaveLength(1);
     expect(unread[0]).toMatchObject({ threadId, sourceTitle: '今日の予算', expression: 'thinking' });
     expect(unread[0]!.content).toBe(
-      'ライ氏、お願いがあります。今日の予算の2,000円では足りなくなりそうです。理由は「長い物語を書き切りたいです」です。'
+      'ライ、お願いがあります。今日の予算の2,000円では足りなくなりそうです。理由は「長い物語を書き切りたいです」です。'
       + '今日だけ、あと500円増やしてもらえますか。増やすかどうかは、頭の中の「したことの記録」から決められます。断ってもらっても大丈夫です。');
     const history = persistent.conversationHistory(scope, threadId);
     expect(history.at(-1)).toMatchObject({ role: 'assistant', content: unread[0]!.content });
@@ -288,7 +288,7 @@ describe('daily budget and the request to raise it', () => {
 
   it('speaks the request as Shannon, not as the system', () => {
     const message = budgetRequestMessage({ requestId: 'r', dayKey: '2026-10-02', reason: '調べたいことが増えました！', requestedYen: 250, capYen: 1_300 });
-    expect(message).toContain('ライ氏');
+    expect(message).toContain('ライ');
     expect(message).toContain('1,300円');
     expect(message).toContain('あと250円');
     expect(message).not.toMatch(/あなた|所有者|だよ。|るよ。/u);
@@ -321,7 +321,7 @@ describe("Shannon's own pursuits ledger", () => {
     expect(service.addPursuit(scope, { kind: 'work', title: '雨の日の短い物語 ', why: '同じです。', origin: 'self' }).rejection).toBe('PURSUIT_DUPLICATE');
     expect(service.addPursuit(scope, { kind: 'work', title: '', why: 'x', origin: 'self' }).rejection).toBe('PURSUIT_INVALID');
     expect(service.addPursuit(scope, { kind: 'work', title: '種のふり', why: 'x', origin: 'seed' as never }).rejection).toBe('PURSUIT_INVALID');
-    expect(service.addPursuit(scope, { kind: 'question', title: '人はなぜ泣ける話を読むのか', why: 'ライ氏と話して気になりました。', origin: 'conversation' }).pursuit?.origin).toBe('conversation');
+    expect(service.addPursuit(scope, { kind: 'question', title: '人はなぜ泣ける話を読むのか', why: 'ライと話して気になりました。', origin: 'conversation' }).pursuit?.origin).toBe('conversation');
     const linked = service.updatePursuit(scope, added.pursuit!.id, { links: [{ label: '下書き', url: 'aether://study/draft-1' }] });
     expect(linked.pursuit?.links).toEqual([{ label: '下書き', url: 'aether://study/draft-1' }]);
     expect(service.updatePursuit(scope, added.pursuit!.id, { links: [{ label: '外', url: 'file:///etc/passwd' }] }).rejection).toBe('PURSUIT_INVALID');

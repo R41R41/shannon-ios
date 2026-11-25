@@ -118,7 +118,7 @@ describe('a marked session', () => {
       { thought: '休みます。', steps: [rest()] },
     ];
     await runUntilIdle(harness.loop);
-    expect(harness.model.prompts('think')[1]).toContain('ライ氏の文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない');
+    expect(harness.model.prompts('think')[1]).toContain('ライの文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない');
     expect(harness.entries().some(entry => entry.tool === 'folder.create')).toBe(false);
     const at = harness.clock.at;
     const marked = harness.store.study.create(scope, { kind: 'note', title: '宿のメモ', body: '静かな宿のこと。' }, at);
@@ -208,7 +208,7 @@ describe('a second call and a phone call of a marked session', () => {
       sentOn: () => 0, lastSentAt: () => null, audience: () => (state.others ? { instructions: '[ほかの人がいる場]', marker: '【機微】' } : null),
       say: () => 'sent', sayByPhone: (_scope, input) => { said.push(input.text); return 'sent'; },
       sayAgain: (_scope, input) => { said.push(input.text); return 'sent'; },
-      latest: () => null, followUpsOn: () => 0, followedUp: () => false, text: () => 'ライ氏、いま何をしていますか。',
+      latest: () => null, followUpsOn: () => 0, followedUp: () => false, text: () => 'ライ、いま何をしていますか。',
     };
     const phone: AutonomyPhone = { facts: () => ({ switchedOn: true, serverReady: true, ringing: false, waitMinutes: 0, earphones: false }) as never, request: () => 'requested', outcome: () => 'answered' };
     for (const comes of [true, false]) {

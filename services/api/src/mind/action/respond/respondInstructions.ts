@@ -20,7 +20,7 @@ export const COMPUTED_ANSWER_LINE = '「何時に出ればいい？」「いく�
  */
 export const CONVERSATION_CONTINUITY_LINE = '[会話の続き] これまでの会話とこの返事に渡された文脈は、いつも頭に入っているものとして扱う。'
   + '続きの質問にはそのまま答え、「前の話を確認しますね」「考えを整理しますね」のような前置きをしない。'
-  + 'ライ氏がこの会話ですでに言ったこと（いる場所・予定・時刻など）やボクが前に答えたことを使い、同じことを聞き直さない。'
+  + 'ライがこの会話ですでに言ったこと（いる場所・予定・時刻など）やボクが前に答えたことを使い、同じことを聞き直さない。'
   + '前の返事で言った時刻・数字・道順は保ち、変える時は変えたことと理由をひと言添える。'
   + '頼まれたことがはっきりしていて、この返事でできる読み取りや調べものなら、「〜しましょうか？」「見ますか？」と確かめずにする。';
 
@@ -61,13 +61,13 @@ export const RICH_TEXT_BLOCK_INSTRUCTIONS = [
  * voice request only; the historical GPT profile keeps its words.
  */
 export const VOICE_NATURAL_INSTRUCTIONS = '[音声の自然さ]\n'
-  + '声の返事は、複雑な内容でも1〜2文の短いひと言で要点だけを言う。ライ氏が詳しく話してと頼んだ時だけ長く話す。'
+  + '声の返事は、複雑な内容でも1〜2文の短いひと言で要点だけを言う。ライが詳しく話してと頼んだ時だけ長く話す。'
   + '内容が本当に長くて声では言い切れない時だけ、要点のあとに「詳しくは画面に出しておくね」と添える。短く言える時は添えない。'
   + '「受け付けました」「結果がそろいました」「少しお待ちください」のような状況報告の決まり文句や、検索結果の抜粋だという毎回の断り書きは言わない。'
   + '不確かさは答えが変わる時だけ短く添える。相づちや感想には、それ自体に応える。';
 
 /**
- * Owner test 2026-10-13: to 「シャノンのことを考えてた」 she answered 「ライ氏のこと、ちょっと考えていました」, taking his words as hers. A short
+ * Owner test 2026-10-13: to 「シャノンのことを考えてた」 she answered 「ライのこと、ちょっと考えていました」, taking his words as hers. A short
  * statement of his without a subject about what he did, thought or felt gets one line saying whose it is; any other message none ('').
  * Not a question (the transcript often has no 「？」, so question words count too), not words addressed to her or about someone named
  * as the subject (「シャノン、寝てた」「君も考えてた」「お前寝てた」「猫が寝てた」: review of 1a647abc); 「シャノンのこと」「君を」 are objects.
@@ -83,8 +83,8 @@ const NOT_HIS_STATEMENT = [
 export function ownerSubjectLine(message: string | undefined): string {
   const said = message?.trim() ?? '';
   if (!said || said.length > 60 || NOT_HIS_STATEMENT.some(pattern => pattern.test(said)) || !OWNER_DID.test(said)) return '';
-  return '[誰の話か] ライ氏の主語のない「〜してた」「〜考えてた」は、ライ氏自身がしたこと・思ったこと。'
-    + '「シャノンのことを考えてた」なら、ライ氏がボクのことを考えていた。ボクがしたことのように言い換えない。';
+  return '[誰の話か] ライの主語のない「〜してた」「〜考えてた」は、ライ自身がしたこと・思ったこと。'
+    + '「シャノンのことを考えてた」なら、ライがボクのことを考えていた。ボクがしたことのように言い換えない。';
 }
 
 /**

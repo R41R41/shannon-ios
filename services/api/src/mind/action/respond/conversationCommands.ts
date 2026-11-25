@@ -97,7 +97,7 @@ export function executeConversationCommand(
       new ShannonMemoryService(dependencies.stateStore, dependencies.conversationStore, () => at)
         .mutate(scopeKey, { memoryId: resolved.sourceExperienceId, action: 'pin' });
     } catch { return { reply: 'その発言を記憶に固定できたか、確認できませんでした。保存できたとはまだ言えないので、記憶の詳細を確認してください。' }; }
-    return { reply: `「${contentPreview(resolved.content)}」というライ氏の発言を、出典のある会話の記憶として固定しました。`,
+    return { reply: `「${contentPreview(resolved.content)}」というライの発言を、出典のある会話の記憶として固定しました。`,
       receipt: { id: resolved.sourceExperienceId, capability: 'memory.control', status: 'completed',
         summary: '参照元の会話の記憶を固定', occurredAt: at } };
   }

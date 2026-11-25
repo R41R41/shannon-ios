@@ -221,11 +221,11 @@ describe('N5: what a turn nobody but the owner may release is given', () => {
     const text = [
       '[記憶]',
       '- ユーザーは紅茶が好き',
-      '- 【機微:健康・ライ氏だけが知っている】ユーザーは来週',
+      '- 【機微:健康・ライだけが知っている】ユーザーは来週',
       'オカメインコ病院に行く（続きの行）',
       '  さらに続く行',
       '- ユーザーは猫を飼っている',
-      '【機微:未分類・ライ氏だけが知っている】今日の関心: 転職',
+      '【機微:未分類・ライだけが知っている】今日の関心: 転職',
       '',
       '[次の区画]',
     ].join('\n');
@@ -233,18 +233,18 @@ describe('N5: what a turn nobody but the owner may release is given', () => {
   });
 
   it('leaves out a whole block marked by a marker alone on its line, up to the next blank line (second review)', () => {
-    const text = ['[今日の関心]', '- 散歩', '', '【機微:未分類・ライ氏だけが知っている】', '[Current intention frame]', 'Primary objective: 家計簿アプリ',
+    const text = ['[今日の関心]', '- 散歩', '', '【機微:未分類・ライだけが知っている】', '[Current intention frame]', 'Primary objective: 家計簿アプリ',
       '- Desired outcome: 完成', '', '[次の区画]'].join('\n');
     expect(withoutGuardedEntries(text)).toBe(['[今日の関心]', '- 散歩', '', '', '[次の区画]'].join('\n'));
   });
 
   it('leaves out a whole block whose header line opens with the marker, as upstream places it on the intention frame', () => {
     const text = ['[Current cognitive context — use before answering]', 'Situation: channel=text', '',
-      '【機微:未分類・ライ氏だけが知っている】[Current intention frame — durable, owner-visible, and evidence-backed]',
+      '【機微:未分類・ライだけが知っている】[Current intention frame — durable, owner-visible, and evidence-backed]',
       'Primary objective: 家計簿アプリ', 'Desired outcome: 完成', 'Owner-visible plan proposal:', '1. 画面を作る', '- 箇条書きの続き', '',
-      '[ライ氏についての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- 【機微:健康・ライ氏だけが知っている】ユーザーは通院している', '- ユーザーは猫を飼っている'].join('\n');
+      '[ライについての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- 【機微:健康・ライだけが知っている】ユーザーは通院している', '- ユーザーは猫を飼っている'].join('\n');
     expect(withoutGuardedEntries(text)).toBe(['[Current cognitive context — use before answering]', 'Situation: channel=text', '', '',
-      '[ライ氏についての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- ユーザーは猫を飼っている'].join('\n'));
+      '[ライについての記憶 — ほかの人がいる場]', '- ユーザーは紅茶が好き', '- ユーザーは猫を飼っている'].join('\n'));
   });
 });
 
@@ -314,8 +314,8 @@ describe('his intentions in a turn that may show only open items (second review,
     });
     const owner = context(false).prompt;
     expect(owner).toContain('家計簿アプリ');
-    expect(owner).toContain('【機微:未分類・ライ氏だけが知っている】');
-    expect(owner).toContain('【機微:健康・ライ氏だけが知っている】ユーザーは来週オカメインコ病院に行く');
+    expect(owner).toContain('【機微:未分類・ライだけが知っている】');
+    expect(owner).toContain('【機微:健康・ライだけが知っている】ユーザーは来週オカメインコ病院に行く');
     const open = context(true);
     for (const word of ['家計簿', 'current_goal=', 'Current intention frame', 'Primary objective', 'オカメインコ病院', 'ペンギン歯科']) expect(open.prompt, word).not.toContain(word);
     expect(open.situation.currentGoal).toBeUndefined();
@@ -330,7 +330,7 @@ describe('his intentions in a turn that may show only open items (second review,
 describe('nits of the third review (2026-10-06)', () => {
   it('N-c: drops every reply that answered a marked message, also a second one in a row', () => {
     const items = [
-      { role: 'user' as const, content: '【機微:健康・ライ氏だけが知っている】通院の話' },
+      { role: 'user' as const, content: '【機微:健康・ライだけが知っている】通院の話' },
       { role: 'assistant' as const, content: '返事1' }, { role: 'assistant' as const, content: '返事2' },
       { role: 'user' as const, content: '天気の話' }, { role: 'assistant' as const, content: '返事3' }, { role: 'assistant' as const, content: '返事4' },
     ];

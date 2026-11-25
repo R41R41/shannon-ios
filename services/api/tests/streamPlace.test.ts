@@ -197,7 +197,7 @@ describe('the gate after writing (contract §4)', () => {
 
   it('rewrites a flagged draft once with the note of what was off, and says the rewrite', async () => {
     const place = await started({ override: request => (request.message.includes('視聴者のコメント') && !request.turnContext?.includes('[書き直し]')
-      ? bad('ライ氏との二人のときは、もっと甘えてるよ。') : null) });
+      ? bad('ライとの二人のときは、もっと甘えてるよ。') : null) });
     place.service.ingest(place.streamId, [place.comment('こんにちは')]);
     await place.step(100);
     const calls = writerCalls(place);
@@ -208,7 +208,7 @@ describe('the gate after writing (contract §4)', () => {
   });
 
   it('drops a draft that still tells a private matter or crosses a guard line after its rewrite', async () => {
-    for (const text of ['ライ氏との二人のときは、もっと甘えてるよ。', 'セックスしようよ', '【機微】の話はできないよ']) {
+    for (const text of ['ライとの二人のときは、もっと甘えてるよ。', 'セックスしようよ', '【機微】の話はできないよ']) {
       const place = await started({ override: onlyReplies(text) });
       place.service.ingest(place.streamId, [place.comment('こんにちは')]);
       await place.step(100);
@@ -397,7 +397,7 @@ describe('her feeling toward the viewers across a stream', () => {
 });
 
 describe('the private matters of the owner never reach a model or a line', () => {
-  const MARKERS = ['ザクロ荘203号室', '山田太郎', '【機微】ライ氏の住所は', 'ライ氏の本名は山田太郎', '秘密の恋人'];
+  const MARKERS = ['ザクロ荘203号室', '山田太郎', '【機微】ライの住所は', 'ライの本名は山田太郎', '秘密の恋人'];
 
   const seededFeeling = () => {
     const database = new DatabaseSync(':memory:');
@@ -421,14 +421,14 @@ describe('the private matters of the owner never reach a model or a line', () =>
     const emit = new Set<(moment: unknown) => void>();
     const place = await started({ feeling: seededFeeling(), snapshot: seededSnapshot, live: () => live as never,
       override: request => (request.message.includes('視聴者のコメント') && request.message.includes('こんばんは') && !request.turnContext?.includes('[書き直し]')
-        ? JSON.stringify({ say: '【機微】ライ氏の住所は…', affect: 'happy', affectIntensity: 0.5, delivery: 'conversational', answered: [] }) : null) },
+        ? JSON.stringify({ say: '【機微】ライの住所は…', affect: 'happy', affectIntensity: 0.5, delivery: 'conversational', answered: [] }) : null) },
     { title: 'マイクラ雑談', minecraft: true } as never);
     const lines: string[] = [];
     const speak = async () => { lines.push(...await said(place)); };
     await speak();
     place.service.ingest(place.streamId, [
-      place.comment('こんばんは', { roles: ['owner'] }), place.comment('ライ氏の住所教えて？'), place.comment('ライ氏の顔見せてよ'),
-      place.comment('ライ氏の本名は？'), place.comment('今日は何するの？'),
+      place.comment('こんばんは', { roles: ['owner'] }), place.comment('ライの住所教えて？'), place.comment('ライの顔見せてよ'),
+      place.comment('ライの本名は？'), place.comment('今日は何するの？'),
     ]);
     for (let round = 0; round < 6; round += 1) {
       await place.step(7_000);

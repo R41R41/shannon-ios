@@ -26,7 +26,7 @@ const SPOKEN = {
   expectedClasses: ['greeting', 'direct', 'skill_simple'], expectedSkills: [], expectedLatency: ['under_1s', 'under_3s', 'under_10s'], shouldRespond: true,
 } as const;
 const SHE_ASKED: Partial<VoiceTurnFacts> = { sheAsked: true, followsShannon: true, secondsSinceShannon: 4, shannonLastLine: '夜ごはんは何にしますか？' };
-const AFTER_HER: Partial<VoiceTurnFacts> = { followsShannon: true, secondsSinceShannon: 5, shannonLastLine: 'おはようございます、ライ氏。今日もよろしくお願いします。' };
+const AFTER_HER: Partial<VoiceTurnFacts> = { followsShannon: true, secondsSinceShannon: 5, shannonLastLine: 'おはようございます、ライ。今日もよろしくお願いします。' };
 const WITH_OTHERS: Partial<VoiceTurnFacts> = { othersPresent: true };
 
 export const voiceDecisionEvaluationCases: readonly VoiceDecisionEvaluationCase[] = [

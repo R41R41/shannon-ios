@@ -10,7 +10,7 @@ const POKED = '2026-10-14T08:45:00.000Z';
 const at = (hoursLater: number) => new Date(Date.parse(POKED) + hoursLater * HOUR).toISOString();
 
 const sulk = (extra: Partial<ShannonLingeringFeeling> = {}): ShannonLingeringFeeling => ({
-  kind: 'annoyed', target: 'ライ氏', cause: 'ライ氏に腰をつつかれた', span: 'lingering', strength: 0.9, awakeAt: 0, startedAwakeAt: 0,
+  kind: 'annoyed', target: 'ライ', cause: 'ライに腰をつつかれた', span: 'lingering', strength: 0.9, awakeAt: 0, startedAwakeAt: 0,
   startedAt: POKED, ...extra,
 });
 
@@ -51,10 +51,10 @@ describe('a night fades what lingers (owner 2026-10-19)', () => {
 
 describe('what the exchange before a touch agreed (owner 2026-10-19)', () => {
   it('reads her yes to his asking, and his telling her he is about to', () => {
-    expect(touchAgreementIn('うーん、じゃあもうちょっと触ってもいい?', 'ライ氏、もちろんいいですよ。えへへ、どうぞ。')).toBe('permitted');
-    expect(touchAgreementIn('頭ヨシヨシしていいかな?', 'ライ氏、ヨシヨシ、どうぞ。')).toBe('permitted');
-    expect(touchAgreementIn('じゃあ、よしよしするね。', 'ライ氏、よしよし、どうぞ。')).toBe('announced');
-    expect(touchAgreementIn('じゃあ、手繋ぐね。', 'ライ氏、手を繋ぐのはいいですよ。')).toBe('announced');
+    expect(touchAgreementIn('うーん、じゃあもうちょっと触ってもいい?', 'ライ、もちろんいいですよ。えへへ、どうぞ。')).toBe('permitted');
+    expect(touchAgreementIn('頭ヨシヨシしていいかな?', 'ライ、ヨシヨシ、どうぞ。')).toBe('permitted');
+    expect(touchAgreementIn('じゃあ、よしよしするね。', 'ライ、よしよし、どうぞ。')).toBe('announced');
+    expect(touchAgreementIn('じゃあ、手繋ぐね。', 'ライ、手を繋ぐのはいいですよ。')).toBe('announced');
   });
 
   it('reads nothing of a refusal, of a question about something else, or of a past touch', () => {

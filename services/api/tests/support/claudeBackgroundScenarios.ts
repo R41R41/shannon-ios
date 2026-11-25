@@ -112,7 +112,7 @@ const memoryGateway = (o: Options) => new OpenAIMemoryModelGateway({ apiKey: 'sy
   usageStore: o.usageStore });
 
 const shimScenarios: ClaudeScenario[] = [
-  shim('replay-summary', '合成された要約。', o => new OpenAIReplaySummaryWriter(o).update('owner', { previousSummary: null, lines: ['ライ氏: 合成された一行'] })),
+  shim('replay-summary', '合成された要約。', o => new OpenAIReplaySummaryWriter(o).update('owner', { previousSummary: null, lines: ['ライ: 合成された一行'] })),
   // The voice history's summary (owner decision 2026-10-14): Haiku without thinking, its instructions cached (a new golden).
   shim('voice-summary', '話題: 合成された話題\n気持ち: 落ち着いていた', o => new ClaudeVoiceSummaryWriter(claudeBackground(o.model,
     { apiKey: o.apiKey, fetcher: o.fetcher, usageStore: o.usageStore })!).write('owner', { previousSummary: '話題: 合成された前の話題',

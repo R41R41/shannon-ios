@@ -67,7 +67,7 @@ function harness(minutes = { value: 0 }) {
     environment: () => ENV, log: () => undefined,
   });
   const say = (input: { room: string; user: string; participants: string[]; id: string }) => voice.turn({ platform: 'discord', requestId: input.id,
-    conversationId: input.room, voiceChannelId: '700', sourceUserId: input.user, sourceDisplayName: input.user === OWNER ? 'ライ氏' : '友人',
+    conversationId: input.room, voiceChannelId: '700', sourceUserId: input.user, sourceDisplayName: input.user === OWNER ? 'ライ' : '友人',
     userMessage: 'シャノン、聞こえる？', observedAt: now(), participants: input.participants }, () => undefined);
   return { api, voice, provider, asks, store, say, minutes,
     close: async () => { await background.waitForIdle('owner'); await new Promise(resolve => setImmediate(resolve)); turns.close(); peopleStore.close(); store.close(); } };

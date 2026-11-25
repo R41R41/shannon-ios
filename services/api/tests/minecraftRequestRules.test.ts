@@ -8,7 +8,7 @@ import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
 describe('rules for handing a wish to her Minecraft body', () => {
   const guide = minecraftQueueGuide({ queueLines: [], running: null, who: 'ミナト' }).join('\n');
   const tool = SHANNON_TOOLS.find(item => item.name === 'minecraft.request')!;
-  const toolBlock = toolRequestGuide('ライ氏').join('\n');
+  const toolBlock = toolRequestGuide('ライ').join('\n');
 
   it('keeps the conditions of the wish in the goal, on both ways', () => {
     expect(guide).toContain(KEEP_CONDITIONS_RULE);
@@ -18,8 +18,8 @@ describe('rules for handing a wish to her Minecraft body', () => {
 
   it('takes advice and suggestions as requests, with the speaker named as the one who asks', () => {
     expect(guide).toContain(adviceIsRequestRule('ミナト', 'kind=task にする'));
-    expect(tool.description).toContain(adviceIsRequestRule('ライ氏', 'この道具で頼む'));
-    expect(toolBlock).toContain(adviceIsRequestRule('ライ氏', '道具 minecraft.request で頼む'));
+    expect(tool.description).toContain(adviceIsRequestRule('ライ', 'この道具で頼む'));
+    expect(toolBlock).toContain(adviceIsRequestRule('ライ', '道具 minecraft.request で頼む'));
     expect(toolBlock).toContain('先にベッド作った方がいいよ');
     expect(toolBlock).toContain('寝ずに');
   });
@@ -32,6 +32,6 @@ describe('rules for handing a wish to her Minecraft body', () => {
   });
 
   it('names no listener in the rules: the same words for the owner and for a guest', () => {
-    expect(adviceIsRequestRule('ミナト', 'a').replaceAll('ミナト', '')).toBe(adviceIsRequestRule('ライ氏', 'a').replaceAll('ライ氏', ''));
+    expect(adviceIsRequestRule('ミナト', 'a').replaceAll('ミナト', '')).toBe(adviceIsRequestRule('ライ', 'a').replaceAll('ライ', ''));
   });
 });

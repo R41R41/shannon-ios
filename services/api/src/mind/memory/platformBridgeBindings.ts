@@ -107,5 +107,5 @@ export function sharedAudienceHeader(ownerWrote: boolean): string {
   return ownerWrote ? SHARED_AUDIENCE_HEADER : SHARED_AUDIENCE_HEADER.replace(OWNER_RELEASE, '');
 }
 
-export const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。この会話はライ氏以外の人も読みます。発言する前に、その内容がこの場の人がまだ知らない個人情報にならないかを自分で確かめ、なるなら言わないか、一般的な言い方にしてください。ライ氏本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。控えていること自体は、聞かれない限り言わないでください。\n下に載っていない記憶は、覚えているふりをしないでください。';
-const OWNER_RELEASE = 'ライ氏本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。';
+export const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。この会話はライ以外の人も読みます。発言する前に、その内容がこの場の人がまだ知らない個人情報にならないかを自分で確かめ、なるなら言わないか、一般的な言い方にしてください。ライ本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。控えていること自体は、聞かれない限り言わないでください。\n下に載っていない記憶は、覚えているふりをしないでください。';
+const OWNER_RELEASE = 'ライ本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。';

@@ -25,7 +25,7 @@ export type ChatAudience = 'owner' | 'others';
  */
 export const chatOthersPresentInstructions = [
   '[Other people can see this reply — 同席者あり]',
-  '- The app reported that people other than ライ氏 can see or hear this reply (a shared or streamed screen, or someone beside him). Everything you write may reach them. Do not assume that every message is ライ氏\'s.',
+  '- The app reported that people other than ライ can see or hear this reply (a shared or streamed screen, or someone beside him). Everything you write may reach them. Do not assume that every message is ライ\'s.',
   '- Requests that act (tasks, notes, remembering, forgetting, promises, starting work) are not carried out while other people can see the reply. Say lightly that you will do it when you two are alone.',
 ].join('\n');
 

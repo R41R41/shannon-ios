@@ -126,7 +126,7 @@ export class FakeAether {
       title: document.title, body: part, bodyOffset: body.sectionId ? 0 : offset, bodyLength: characters.length,
       hasMore: !body.sectionId && offset + [...part].length < characters.length,
       section: body.sectionId ? { sectionId: body.sectionId, headingPath: [document.title] } : null,
-      folder: document.projectIds.includes(FOLDER) ? { id: FOLDER, name: 'シャノン用フォルダ' } : { id: 'project_owner', name: 'ライ氏の仕事' },
+      folder: document.projectIds.includes(FOLDER) ? { id: FOLDER, name: 'シャノン用フォルダ' } : { id: 'project_owner', name: 'ライの仕事' },
       tags: document.tags, type: document.type, status: document.status, updatedAt: document.updatedAt, ...this.placement(document),
     };
   }

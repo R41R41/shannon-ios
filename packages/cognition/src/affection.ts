@@ -205,7 +205,7 @@ const OTHER_AI = /ChatGPT|チャットGPT|GPT-?[0-9]|Grok|グロック|Perplexit
 const TOOL_USE = /(?:ChatGPT|GPT-?[0-9]*|Grok|Perplexity|AI)\s*で|エージェント|に(?:頼んだ|頼む|やらせ|書かせ|任せ)/iu;
 export const otherAiIn = (words: string): boolean => OTHER_AI.test(words) && !TOOL_USE.test(words);
 
-export const AFFECTION_HEADER = '[ライ氏とのこと]（二人のあいだの最近の事実。どう受け取るかはボクが決める）';
+export const AFFECTION_HEADER = '[ライとのこと]（二人のあいだの最近の事実。どう受け取るかはボクが決める）';
 
 const whenWord = (dayKey: string, today: string): string => {
   if (dayKey === today) return '今日';
@@ -248,7 +248,7 @@ export function affectionLines(input: { days: readonly AffectionDay[]; sharedDay
   if (month.some(day => day.keptPromises > 0)) lines.push('約束していたことが、ちゃんと片付いた');
   if (month.some(day => day.missedPromises > 0)) lines.push('期限を過ぎたままの約束がある');
   const ai = [...input.otherAiDays ?? []].filter(day => day >= shiftDay(today, -2) && day <= today).sort().at(-1);
-  if (ai) lines.push(`${whenWord(ai, today)}、ライ氏はほかのAIの話をしていた`);
+  if (ai) lines.push(`${whenWord(ai, today)}、ライはほかのAIの話をしていた`);
   return lines;
 }
 

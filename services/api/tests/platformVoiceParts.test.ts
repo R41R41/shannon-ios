@@ -195,7 +195,7 @@ describe('the sentence splitter for a voice reply', () => {
 describe('the voice prompt blocks', () => {
   it('says who is there and what has been said, and tells the model what the intent field can do now', () => {
     const owner = platformVoiceInstructions({ title: 'テスト', ownerAlone: true, ownerSpeaking: true, speakerName: null, humans: 1, audioTags: false });
-    expect(owner).toContain('いま聞こえているのはライ氏だけ');
+    expect(owner).toContain('いま聞こえているのはライだけ');
     expect(owner).not.toContain('[whispers]');
     const friend = platformVoiceInstructions({ title: 'テスト', ownerAlone: false, ownerSpeaking: false, speakerName: 'ユウ', humans: 3, fillerText: 'えっと、', audioTags: true });
     expect(friend).toContain('3人いる');
@@ -225,15 +225,15 @@ describe('the voice prompt blocks', () => {
     expect(situationBlock(null, null, ['「羊を倒す」（止めた）'])).toContain('いま動いていない、最近の依頼: 「羊を倒す」（止めた）');
     expect(situationBlock(null, null, [], ['ベッドは置くね'])).toContain('ベッドは置くね');
     expect(situationBlock(null, null, [], ['ベッドは置くね'])).toContain('いま、頼まれて動いている作業は無い');
-    expect(voiceIntentInstructions({ connected: false, running: null }, 'ライ氏')).toContain('いまは渡せない');
+    expect(voiceIntentInstructions({ connected: false, running: null }, 'ライ')).toContain('いまは渡せない');
     expect(voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' } }, 'ユウ')).toContain('いまの作業への伝言');
-    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ氏')).toContain('はっきり頼んだら、聞き返さずに引き受けて kind=task');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ')).toContain('はっきり頼んだら、聞き返さずに引き受けて kind=task');
     expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('ユウがマイクラでしてほしいこと');
     expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('ほかの人どうしの話は kind=none');
     expect(voiceIntentInstructions({ connected: true, running: null }, 'ユウ')).toContain('kind=message');
-    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ氏')).toContain('[依頼の列] いまは空');
+    expect(voiceIntentInstructions({ connected: true, running: null }, 'ライ')).toContain('[依頼の列] いまは空');
     const listed = voiceIntentInstructions({ connected: true, running: { id: 't', goal: '鉄を集める' },
-      queue: ['#1 実行中 「鉄を集める」', '#2 待ち 「ケーキを作る」'] }, 'ライ氏');
+      queue: ['#1 実行中 「鉄を集める」', '#2 待ち 「ケーキを作る」'] }, 'ライ');
     expect(listed).toContain('[依頼の列]\n#1 実行中 「鉄を集める」\n#2 待ち 「ケーキを作る」');
     expect(listed).toContain('placement');
     expect(listed).toContain('cancel');
@@ -274,14 +274,14 @@ describe('what a reply is told of where and how she is spoken to, and of request
   });
 
   it('asks the one coming into the call to be told apart from coming into the game', () => {
-    const text = callJoinInstructions({ who: 'ライ氏' });
+    const text = callJoinInstructions({ who: 'ライ' });
     expect(text).toContain('kind=call_join');
     expect(text).toContain('マイクラの中へ入る話（「マイクラに入ってきて」）は call_join でなく login');
     expect(text).toContain('理由: 入るのは返事のあとで、数秒かかる');
   });
 
   it('takes advice, a suggestion and the answer to her question as a request, keeps the conditions, and does not promise what is not handed on', () => {
-    const guide = minecraftQueueGuide({ queueLines: [], running: null, who: 'ライ氏' }).join('\n');
+    const guide = minecraftQueueGuide({ queueLines: [], running: null, who: 'ライ' }).join('\n');
     expect(guide).toContain('助言・提案・質問への答えの形');
     expect(guide).toContain('夜が来る前に先にベッド作った方がいいよ');
     expect(guide).toContain('寝ずにスケルトンを倒して骨粉を手に入れようか');
@@ -294,7 +294,7 @@ describe('what a reply is told of where and how she is spoken to, and of request
     expect(guest).not.toContain('持ち主ではなく');
     expect(guest).toContain('順番は頼んだ人が決める');
     // While a request runs, a thing to put down or hand over is still a request of its own.
-    const running = minecraftQueueGuide({ queueLines: ['#1 実行中 「ケーキを作る」'], running: 'ケーキを作る', who: 'ライ氏' }).join('\n');
+    const running = minecraftQueueGuide({ queueLines: ['#1 実行中 「ケーキを作る」'], running: 'ケーキを作る', who: 'ライ' }).join('\n');
     expect(running).toContain('message でなく kind=task にする');
   });
 });

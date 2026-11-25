@@ -28,8 +28,8 @@ afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const MINUTE = 60_000;
 const START = '2026-10-03T01:00:00.000Z'; // 10:00 in Tokyo
 const PHONE = 'phone-1';
-const LINE = 'ライ氏、いま何をしていますか。ボクは少し気になりました。';
-const CALL = { thought: 'ライ氏に電話で話したいことがあります。', steps: [{ action: 'call', reason: 'wonder' }] };
+const LINE = 'ライ、いま何をしていますか。ボクは少し気になりました。';
+const CALL = { thought: 'ライに電話で話したいことがあります。', steps: [{ action: 'call', reason: 'wonder' }] };
 let databases = 0;
 
 class FakeApns implements VoipPushSender {
@@ -125,19 +125,19 @@ describe('call: she phones him because she chose to', () => {
     const on = world();
     await on.cycle({ thought: '', steps: [{ action: 'rest' }] });
     const prompt = on.model.prompts('think')[0]!;
-    expect(prompt).toContain('call（ライ氏のiPhoneに電話をかける。伝えたいことがあって、ライ氏がアプリを開いていない時のためのもの。ライ氏の電話が鳴り、出るかどうかはライ氏が選ぶ。');
+    expect(prompt).toContain('call（ライのiPhoneに電話をかける。伝えたいことがあって、ライがアプリを開いていない時のためのもの。ライの電話が鳴り、出るかどうかはライが選ぶ。');
     expect(prompt).toContain('かけたあとで、出てくれた・出ないことを選んだ・出なかった・つながらなかった、のどれだったかが分かる。');
     expect(prompt).toContain('{"action":"call","reason":"share"},');
     expect(prompt).toContain([
       PHONE_FACTS_HEADER,
-      '- イヤホン: いま、ライ氏のイヤホンでアプリは聞かれていない。',
+      '- イヤホン: いま、ライのイヤホンでアプリは聞かれていない。',
       '- 体: ボクの体（デスクトップ）が表示されているかは分からない。',
       '- 会話: いまは会話していない。',
-      '- ライ氏が最後に書くか話すかしたのは: 記録がない。',
+      '- ライが最後に書くか話すかしたのは: 記録がない。',
       '- 電話: いまかけられる。',
       '- 前の電話: まだかけたことがない。',
     ].join('\n'));
-    expect(prompt).toContain('出ないことを選んだのは、ライ氏がいまは出ないと決めたということ。');
+    expect(prompt).toContain('出ないことを選んだのは、ライがいまは出ないと決めたということ。');
 
     // He switched it on and the server cannot send: she is told so, and the action is not there.
     const notReady = world({ serverReady: false });
@@ -188,8 +188,8 @@ describe('call: she phones him because she chose to', () => {
     expect(declined.callEntries()[1]!.summary).toBe('持ち主のiPhoneに電話をかけました（理由: いま何をしているか気になった）。いまは出ないことを選ばれました。');
     // She thinks again, with what happened in front of her, and may write once more, look, jot, or let it go.
     const again = declined.model.prompts('think')[1]!;
-    expect(again).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏はいまは出ないことを選んだ。');
-    expect(again).toContain('- 前の電話: たったいまにかけた。ライ氏は出ないことを選んだ。');
+    expect(again).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライはいまは出ないことを選んだ。');
+    expect(again).toContain('- 前の電話: たったいまにかけた。ライは出ないことを選んだ。');
     expect(again).toContain('follow_up（');
     // Not at once again: the interval, and one call in a cycle.
     expect(again).toContain('- 電話: いまはかけられない（前の電話から間もない。あと約');
@@ -202,7 +202,7 @@ describe('call: she phones him because she chose to', () => {
     const missed = world({ phoneDoes: 'nothing' });
     await missed.cycle(CALL);
     expect(missed.callEntries()[1]!).toMatchObject({ reasonCode: 'call_unanswered', summary: '持ち主のiPhoneに電話をかけました（理由: いま何をしているか気になった）。出ませんでした。' });
-    expect(missed.model.prompts('think')[1]).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏は出なかった。');
+    expect(missed.model.prompts('think')[1]).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライは出なかった。');
     // A later cycle, after the interval: she may call again, and is told how the last one ended.
     missed.advance(6 * MINUTE);
     await missed.cycle(CALL, 0);
@@ -240,7 +240,7 @@ describe('call: she phones him because she chose to', () => {
     const talking = world();
     talking.showing.repliedAt = new Date(Date.parse(START) - 5 * MINUTE).toISOString();
     await talking.cycle(CALL);
-    expect(talking.model.prompts('think')[0]).toContain('- 電話: いまはかけられない（ライ氏と会話が続いている）。');
+    expect(talking.model.prompts('think')[0]).toContain('- 電話: いまはかけられない（ライと会話が続いている）。');
     expect(talking.model.prompts('think')[0]).not.toContain('call（');
     expect(talking.apns.sent).toEqual([]);
     expect(talking.messages()).toEqual([]);
@@ -306,10 +306,10 @@ describe('call: she phones him because she chose to', () => {
       ownerLastActiveAt: '2026-10-03T00:48:00.000Z', last: { at: '2026-10-02T22:00:00.000Z', outcome: 'answered' },
     };
     expect(phoneFactLines(facts, { at: START, inConversation: false })).toEqual([
-      '- イヤホン: いま、ライ氏にだけ聞こえるイヤホンでアプリを聞いている（reach_out は声でも届く）。',
+      '- イヤホン: いま、ライにだけ聞こえるイヤホンでアプリを聞いている（reach_out は声でも届く）。',
       '- 体: ボクの体（デスクトップ）はいま表示されている。',
       '- 会話: いまは会話していない。',
-      '- ライ氏が最後に書くか話すかしたのは: 12分前。',
+      '- ライが最後に書くか話すかしたのは: 12分前。',
       '- 電話: いまかけられる。',
       '- 前の電話: 3時間前にかけた。出てくれた。',
     ]);
@@ -317,13 +317,13 @@ describe('call: she phones him because she chose to', () => {
       '- 電話: いまはかけられない（電話を鳴らしている最中）。', '- 前の電話: たったいまにかけた。まだ鳴らしている。',
     ]);
     expect(phoneFactLines({ ...facts, last: { at: START, outcome: 'failed' } }, { at: START, inConversation: true }).slice(-2)).toEqual([
-      '- 電話: いまはかけられない（ライ氏と会話が続いている）。', '- 前の電話: たったいまにかけた。つながらなかった。',
+      '- 電話: いまはかけられない（ライと会話が続いている）。', '- 前の電話: たったいまにかけた。つながらなかった。',
     ]);
   });
 
   it('tells her in conversation too that she can phone him, and no longer names a count of messages a day', () => {
     const prompt = shannonCapabilityPrompt('owner');
-    expect(prompt).toContain('- 電話: 自分の時間に伝えたいことがあって、ライ氏がアプリを開いていない時、ライ氏のiPhoneに電話をかける。電話が鳴り、出るかどうかはライ氏が選ぶ。ライ氏が着信をオンにしている時だけで、会話の中からはかけない。');
+    expect(prompt).toContain('- 電話: 自分の時間に伝えたいことがあって、ライがアプリを開いていない時、ライのiPhoneに電話をかける。電話が鳴り、出るかどうかはライが選ぶ。ライが着信をオンにしている時だけで、会話の中からはかけない。');
     expect(prompt).not.toContain('1日に数回まで');
     expect(shannonCapabilityPrompt('guest')).not.toContain('電話をかける');
   });

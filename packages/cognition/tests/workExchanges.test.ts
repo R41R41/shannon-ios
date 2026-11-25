@@ -20,9 +20,9 @@ describe('WORK_EXCHANGES (a draft of session dc-live, apart from the 34 the owne
   it('shows three of them, turning with the minute', () => {
     const first = workExchangeLines(0), second = workExchangeLines(1);
     expect(first.startsWith('掛け合いの手ざわり（マイクラの作業について聞かれた時')).toBe(true);
-    expect(first.match(/「ライ氏：/gu)).toHaveLength(3);
+    expect(first.match(/「ライ：/gu)).toHaveLength(3);
     expect(first).not.toBe(second);
     expect(workExchangeLines(WORK_EXCHANGES.length)).toBe(workExchangeLines(0));
-    expect(workExchangeLines(0, 1).match(/「ライ氏：/gu)).toHaveLength(1);
+    expect(workExchangeLines(0, 1).match(/「ライ：/gu)).toHaveLength(1);
   });
 });

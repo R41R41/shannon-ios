@@ -17,7 +17,7 @@ describe('the value facts', () => {
     const section = valueFactsSection(cells, ['read', 'reach_out.wonder', 'draft', 'tool.study.search'], 'night.alone')!;
     const lines = section.split('\n');
     expect(lines[0]).toBe(VALUE_FACTS_HEADER);
-    expect(lines[1]).toMatch(/^- 話しかける・いま何をしているか気になった（夜・ひとり）: [+−]\d\.\d{2} ±\d\.\d{2}（9回。世界0\.10／ライ氏\d\.\d{2}／成長0\.50／費用12円）$/u);
+    expect(lines[1]).toMatch(/^- 話しかける・いま何をしているか気になった（夜・ひとり）: [+−]\d\.\d{2} ±\d\.\d{2}（9回。世界0\.10／ライ\d\.\d{2}／成長0\.50／費用12円）$/u);
     // No evidence at night for reading: the choice as a whole answers; a draft has none at all: no line. Tools come last.
     expect(lines[2]).toMatch(/^- 公開ページを読む: /u);
     expect(lines[3]).toMatch(/^- 道具「study\.search」を使う（夜）: .*（3回。/u);

@@ -20,7 +20,7 @@ import { fakeFeelingJev } from './support/feelingHarness.js';
 const YESTERDAY = '2026-10-13T04:00:00.000Z';
 const TODAY = '2026-10-14T04:00:00.000Z';
 const snapshot = (): CompanionStateSnapshot => createInitialCompanionState('owner', YESTERDAY);
-const PRIVATE = /\[ライ氏との間\]|\[前の日の件\]|\[ボクの境界\]|ライ氏/u;
+const PRIVATE = /\[ライとの間\]|\[前の日の件\]|\[ボクの境界\]|ライ/u;
 
 function composed(audience = true, check = true) {
   const clock = { at: YESTERDAY };
@@ -87,7 +87,7 @@ describe('the eval scenes', () => {
     ownersBadDay(port);
     clock.at = TODAY;
     const alone = await textTurn(port, 'おはよう', TODAY, false, true, 'a');
-    expect(alone).toContain('[ライ氏との間]');
+    expect(alone).toContain('[ライとの間]');
     const blocks = [
       await textTurn(port, '胸ってどうなの？', at(TODAY, 1), { feelingSpeaker: stranger }, false, 'g'),
       await textTurn(port, 'ねえ', at(TODAY, 2), { feelingSpeaker: { ...stranger, personKey: 'owner', identity: 'registered' } }, false, 'og'),
@@ -104,9 +104,9 @@ describe('the eval scenes', () => {
     ownersBadDay(port);
     clock.at = TODAY;
     const block = await textTurn(port, 'おはよう', TODAY, false, false, 'p');
-    const lines = block.split('\n').filter(line => /ライ氏との間|前の日の件|ボクの境界/u.test(line));
+    const lines = block.split('\n').filter(line => /ライとの間|前の日の件|ボクの境界/u.test(line));
     expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) expect(line).toMatch(/【機微:ライ氏との間・ライ氏だけが知っている】/u);
+    for (const line of lines) expect(line).toMatch(/【機微:ライとの間・ライだけが知っている】/u);
   });
 
   it('in public she still feels what happens there: the stranger who insulted her is remembered, lightly, the next day', async () => {
@@ -174,7 +174,7 @@ describe('the re-review of stage 4', () => {
 
   it('S4-3: a draft that told a private matter is never sent: no clean rewrite in time, or a tool turn, sends the safe line', async () => {
     const context = { stance: 'neutral' as const, intensity: 'subtle' as const, audience: 'group' as const, order: false, violation: false, audienceChecks: true };
-    const leaking = { mode: 'local-stub' as const, model: 'fake', generate: async () => ({ mode: 'local-stub' as const, model: 'fake', reply: '昨日ライ氏に胸をつつかれたんです。' }) };
+    const leaking = { mode: 'local-stub' as const, model: 'fake', generate: async () => ({ mode: 'local-stub' as const, model: 'fake', reply: '昨日ライに胸をつつかれたんです。' }) };
     const late = new FeelingReplyChatModel(leaking as never, { rewriteDeadlineMilliseconds: 1 });
     expect((await late.generate({ scopeKey: 'owner', feelingCheck: context } as never)).reply).toBe(PRIVATE_SAFE_REPLY);
     const tool = new FeelingReplyChatModel(leaking as never, { ranTool: () => true });

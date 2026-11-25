@@ -352,7 +352,7 @@ describe('the replay summary is written off the response path', () => {
 describe('privacy of the replay window and its summary', () => {
   /** A writer that repeats the word when it was shown it, so the test can see what the writer was given. */
   const telling = (input: { previousSummary: string | null; lines: readonly string[] }, call: number) =>
-    `要約${call}${[input.previousSummary ?? '', ...input.lines].some(text => text.includes('紅茶')) ? '：ライ氏は紅茶が好き' : ''}`;
+    `要約${call}${[input.previousSummary ?? '', ...input.lines].some(text => text.includes('紅茶')) ? '：ライは紅茶が好き' : ''}`;
 
   function withFact(now: () => string) {
     const h = setup(telling, { now });
@@ -380,7 +380,7 @@ describe('privacy of the replay window and its summary', () => {
     let now = minute(400);
     const h = withFact(() => now);
     await h.summarizer.refresh('owner', 'thread');
-    expect(h.replay('voice').summary).toBe('要約1：ライ氏は紅茶が好き');
+    expect(h.replay('voice').summary).toBe('要約1：ライは紅茶が好き');
     h.forget(minute(500));
     for (const channel of ['voice', 'text'] as const) {
       const replay = h.replay(channel);

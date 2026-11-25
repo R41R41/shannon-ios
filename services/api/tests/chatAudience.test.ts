@@ -125,10 +125,10 @@ describe('POST /v1/chat audience — others', () => {
       expect(promptOf(model.last)).toContain(OTHERS_BLOCK);
       expect(promptOf(model.last)).not.toContain('[Shannon shared state');
     }
-    expect(JSON.stringify(model.last.history)).toContain('【機微:お金・ライ氏だけが知っている】実は借金があって、ミズクラゲ銀行');
+    expect(JSON.stringify(model.last.history)).toContain('【機微:お金・ライだけが知っている】実は借金があって、ミズクラゲ銀行');
     expect(promptOf(model.last)).toContain('- ユーザーは紅茶が好き');
     // A summary reaches the model only for a thread with no withheld turn, and then marked.
-    expect(model.last.priorThreadSummary).toMatch(/^【機微:未分類・ライ氏だけが知っている】/u);
+    expect(model.last.priorThreadSummary).toMatch(/^【機微:未分類・ライだけが知っている】/u);
     await chat('続きを話そう', 'private', { audience: 'others' });
     expect(model.last.priorThreadSummary).toBeUndefined();
 
@@ -182,7 +182,7 @@ describe('POST /v1/chat audience — others', () => {
     for (const [message, thread] of [['前に話したこと覚えてる？', 'thread'], ['前に話したこと覚えてる？', 'private'], ['こんにちは', 'new-thread']] as const) {
       const body = await chat(message, thread, { audience: 'others' }) as unknown as Record<string, any>;
       const json = JSON.stringify(body);
-      for (const word of [...HARD, '紅茶', 'ミズクラゲ銀行', '借金', '返済の段取り', '内緒', '置物', '病院', 'Shannon shared state', '【機微', 'ライ氏についての記憶']) {
+      for (const word of [...HARD, '紅茶', 'ミズクラゲ銀行', '借金', '返済の段取り', '内緒', '置物', '病院', 'Shannon shared state', '【機微', 'ライについての記憶']) {
         expect(json, `${thread} → ${word}`).not.toContain(word);
       }
       expect(Object.keys(body).sort()).toEqual(['audience', 'messageEmotion', 'mode', 'model', 'reply', 'snapshotVersion', 'state', 'systemPrompt', 'threadId', 'turnId']);

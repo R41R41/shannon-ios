@@ -463,7 +463,7 @@ export class ShannonAutonomyService {
   pursuitPrompt(scopeKey: string): string {
     try {
       const at = this.now();
-      const core = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? { characterCore: true } : {}; // ADR-0012: ライ氏, not 持ち主.
+      const core = switchOn(serverEnvironment(), 'SHANNON_INNER_NOTE') ? { characterCore: true } : {}; // ADR-0012: ライ, not 持ち主.
       return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at), core), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
         buildShannonSeenPrompt(this.study.seen(scopeKey, at))].filter(Boolean).join('\n\n');
     } catch { return ''; }

@@ -100,7 +100,7 @@ describe('feeling events on', () => {
     expect(on.ownerLines()!.ledger.touches).toBe(0);
     const room = on.port!.events.linesFor(scope, { personKey: UNKNOWN_PERSON_KEY, audience: 'people', sceneId: null }, on.clock.at, on.state())!;
     expect(room.ledger.touches).toBe(1);
-    expect(room.ledgerLine).not.toContain('ライ氏');
+    expect(room.ledgerLine).not.toContain('ライ');
   });
 
   it('forgets: a touch whose memory the owner had her forget leaves the ledger', async () => {
@@ -140,7 +140,7 @@ describe('feeling events on', () => {
     await on.chat('ねえ');
     const context = on.chatModel.requests.at(-1)!.turnContext!;
     expect(context).not.toContain(FEELING_TURN_HEADER);
-    expect(context.slice(context.lastIndexOf('[今日のこと]'))).toBe('[今日のこと]（事実）\n今日の胸の件（ライ氏）: 一度触れられた、最後はさっき\n事実は判断の材料。数字や回数をそのまま口にしない。');
+    expect(context.slice(context.lastIndexOf('[今日のこと]'))).toBe('[今日のこと]（事実）\n今日の胸の件（ライ）: 一度触れられた、最後はさっき\n事実は判断の材料。数字や回数をそのまま口にしない。');
     expect(on.jev.states).toHaveLength(0);
   });
 
@@ -199,16 +199,16 @@ describe('review fixes: the menu by audience, the guard, Jev input', () => {
 });
 
 describe('the repetition watch over the day (owner, after the live eval)', () => {
-  it('is seeded from today\'s replies of his Talk, so 「ライ氏、」 is caught at the first turn', async () => {
+  it('is seeded from today\'s replies of his Talk, so 「ライ、」 is caught at the first turn', async () => {
     const off = await harnessWith({ port: false });
-    off.chatModel.generate = async request => { off.chatModel.requests.push(request); return { mode: 'local-stub', model: 'fake', reply: 'ライ氏、そうですね。' }; };
+    off.chatModel.generate = async request => { off.chatModel.requests.push(request); return { mode: 'local-stub', model: 'fake', reply: 'ライ、そうですね。' }; };
     await off.chat('おはよう');
     off.advance(MINUTE);
     await off.chat('今日の予定は？');
     const port = composedFeeling({ database: new DatabaseSync(':memory:'), now: () => off.clock.at, timeZone: 'Asia/Tokyo', chooser: null, turn: true,
       singleFace: false, seed: talkSeed(off.conversationStore) }).port;
     const key = { personKey: OWNER_PERSON_KEY, audience: 'owner_alone' as const, sceneId: null };
-    expect(port.events.linesFor(scope, key, off.clock.at, off.state())!.repetitionLine).toContain('書き出し「ライ氏、」が直近2件中2件');
+    expect(port.events.linesFor(scope, key, off.clock.at, off.state())!.repetitionLine).toContain('書き出し「ライ、」が直近2件中2件');
     // Nothing of his Talk seeds a watch in front of anyone else, and yesterday's replies are not today's.
     expect(port.events.linesFor(scope, { ...key, personKey: UNKNOWN_PERSON_KEY, audience: 'people' }, off.clock.at, off.state())!.repetitionLine).toBe('');
     expect(port.events.linesFor(scope, key, '2026-10-15T19:00:00.000Z', off.state())!.repetitionLine).toBe('');

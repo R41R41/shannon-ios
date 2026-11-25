@@ -144,10 +144,10 @@ describe('her talk with the owner alone (SHANNON_NATURAL_TALK)', () => {
     const layered = { systemPrompt: identity, prompt: identity };
     const on = await say(composed(true).port, 'シャノンがエッチな体してるのがいけない');
     expect(feelingText.staged(on.handle, layered).systemPrompt).toContain('[ボクの性格の核 v4-kid #');
-    expect(on.block).toContain('掛け合いの手ざわり: 「ライ氏：');
+    expect(on.block).toContain('掛け合いの手ざわり: 「ライ：');
     const off = await say(composed(false).port, 'シャノンがエッチな体してるのがいけない');
     expect(feelingText.staged(off.handle, layered).systemPrompt).toContain('[ボクの性格の核 v4-kid #');
-    expect(off.block).not.toContain('ライ氏：');
+    expect(off.block).not.toContain('ライ：');
   });
   it('on: never for anyone else in the turn', async () => {
     const { port } = composed(true);

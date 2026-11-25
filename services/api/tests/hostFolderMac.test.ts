@@ -94,7 +94,7 @@ describe('her folder on the Mac beside the Windows PC (A18 S1)', () => {
     const two = harness().service.tools.offered('text', 'owner_alone', scope).find(tool => tool.name === 'folder.read')!;
     const host = two.input.properties.host as { description: string };
     expect(host.description).toContain('owner-windows（WindowsのPC）、owner-mac（Mac）');
-    expect(host.description).toContain('ライ氏に聞いて');
+    expect(host.description).toContain('ライに聞いて');
     const one = harness({ [WINDOWS]: { deviceId: WINDOWS_DEVICE } }).service.tools.offered('text', 'owner_alone', scope).find(tool => tool.name === 'folder.read')!;
     expect(one.input).toEqual(SHANNON_TOOLS.find(tool => tool.name === 'folder.read')!.input);
     expect(hostFolderLabel('owner-mac')).toBe('Mac');
@@ -123,8 +123,8 @@ describe('her folder on the Mac beside the Windows PC (A18 S1)', () => {
     const both = await call('folder.list', {});
     expect(both).toMatchObject({ ok: false, failure: 'invalid_input', retryable: false });
     expect(both.text).toContain('owner-windows（WindowsのPC）、owner-mac（Mac）の両方につながっている');
-    expect(both.text).toContain('ライ氏に聞いて');
-    expect((await call('folder.list', {}, 'autonomy')).text ?? '').not.toContain('ライ氏に聞いて');
+    expect(both.text).toContain('ライに聞いて');
+    expect((await call('folder.list', {}, 'autonomy')).text ?? '').not.toContain('ライに聞いて');
     // Named: as before.
     const named = answerOne(MAC, MAC_DEVICE);
     expect(await call('folder.list', { host: MAC })).toMatchObject({ ok: true });
@@ -160,7 +160,7 @@ describe('her folder on the Mac, changed (A18 S3)', () => {
     await claim(MAC, MAC_DEVICE, MAC_OPERATIONS);
     const both = await call('folder.delete', { path: 'notes/宿.md' });
     expect(both).toMatchObject({ ok: false, failure: 'invalid_input' });
-    expect(both.text).toContain('ライ氏に聞いて');
+    expect(both.text).toContain('ライに聞いて');
     // A Mac that still reads only (S2) is not chosen for a change while the PC can make it.
     await claim(MAC, MAC_DEVICE, READING);
     const toWindows = (async () => {
@@ -178,7 +178,7 @@ describe('her folder on the Mac, changed (A18 S3)', () => {
 
 describe('a text turn with the Windows PC and the Mac bound (production, 2026-10-06)', () => {
   /**
-   * The owner typed 「Macのシャノン用フォルダに何がある?」 and she called no tool: her folder's tools said only 「ライ氏のPC」,
+   * The owner typed 「Macのシャノン用フォルダに何がある?」 and she called no tool: her folder's tools said only 「ライのPC」,
    * and 「シャノン用フォルダ」 was only ever the name of her Aether folder. The turn offers them, and they say the Mac.
    */
   const turn = async (withAether: boolean, message = 'Macのシャノン用フォルダに何がある?') => {
@@ -199,16 +199,16 @@ describe('a text turn with the Windows PC and the Mac bound (production, 2026-10
     expect(folder.map(tool => tool.name)).toEqual(['folder_list', 'folder_search', 'folder_read', 'folder_create', 'folder_update', 'folder_rename', 'folder_move', 'folder_delete']);
     expect(body.tool_choice).toBe('auto');
     for (const tool of folder) {
-      expect(tool.description).toContain('ライ氏のPCやMacにあるボク専用のフォルダ');
+      expect(tool.description).toContain('ライのPCやMacにあるボク専用のフォルダ');
       expect(tool.parameters.properties.host!.description).toContain('owner-windows（WindowsのPC）、owner-mac（Mac）');
-      expect(tool.parameters.properties.host!.description).toContain('ライ氏がMacかPCを言ったら、そのフォルダの名前を書く');
+      expect(tool.parameters.properties.host!.description).toContain('ライがMacかPCを言ったら、そのフォルダの名前を書く');
     }
     const list = folder.find(tool => tool.name === 'folder_list')!;
     expect(list.description).toContain('PCやMacが起きていない時は見られない');
     expect(list.description).toContain('「シャノン用フォルダ」と呼ぶことがある（Aetherのシャノン用フォルダとは別の場所）');
     // Without her Aether tools the line names no Aether tool.
     const instructions = toolInstructions(offer.tools!, false);
-    expect(instructions).toContain('ライ氏のPCやMacにある自分のフォルダ');
+    expect(instructions).toContain('ライのPCやMacにある自分のフォルダ');
     expect(instructions).toContain(HOST_FOLDER_TOOL_INSTRUCTIONS);
     expect(instructions).not.toContain(FOLDER_OR_AETHER_INSTRUCTIONS);
     expect(body.instructions).toContain(HOST_FOLDER_TOOL_INSTRUCTIONS);

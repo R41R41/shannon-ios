@@ -272,7 +272,7 @@ describe('her folder through her tools (contract v2)', () => {
 
   it('never writes the text of a note about a look at the room into a file', async () => {
     const { store, call, claim, device } = harness();
-    const seen = '窓の外が明るくて、ライ氏は青いマグカップでコーヒーを飲みながら画面を見ていた。机の上には本が三冊。';
+    const seen = '窓の外が明るくて、ライは青いマグカップでコーヒーを飲みながら画面を見ていた。机の上には本が三冊。';
     store.study.create(scope, { kind: 'note', title: '見たこと（10月5日 10時）', body: seen, origin: 'room_look' }, new Date().toISOString());
     await claim();
     const refused = await call('folder.create', { path: 'notes/今日.md', content: `今日のこと。${seen.slice(0, 40)}` });
@@ -302,7 +302,7 @@ describe('her folder through her tools (contract v2)', () => {
   it('does not copy, by the v1 step either, a note that restates a note about a look at the room', () => {
     const { store, service } = harness();
     const at = new Date().toISOString();
-    const seen = '窓の外が明るくて、ライ氏は青いマグカップでコーヒーを飲みながら画面を見ていた。机の上には本が三冊。';
+    const seen = '窓の外が明るくて、ライは青いマグカップでコーヒーを飲みながら画面を見ていた。机の上には本が三冊。';
     store.study.create(scope, { kind: 'note', title: '見たこと（10月5日 10時）', body: seen, origin: 'room_look' }, at);
     const restated = store.study.create(scope, { kind: 'note', title: '今日のこと', body: `今日のこと。${seen}` }, at);
     const own = store.study.create(scope, { kind: 'note', title: '駅のこと', body: '夕方の駅は光が低い。' }, at);
@@ -310,6 +310,6 @@ describe('her folder through her tools (contract v2)', () => {
     expect(service.folder.nextCopy(scope, at, restated.id)).toBeNull();
     expect(service.folder.nextCopy(scope, at, own.id)).toMatchObject({ pieceId: own.id });
     expect(roomLookGuard([seen])(`前置き${seen.slice(5, 40)}後書き`)).toBe(true);
-    expect(roomLookGuard([seen])('ライ氏はコーヒーを飲んでいた。')).toBe(false);
+    expect(roomLookGuard([seen])('ライはコーヒーを飲んでいた。')).toBe(false);
   });
 });

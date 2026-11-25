@@ -84,7 +84,7 @@ describe('the message: the fact word for word, and a phrase of hers from the lis
   ];
 
   /** The re-review of 0ac5d742: free phrases that undercut the fact passed a filter (negating it, emoji, the wrong feeling). */
-  const UNDERCUTTING = ['嘘だよ', 'なーんて', '冗談', '今のなし', '🎉', '😭', '次は頑張る', 'おめでとう', 'やったね！🎉', 'ふふん', 'ふふん、 ', ' ライ氏、'];
+  const UNDERCUTTING = ['嘘だよ', 'なーんて', '冗談', '今のなし', '🎉', '😭', '次は頑張る', 'おめでとう', 'やったね！🎉', 'ふふん', 'ふふん、 ', ' ライ、'];
 
   it('says, for every operation and end, every listed phrase in every place it takes, around the fact word for word', () => {
     for (const action of MINECRAFT_LIFECYCLE_ACTIONS) for (const outcome of OUTCOMES) {
@@ -100,7 +100,7 @@ describe('the message: the fact word for word, and a phrase of hers from the lis
       expect(lifecycleOutcomeMessage({ phrase: '', position: 'before' }, given)).toBe(fact);
     }
     // Where each phrase reads well: an address and an opening go before, a trailing apology after.
-    expect(lifecycleOutcomeMessage({ phrase: 'ライ氏、', position: 'after' }, facts())).toBe('ライ氏、マイクラにログインしました。');
+    expect(lifecycleOutcomeMessage({ phrase: 'ライ、', position: 'after' }, facts())).toBe('ライ、マイクラにログインしました。');
     expect(lifecycleOutcomeMessage({ phrase: '…ごめんね', position: 'before' }, facts({ outcome: 'refused' })))
       .toBe('マイクラのログインは、体に断られてできませんでした。…ごめんね');
   });

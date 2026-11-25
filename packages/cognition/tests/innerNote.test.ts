@@ -14,7 +14,7 @@ function note(overrides: Partial<InnerNote['hooks']> = {}, extra: Partial<InnerN
   return {
     id: 'n1', sequence: 1, dayId: 'n1', dayKey: '2026-10-14', dayEndsAt: '2026-10-14T18:00:00.000Z',
     text: { honne: 'びっくりした。いやってほどじゃない。', tatemae: 'ツンとして口数を減らす。', reason: '簡単に許したら安く見られる。',
-      plan: '今日はこのまま。', bottom: 'ライ氏のことは好きなまま。困っていたらすぐ助ける。' },
+      plan: '今日はこのまま。', bottom: 'ライのことは好きなまま。困っていたらすぐ助ける。' },
     hooks: { shown: 'sulky', tell: 'blush', until: '2026-10-14T14:00:00.000Z', scale: 'ordinary', dayReason: null, intent: 'keep',
       routeSummary: 'Shannon is acting a little sulky and cool, but is not truly hurt.', ...overrides },
     triggers: ['touch'], changeReason: null, summary: null, flags: {}, createdAt: '2026-10-14T13:20:00.000Z', replacedAt: null, closedAt: null,
@@ -142,7 +142,7 @@ describe('readers (ADR-0012 D2.5)', () => {
   it('lists what happened after the note as facts', () => {
     const block = innerNoteTurnBlock(note({ intent: 'none', until: null }), 'owner', AT, [{ kind: 'apology', at: '2026-10-14T13:29:00.000Z', words: 'ごめん' }]);
     expect(block).toContain('このメモのあとに起きたこと');
-    expect(block).toContain('22:29（1分前） ライ氏が謝った: 「ごめん」');
+    expect(block).toContain('22:29（1分前） ライが謝った: 「ごめん」');
   });
 
   it('gives the touch prompt a short form and Jev only an ASCII line', () => {
@@ -176,19 +176,19 @@ describe('the reflection', () => {
     expect(instructions).not.toMatch(/すねないもの|必ずする|謝らない|すぐやめる|事故で触れ/u);
     const input = innerNoteReflectionInput({
       at: AT, timeZone: 'Asia/Tokyo', previous: note(), apologies: ['2026-10-14T13:25:00.000Z', '2026-10-14T13:29:00.000Z'], kindnesses: [],
-      events: [{ kind: 'touch', at: '2026-10-14T13:28:00.000Z', touch: { phrase: 'ライ氏に胸をつつかれた', stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' } }],
+      events: [{ kind: 'touch', at: '2026-10-14T13:28:00.000Z', touch: { phrase: 'ライに胸をつつかれた', stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' } }],
       feeling: { present: { kind: 'surprised', intensity: 0.62 }, lingering: [{ kind: 'sulky', strength: 0.4 }] }, dayEndsAt: '2026-10-14T18:00:00.000Z',
       closing: false, yesterday: null, recent: [{ role: 'user', content: 'ごめん' }],
     });
-    expect(input).toContain('ライ氏の謝罪: 2回（22:25、22:29）');
-    expect(input).toContain('体: ライ氏に胸をつつかれた（体が反射で小さく身を引いた）。ボクの受け取り: いや。ボクの一言「ひゃっ」');
+    expect(input).toContain('ライの謝罪: 2回（22:25、22:29）');
+    expect(input).toContain('体: ライに胸をつつかれた（体が反射で小さく身を引いた）。ボクの受け取り: いや。ボクの一言「ひゃっ」');
     expect(input).toContain('今日の終わりまで、あと4時間30分');
     expect(INNER_NOTE_REFLECTION_SCHEMA.required).toContain('route_summary');
   });
 
   it('reads an answer and refuses one without its text', () => {
     const answer = { honne: '本音', tatemae: '建て前', reason: '', plan: 'つもり', bottom: '底', shown: 'cuteAngry', tell: 'blush', intent: 'keep', scale: 'day',
-      day_reason: 'intentional', until_minutes: 90.4, change_reason: null, route_summary: 'Sulking a bit; ライ氏', summary: null };
+      day_reason: 'intentional', until_minutes: 90.4, change_reason: null, route_summary: 'Sulking a bit; ライ', summary: null };
     expect(parsedInnerNoteReflection(answer)).toMatchObject({ shown: 'cuteAngry', scale: 'day', dayReason: 'intentional', untilMinutes: 90,
       routeSummary: 'Sulking a bit;' });
     expect(parsedInnerNoteReflection({ ...answer, honne: '' })).toBeNull();

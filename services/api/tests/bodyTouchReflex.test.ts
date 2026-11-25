@@ -78,9 +78,9 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // that line alone: taken out of each prompt, the day is f8a35ecb… again, so nothing else changed.
     const without = { ...day, calls: day.calls.map(call => ({ ...call, prompt: toLegacyPersona(call.prompt).replace(`\n- ${SHANNON_TEMPERAMENT}`, '').replace(`\n- ${shannonTemperament('others')}`, '') })) };
     // Owner 2026-10-19: the day's carry is being moved, not touched (no feeling, a line saying so, no stance): 804fe1a5… since.
-    expect(digest(without)).toBe('804fe1a53b0e3fd0d9b2dbf1468688596b52a0faaaa005c58c516df6bb92a101');
+    expect(digest(without)).toBe('3bf7ff916c9f6b522fbd9129fc8b63c613b336c9a53d83b8a4177e8890d76cfd');
     // 466fd4ef… with the owner's wording in every prompt; with scope (a) a touch while others are present says 「相手に」.
-    expect(digest(toLegacyPersonaDeep(day))).toBe('5b3049e830353c3c4e2213a4ca565f38260ae335c23b95fc74a0b00e27a946a1'); // fdb92212… before 2026-10-19 (the carry)
+    expect(digest(toLegacyPersonaDeep(day))).toBe('7088441c334be75ead2d875e1e492c874f74cac9895e10e41bde8ec76943e009'); // fdb92212… before 2026-10-19 (the carry)
   });
 
   it('under stage 2 (ADR-0006, on by default) is asked her stance and moved by it instead of the table: the same day, recorded', async () => {
@@ -95,7 +95,7 @@ describe('a touch in the old shape (touch vocabulary 1)', () => {
     // the record (here an in-memory one), and an old-shape touch whose stance is not welcome or fine is told without favour.
     // 8606cfd2… before scope (a): the touch while others are present now says 「相手に」 in her temperament.
     // Owner 2026-10-19: the carry is not asked and moves nothing (da6bf623… before).
-    expect(digest(toLegacyPersonaDeep(day))).toBe('f7f52842eeda550fa377f5a4afdcbfcb20801fb73bfd4efee369295b8c44def5');
+    expect(digest(toLegacyPersonaDeep(day))).toBe('df2823591bdd3d4f731f790e7aee2a92cd624bde824c2bf6e8c68b8f8481fe58');
   });
 
   it('is asked with the answer of before, without a stance; a touch that names its part is asked its stance too', async () => {
@@ -130,17 +130,17 @@ describe('what she is told of a touch that names its part', () => {
       return prompts.at(-1)!;
     };
     const neck = await ask(reflexTouch('neck', 'poke'));
-    expect(neck).toContain('- いま: ライ氏に首をつつかれた（ほんの一瞬）');
+    expect(neck).toContain('- いま: ライに首をつつかれた（ほんの一瞬）');
     expect(neck).toContain('- 体: 思わず小さく身を引いた');
     expect(neck).toContain(`- ${BODY_REACTION_OWN_RULE}`);
     expect(harness.speaker.calls.at(-1)!.stance).toBe(true);
-    expect(await ask(reflexTouch('chest', 'rest'))).toContain('- いま: ライ氏に胸に触れられている（2秒ほど）');
-    expect(await ask(reflexTouch('leg', 'stroke', { side: 'left' }))).toContain('- いま: ライ氏に左の脚をなでられている（2秒ほど）');
+    expect(await ask(reflexTouch('chest', 'rest'))).toContain('- いま: ライに胸に触れられている（2秒ほど）');
+    expect(await ask(reflexTouch('leg', 'stroke', { side: 'left' }))).toContain('- いま: ライに左の脚をなでられている（2秒ほど）');
     expect(await ask(reflexTouch('skirt', 'poke', { reflex: 'avoid' }))).toContain('- 体: 思わず身をそらした');
-    expect(await ask(reflexTouch('waist', 'tickle'))).toContain('- いま: ライ氏に腰をくすぐられている（2秒ほど）');
+    expect(await ask(reflexTouch('waist', 'tickle'))).toContain('- いま: ライに腰をくすぐられている（2秒ほど）');
     // An ordinary part is named the same way; no flinch line where the body reported none.
     const head = await ask({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'head', part: 'head', gesture: 'stroke', input: 'hover', reflex: 'none' });
-    expect(head).toContain('- いま: ライ氏に頭をなでられている（2秒ほど、なぞるように）');
+    expect(head).toContain('- いま: ライに頭をなでられている（2秒ほど、なぞるように）');
     expect(head).not.toContain('- 体: ');
     expect(head).toContain(`- ${BODY_REACTION_OWN_RULE}`);
     for (const prompt of prompts) {
@@ -155,26 +155,26 @@ describe('what she is told of a touch that names its part', () => {
     harness.speaker.decision = { say: true, text: 'あの…。', feeling: 'confused', stance: 'unsure' };
     const answer = await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'body', part: 'chest', gesture: 'rest', reflex: 'flinch' });
     const prompt = harness.speaker.prompts[0]!;
-    expect(prompt).toContain('- いま: ライ氏に胸に触れられている（2秒ほど）');
+    expect(prompt).toContain('- いま: ライに胸に触れられている（2秒ほど）');
     expect(prompt).not.toContain('手をつない');
     expect(answer.status).toBe('said');
-    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'confused', cause: 'ライ氏に胸に触れられた' });
+    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'confused', cause: 'ライに胸に触れられた' });
     expect(harness.activity().map(entry => entry.summary)).toEqual(['体に触れられて（胸に触れられた）、ひとこと返しました。']);
     // Without a judgement only the reflex, and its cause says the same.
     const quiet = await reactionHarness({ speaker: null });
     await quiet.events({ id: 'h-1', type: 'holdHand', audience: 'owner', occurredAt: START, durationMs: 3_000, region: 'body', part: 'waist', gesture: 'rest' });
-    expect(quiet.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏に腰に触れられた' });
+    expect(quiet.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライに腰に触れられた' });
     // Holding the hand itself keeps its words.
     harness.advance(60_000);
     await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'hand', part: 'hand', gesture: 'hold' });
-    expect(harness.speaker.prompts[1]).toContain('- いま: ライ氏に手をつないでもらっている（2秒ほど）');
+    expect(harness.speaker.prompts[1]).toContain('- いま: ライに手をつないでもらっている（2秒ほど）');
   });
 
   it('with other people present, tells the part and the flinch, and keeps the rule for the room', async () => {
     const harness = await reactionHarness();
     await harness.said(reflexTouch('neck', 'poke'), { audience: 'others' });
     const prompt = harness.speaker.prompts[0]!;
-    expect(prompt).toContain('- いま: ライ氏か、そばにいる誰かに首をつつかれた（ほんの一瞬）');
+    expect(prompt).toContain('- いま: ライか、そばにいる誰かに首をつつかれた（ほんの一瞬）');
     expect(prompt).toContain('- 体: 思わず小さく身を引いた');
     expect(prompt).toContain('- この場: ほかの人もいる');
     expect(prompt).not.toContain('理由 ');
@@ -193,12 +193,12 @@ describe('how she takes it is her own answer, never a table', () => {
   it('becomes the feeling she chose, as strong as the reflex was felt, also when she stays silent; the body is shown it as her face', async () => {
     const silent = await run({ say: false, text: '', feeling: 'uncomfortable', stance: 'dislike' });
     expect(silent.answer).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'annoyed' } });
-    expect(silent.harness.state().expressiveEmotion).toMatchObject({ primary: 'uncomfortable', target: 'ライ氏', cause: 'ライ氏に首をつつかれた' });
+    expect(silent.harness.state().expressiveEmotion).toMatchObject({ primary: 'uncomfortable', target: 'ライ', cause: 'ライに首をつつかれた' });
     expect(silent.harness.reactionStore.outcome(scope, 'touch-1')).toMatchObject({ stance: 'dislike', feeling: 'uncomfortable', said: false });
     // The same touch, another answer of hers: she may welcome it. Nothing turns her toward either.
     const fond = await run({ say: true, text: 'えへへ、くすぐったいです。', feeling: 'bashful', stance: 'welcome' });
     expect(fond.answer).toMatchObject({ status: 'said', message: { text: 'えへへ、くすぐったいです。', expression: 'bashful' }, mood: { expression: 'bashful' } });
-    expect(fond.harness.state().expressiveEmotion).toMatchObject({ primary: 'bashful', cause: 'ライ氏に首をつつかれた' });
+    expect(fond.harness.state().expressiveEmotion).toMatchObject({ primary: 'bashful', cause: 'ライに首をつつかれた' });
     expect(fond.harness.reactionStore.outcome(scope, 'touch-1')).toMatchObject({ stance: 'welcome', feeling: 'bashful', said: true });
     expect(fond.harness.activity().map(entry => entry.summary)).toEqual(['体に触れられて（首をつつかれた）、ひとこと返しました。']);
     // A refusal said aloud is hers to say.
@@ -219,13 +219,13 @@ describe('how she takes it is her own answer, never a table', () => {
       await harness.events({ id: `e-${index}`, type: 'pet', audience: 'owner', occurredAt: harness.clock.at, durationMs: 5_000, strength: 1, region: 'body', part, gesture: 'stroke' });
     }
     // Five strokes in a row would please her by the table; here they only startled her.
-    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏にスカートをなでられた（続けて5回目）' });
+    expect(harness.state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライにスカートをなでられた（続けて5回目）' });
     expect(harness.state().emotion.valence).toBe(before.emotion.valence);
     expect(harness.state().emotion.openness).toBe(before.emotion.openness);
     // A stroke on the head in the new shape is felt by the table, as a pat always was.
     harness.advance(20_000);
     await harness.events({ id: 'head-1', type: 'pet', audience: 'owner', occurredAt: harness.clock.at, region: 'head', part: 'head', gesture: 'stroke' });
-    expect(harness.state().expressiveEmotion?.cause).toBe(`ライ氏に${SHANNON_TOUCH_FEELINGS.pet.done}（続けて6回目）`);
+    expect(harness.state().expressiveEmotion?.cause).toBe(`ライに${SHANNON_TOUCH_FEELINGS.pet.done}（続けて6回目）`);
   });
 
   it('feels a touch on an ordinary part named in the new shape exactly as the same touch in the old shape', async () => {
@@ -296,22 +296,22 @@ describe('the words of a burst with a touch on such a part (review item 2)', () 
     const harness = await reactionHarness({ experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
     harness.speaker.decision = { say: false, text: '', feeling: 'confused', stance: 'unsure' };
     await harness.said(reflexTouch('chest', 'stroke'));
-    expect(memories.at(-1)).toContain('ライ氏に体に触れられた');
+    expect(memories.at(-1)).toContain('ライに体に触れられた');
     expect(memories.at(-1)).not.toMatch(/もらった/u);
     // A burst that also holds an ordinary stroke stays factual once such a touch was in it.
     harness.advance(20_000);
     await harness.said({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'body', part: 'shoulder', gesture: 'stroke' });
-    expect(memories.at(-1)).toContain('ライ氏に体に触れられた（2回');
+    expect(memories.at(-1)).toContain('ライに体に触れられた（2回');
     expect(harness.speaker.prompts.at(-1)).toContain('- 体に触れられた: この数分で2回目');
     // A hand resting there, then the burst of held hands it belongs to.
     harness.advance(60_000);
     await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'body', part: 'skirt', gesture: 'rest' });
-    expect(memories.at(-1)).toContain('ライ氏に体に触れられた');
+    expect(memories.at(-1)).toContain('ライに体に触れられた');
     expect(memories.at(-1)).not.toContain('手をつない');
     // Without a region the wording names no part, and never 頭 (the wording of before parts existed).
     const bare = await reactionHarness({ speaker: null, experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
     await bare.events({ id: 'n-1', type: 'pet', audience: 'owner', occurredAt: START, part: 'neck', gesture: 'stroke' });
-    expect(memories.at(-1)).toContain('ライ氏に触れられた');
+    expect(memories.at(-1)).toContain('ライに触れられた');
     expect(memories.at(-1)).not.toContain('頭');
   });
 
@@ -319,10 +319,10 @@ describe('the words of a burst with a touch on such a part (review item 2)', () 
     const memories: string[] = [];
     const harness = await reactionHarness({ experiences: { write: (_scope, experience) => { memories.push(experience.summary); return true; } } });
     await harness.said({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'head', part: 'head', gesture: 'stroke' });
-    expect(memories.at(-1)).toContain('ライ氏に頭をなでてもらった');
+    expect(memories.at(-1)).toContain('ライに頭をなでてもらった');
     harness.advance(60_000);
     await harness.said({ type: 'holdHand', durationMs: 2_000, ongoing: true, region: 'hand', part: 'hand', gesture: 'hold' });
-    expect(memories.at(-1)).toContain('ライ氏に手をつないでもらった');
+    expect(memories.at(-1)).toContain('ライに手をつないでもらった');
     // A finished event that names the part only now still makes the burst factual.
     harness.advance(60_000);
     await harness.said({ type: 'poke', durationMs: 200, ongoing: false }, { id: 'late-part' });
@@ -375,7 +375,7 @@ describe('the [体に起きたこと] block of an owner text turn (review follow
       touch(harness, 'd', 'tickle', { region: 'side' }), touch(harness, 'e', 'carry'), touch(harness, 'f', 'holdHand', { region: 'body' }));
     // Recorded by running these same events on a10fdedd, before stage 1b.
     expect(await block(harness)).toBe([
-      '[体に起きたこと]（PCに表示されているボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）',
+      '[体に起きたこと]（PCに表示されているボクの体にライがしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）',
       '- たったいま、なでられた', '- たったいま、手をつないでもらった', '- たったいま、頬をつつかれた',
     ].join('\n'));
   });

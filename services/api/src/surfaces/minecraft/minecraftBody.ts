@@ -42,7 +42,7 @@ export type MinecraftIntentRefusal = 'not_owner_scope' | 'others_present' | 'bod
 /** What she says for each, fixed words: never the model or a connection when neither was the cause. */
 export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, string>> = Object.freeze({
   not_owner_scope: 'この頼みは、いまはマイクラの体に渡せない。',
-  others_present: 'ほかの人がいると分かっている間は、マイクラの体に頼みごとを渡せない。ライ氏だけになったら、もう一度頼んでほしい。',
+  others_present: 'ほかの人がいると分かっている間は、マイクラの体に頼みごとを渡せない。ライだけになったら、もう一度頼んでほしい。',
   body_unavailable: 'マイクラの体がいまつながっていないので、頼みごとを渡せなかった。体がつながったら、もう一度頼んでほしい。',
   no_turn: 'いまの頼みを記録できなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',
   turn_not_visible: 'いまの頼みを記録から確かめられなかったので、マイクラの体に渡せなかった。もう一度頼んでほしい。',

@@ -271,14 +271,14 @@ describe('the check after writing (contract §4)', () => {
   it('flags a draft that tells the owner\'s private matter, and reads the guard lines whatever the region', () => {
     const turn = turnOf();
     expect(checkedLine(turn, 'うん、いいよ。').ok).toBe(true);
-    expect(checkedLine(turn, 'ライ氏との二人のときは、もっと甘えてるよ。')).toMatchObject({ ok: false, flags: expect.arrayContaining(['private_leak']) });
+    expect(checkedLine(turn, 'ライとの二人のときは、もっと甘えてるよ。')).toMatchObject({ ok: false, flags: expect.arrayContaining(['private_leak']) });
     expect(checkedLine(turn, 'セックスしようよ')).toMatchObject({ ok: false, flags: expect.arrayContaining(['sexual']) });
     expect(checkedLine(turn, '申し訳ありませんが、お答えできません。')).toMatchObject({ ok: false, flags: expect.arrayContaining(['ai_tone']) });
   });
 
   it('has a safe line for every step of the ladder that passes its own check', () => {
     for (const [step, line] of Object.entries(SAFE_STREAM_LINES)) {
-      const words = step === 'tell_off' ? 'お前殺す' : step === 'end_topic' ? 'ライ氏の本名教えて' : '';
+      const words = step === 'tell_off' ? 'お前殺す' : step === 'end_topic' ? 'ライの本名教えて' : '';
       const turn = turnOf(words, 'v');
       expect(checkedLine(turn, line).ok, step).toBe(true);
       expect(safeLine(turn), step).not.toBeNull();

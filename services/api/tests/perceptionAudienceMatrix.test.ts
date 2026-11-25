@@ -253,7 +253,7 @@ describe('perception copies every surface\'s audience (stage 3, step F2)', () =>
     const bridge = new PlatformBridgeService(configuredPlatformBridge({
       SHANNON_PLATFORM_BRIDGE_TOKEN: 'b'.repeat(40), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
       SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([
-        { platform: 'discord', conversationId: 'discord::555', ownerUserId: OWNER, title: 'ライ氏とのDM', audience: 'owner-private' },
+        { platform: 'discord', conversationId: 'discord::555', ownerUserId: OWNER, title: 'ライとのDM', audience: 'owner-private' },
         { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
         { platform: 'discord', conversationId: 'discord::777', ownerUserId: OWNER, title: 'ミナとのDM' },
       ]),

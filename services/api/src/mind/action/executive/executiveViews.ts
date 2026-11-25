@@ -20,8 +20,8 @@ export interface GoalReadPorts {
 }
 
 const CLOSED_REASON_WORDS: Readonly<Record<PursuitClosedReason, string>> = Object.freeze({
-  cap: '進める目標が多すぎたので休めた', shannon_rest: 'シャノンが休めた', shannon_drop: 'シャノンがやめた', owner_rest: 'ライ氏が休めた',
-  owner_drop: 'ライ氏がやめた', evidence: '完了の条件を満たした', owner_confirm: 'ライ氏が完了を認めた', legacy: '以前の仕組みで閉じた',
+  cap: '進める目標が多すぎたので休めた', shannon_rest: 'シャノンが休めた', shannon_drop: 'シャノンがやめた', owner_rest: 'ライが休めた',
+  owner_drop: 'ライがやめた', evidence: '完了の条件を満たした', owner_confirm: 'ライが完了を認めた', legacy: '以前の仕組みで閉じた',
   proposed_complete: 'シャノンが終えたと考えた（確認待ち）',
 });
 

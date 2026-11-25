@@ -9,7 +9,7 @@ import { capabilityCatalog } from './capabilityCatalog.js';
  * No word of the owner's is in it; goal titles are her own.
  */
 const BAND = Object.freeze<Record<string, string>>({ night: '夜', morning: '朝', afternoon: '昼', evening: '夕方' });
-const PRESENCE = Object.freeze<Record<string, string>>({ alone: 'ライ氏ひとり', others: 'ほかの人もいる', unknown: '様子不明' });
+const PRESENCE = Object.freeze<Record<string, string>>({ alone: 'ライひとり', others: 'ほかの人もいる', unknown: '様子不明' });
 const OUTCOME = Object.freeze<Record<string, string>>({ success: 'できた', failure: 'うまくいかなかった', unknown: '不明' });
 
 const signed = (value: number) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`;
@@ -26,7 +26,7 @@ export function executivePrompt(
     '- 候補の中から選んでよいし、下の「できること」にある別のものを選んでもよい。点数で決めなくてよい。',
     '- 文字で知らせるのも電話も、理由は自由。ただし相手の時間を大事にする。',
     '- 休むのも立派な選択。次に考えるまでの分（20〜180）を書く。',
-    '- 目標について、続ける（continue）・休める（rest）・やめる（drop）・終わったと思う（propose_complete）を言える。終わったかどうかは、証拠かライ氏が決める。',
+    '- 目標について、続ける（continue）・休める（rest）・やめる（drop）・終わったと思う（propose_complete）を言える。終わったかどうかは、証拠かライが決める。',
     '- 返事はJSONだけ: {"capability":"…","goalId":"…（目標に向けた時）",',
     '  "args":{"intent":"何をするか一言","about":"share|wonder|upcoming|saw（知らせる時）","pieceId":"…（直す・見せる作品）"},',
     '  "reason":"選んだ理由を一行（80字まで）","goalProposal":"continue|rest|drop|propose_complete","nextThinkMinutes":90}',
@@ -49,7 +49,7 @@ export function executivePrompt(
       return `- ${candidate.capability}${candidate.goalId ? `（目標 ${candidate.goalId}）` : ''}: ${value}${recent}${rank ? `、順位 ${rank}` : ''}`;
     }),
     ...(material.interests.length ? ['[気になっていること]（重み）', ...material.interests.map(item => `- ${item.id}: ${item.weight.toFixed(2)}`)] : []),
-    `[この7日のライ氏の反応] ${Object.entries(material.ownerReactions7d).map(([reaction, count]) => `${reaction} ${count}`).join('、') || 'なし'}`,
+    `[この7日のライの反応] ${Object.entries(material.ownerReactions7d).map(([reaction, count]) => `${reaction} ${count}`).join('、') || 'なし'}`,
     ...(withheld ? [withheld] : []),
   ];
   return { system, prompt: lines.join('\n') };

@@ -56,9 +56,9 @@ describe('the workspace after a restart', () => {
     await world.chat('さっきの続きだけど');
     const context = world.lastContext();
     expect(context).toContain('[いまの場]');
-    expect(context).toMatch(/・声の会話：ライ氏が話した\n|・声の会話：ライ氏が話した$/mu);
+    expect(context).toMatch(/・声の会話：ライが話した\n|・声の会話：ライが話した$/mu);
     expect(context).not.toContain('木材を集めておいて');
-    expect(context).toContain('ライ氏が話した「今日は何をしていたの？」');
+    expect(context).toContain('ライが話した「今日は何をしていたの？」');
     expect(context).toContain('【知らせ:触れた】');
     await world.close();
   });
@@ -76,7 +76,7 @@ describe('the workspace after a restart', () => {
     world.advance(MINUTE);
     await world.chat('もう一度だけど');
     expect(world.lastContext()).not.toContain('植木鉢');
-    expect(world.lastContext()).toContain('・アプリの文字：ライ氏が話した');
+    expect(world.lastContext()).toContain('・アプリの文字：ライが話した');
     await world.close();
   });
 
@@ -150,7 +150,7 @@ describe('the workspace after a restart', () => {
     expect(second.host.view('owner', at).notices).toEqual(['inbox:1']);
     expect(second.host.view('owner', at).held.filter(item => item.id === 'inbox:1')).toHaveLength(1);
     // A row of anything but closed values is refused by the writer.
-    expect(() => new SQLiteMindInbox(second.database, { createSchema: false }).append('owner', { kind: 'notice', code: 'withheld', audience: 'owner', source: 'own_time', sourceId: 'x', tool: 'ライ氏に話しかける' }, at)).toThrow('MIND_INBOX_SYMBOL');
+    expect(() => new SQLiteMindInbox(second.database, { createSchema: false }).append('owner', { kind: 'notice', code: 'withheld', audience: 'owner', source: 'own_time', sourceId: 'x', tool: 'ライに話しかける' }, at)).toThrow('MIND_INBOX_SYMBOL');
     expect(inboxPerception({ draft: { kind: 'notice', code: 'withheld', audience: 'owner', source: 'own_time', sourceId: 'x' }, at })).not.toBeNull();
     emit.close(); first.database.close(); second.database.close();
   });

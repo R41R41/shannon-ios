@@ -64,7 +64,7 @@ export function createOperatorRequests(
       actionId: admission.actionId,
     });
     parts.activity(c.at, {
-      summary: `運用者（${c.operator}）がライ氏の代わりにマイクラの ${input.action} を頼みました${input.keepWorld ? '（今のワールドのまま始めるよう指定）' : ''}。`,
+      summary: `運用者（${c.operator}）がライの代わりにマイクラの ${input.action} を頼みました${input.keepWorld ? '（今のワールドのまま始めるよう指定）' : ''}。`,
       tool: `operator.minecraft.${input.action}`,
       outcome: 'done',
       reasonCode: 'operator_cli',
@@ -125,7 +125,7 @@ throw error;
       throw error;
     }
     parts.activity(c.at, {
-      summary: `運用者（${c.operator}）がライ氏の代わりにマイクラの依頼を始めました。`,
+      summary: `運用者（${c.operator}）がライの代わりにマイクラの依頼を始めました。`,
       tool: 'operator.minecraft.request',
       outcome: 'done',
       reasonCode: 'operator_cli',

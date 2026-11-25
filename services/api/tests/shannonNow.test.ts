@@ -387,7 +387,7 @@ describe('GET /v1/shannon/now: what it answers', () => {
   it('gives her feeling as faces and strengths, and never why', async () => {
     const { read, stateStore, clock } = await harness();
     const felt = (primary: string, intensity: number, at: string) => stateStore.apply(OWNER, { type: 'expressive-emotion-updated', emotion: {
-      primary, secondary: [], intensity, target: 'ライ氏', cause: 'CAUSE FROM THE CONVERSATION', arousal: 0.3, valence: -0.5,
+      primary, secondary: [], intensity, target: 'ライ', cause: 'CAUSE FROM THE CONVERSATION', arousal: 0.3, valence: -0.5,
       visibility: 'expressed', startedAt: at, decay: 0.24, carryover: 0.6, updatedAt: at,
     } as never });
     clock.at = ago(3 * 60 * MINUTE);
@@ -404,7 +404,7 @@ describe('GET /v1/shannon/now: what it answers', () => {
     expect(body.feeling.lingering[0]!.strength).toBeGreaterThan(0);
     expect(body.feeling.lingering[0]!.strength).toBeLessThanOrEqual(0.8);
     const text = JSON.stringify(body);
-    for (const forbidden of ['CAUSE FROM THE CONVERSATION', 'cause', 'target', 'ライ氏', 'lonely']) expect(text).not.toContain(forbidden);
+    for (const forbidden of ['CAUSE FROM THE CONVERSATION', 'cause', 'target', 'ライ', 'lonely']) expect(text).not.toContain(forbidden);
     // Reading stored nothing.
     const before = stateStore.snapshot(OWNER);
     await read();

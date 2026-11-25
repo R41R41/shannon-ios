@@ -25,7 +25,7 @@ import { promptOf } from './modelPrompt.js';
 const scope = 'owner';
 const START = '2026-10-02T09:00:00.000Z';
 const SECOND = 1_000;
-const SEEN_TEXT = 'ライ氏が机に向かっているのが見えます。';
+const SEEN_TEXT = 'ライが机に向かっているのが見えます。';
 const delegations = '/v1/voice/live/delegations';
 
 /** What the owner said in the call of 2026-10-02, in order. No look was ever opened then. */

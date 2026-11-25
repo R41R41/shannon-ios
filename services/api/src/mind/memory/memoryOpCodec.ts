@@ -46,7 +46,7 @@ export function closedKey(value: string, maximum: number): string {
 }
 
 /** The marker on the owner's own words that read like an instruction (review L5): kept, quoted, never refused. */
-export const OWNER_WORDS_MARKER = '［ライ氏の言葉］';
+export const OWNER_WORDS_MARKER = '［ライの言葉］';
 
 /**
  * How a codec call reads its texts (set for the duration of one `encode` or `decode`): the owner's own words (an op of his turn,

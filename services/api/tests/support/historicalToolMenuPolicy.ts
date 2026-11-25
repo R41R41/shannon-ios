@@ -19,7 +19,7 @@ export function historicalToolMenuPolicy(actual: ToolMenuPolicy): ToolMenuPolicy
  * Q01's native description/endpoint are covered by voyagerOpenTasks/capability evidence.
  */
 export function historicalReadCapabilityPolicy(actual: typeof import('@shannon/cognition')): typeof actual {
-  const text = '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。';
+  const text = '読む道具: ライと二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補を、要る時に道具で読む（読むだけ）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある。';
   return { ...actual, withReadToolsCapability: prompt => actual.withReadToolsCapability(prompt).replace(actual.SHANNON_READ_TOOLS_CAPABILITY.text, text) };
 }
 
@@ -28,8 +28,8 @@ export function historicalReadCapabilityPolicy(actual: typeof import('@shannon/c
  * the text menu's web entry and the research tool's description, as afb38c28 sent them.
  */
 const HISTORICAL_SUMMARIES: Readonly<Record<string, string>> = Object.freeze({
-  'voyager.tasks': 'ライ氏のVoyagerのタスクを言葉で探して読む',
-  'schedule.upcoming': 'ライ氏のこれからの予定と期日のある約束を見る',
+  'voyager.tasks': 'ライのVoyagerのタスクを言葉で探して読む',
+  'schedule.upcoming': 'ライのこれからの予定と期日のある約束を見る',
   'web.search': 'ウェブで今の情報を調べる（ニュース・天気・営業時間など）',
   'weather.forecast': '天気予報を見る（家のあたりか、指定した場所）',
 });
@@ -48,7 +48,7 @@ function historicalSchedule(tool: Tool): Tool {
   }
   const now = tool.input.properties as Readonly<Record<string, Property>>;
   return { ...tool,
-    description: `ライ氏のこれからの予定・期日のある約束・日付のあるタスクを見る（見るだけ）。カレンダーはアプリが共有している時だけ分かる。${tool.description.split('カレンダーはアプリが共有している分だけ分かる。')[1]}`,
+    description: `ライのこれからの予定・期日のある約束・日付のあるタスクを見る（見るだけ）。カレンダーはアプリが共有している時だけ分かる。${tool.description.split('カレンダーはアプリが共有している分だけ分かる。')[1]}`,
     input: { ...tool.input, properties: {
       query: { type: 'string', description: '予定・約束・タスクの題名と場所。空白で分けた全語で絞る', maxLength: 160 }, kind: now.kind!,
       after: { type: 'string', description: 'この日時以降。ISO 8601の日時とタイムゾーン（例: 2026-10-01T00:00:00+09:00）', maxLength: 40 },
@@ -65,7 +65,7 @@ export function historicalVoyagerToolPolicy(actual: typeof import('../../src/min
     : tool.name === 'web.research'
     ? { ...tool, description: tool.description.replace(RESEARCH_WEATHER_LINE, '') }
     : tool.name !== 'voyager.tasks' ? tool : ({ ...tool,
-    description: 'ライ氏のVoyagerのタスクを言葉で探して読む（読むだけ。言葉で探すので、全部の一覧ではない）。タスクを作る・変える' + tool.description.split('タスクを作る・変える')[1],
+    description: 'ライのVoyagerのタスクを言葉で探して読む（読むだけ。言葉で探すので、全部の一覧ではない）。タスクを作る・変える' + tool.description.split('タスクを作る・変える')[1],
     input: { ...tool.input, properties: { ...tool.input.properties, query: { ...tool.input.properties.query!, description: '探す言葉（タスクの題名にありそうな言葉）。書かなければ「タスク」で探す' } } },
   });
   const then = (tools: readonly Tool[]) => tools.filter(tool => !LATER_TOOLS.has(tool.name)).map(project);

@@ -145,8 +145,8 @@ export function personaBlock(selection: Pick<PersonaSelection, 'primary' | 'seco
   return parts.join('\n');
 }
 
-/** Exchanges as the block shows them: 「ライ氏：…／ボク：…」. */
-const exchangeWords = (exchanges: readonly Exchange[]) => exchanges.map(([his, hers]) => `「ライ氏：${his}／ボク：${hers}」`).join('');
+/** Exchanges as the block shows them: 「ライ：…／ボク：…」. */
+const exchangeWords = (exchanges: readonly Exchange[]) => exchanges.map(([his, hers]) => `「ライ：${his}／ボク：${hers}」`).join('');
 
 /** Exchanges about her work in the game (`WORK_EXCHANGES`, a draft): a few, turning with the minute, as the persona block shows its own. */
 export function workExchangeLines(turn = 0, count = 3): string {

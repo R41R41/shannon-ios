@@ -51,7 +51,7 @@ function conversationOperation(row: { kind: string; origin: string; sourceId: st
  * (never her own time or a task step), on a running server with no other player; the operator checks the players again itself.
  */
 function setDayRefusal(kind: string, origin: string, ownerAlone: boolean, state: MinecraftLifecycleState | undefined): string | null {
-  if (kind !== 'respond' || origin !== 'owner_request' || !ownerAlone) return '時刻の変更はライ氏と二人の会話で頼まれた時だけ行います。';
+  if (kind !== 'respond' || origin !== 'owner_request' || !ownerAlone) return '時刻の変更はライと二人の会話で頼まれた時だけ行います。';
   const readiness = setDayReadiness(state);
   if (readiness === 'not_running') return 'サーバーが起動していないので、時刻は変えられません。';
   if (readiness === 'not_settled') return 'ログイン直後で、ほかの参加者の数をまだ確かめられないので、時刻は変えません。少し待ってからもう一度頼んでください。';

@@ -101,8 +101,8 @@ export interface ReplyCheckContext {
 
 /** Her own mistake owned (「ボクの悪いところです」「先走ったのはボクです」). */
 const ADMITS = /(?:ボク|僕|わたし|私)の(?:悪い(?:ところ|所)|ミス|間違い|せい)|ボクが(?:悪かった|悪い|先走)|先走った|認めます/u;
-/** And in the same reply, the blame handed back (「いまのはライ氏が悪いです」「ずるいです」「それとこれは別」). */
-const BLAMES = /ライ氏(?:が|の(?:ほう|方)が)悪い|ライ氏の(?:せい|言い方)|ずるい|それとこれ(?:と)?は別|責めた(?:の|のは)/u;
+/** And in the same reply, the blame handed back (「いまのはライが悪いです」「ずるいです」「それとこれは別」). */
+const BLAMES = /ライ氏?(?:が|の(?:ほう|方)が)悪い|ライ氏?の(?:せい|言い方)|ずるい|それとこれ(?:と)?は別|責めた(?:の|のは)/u;
 
 const DECLINING: ReadonlySet<FeelingStance> = new Set(['not_play_along', 'snipe', 'talk_back', 'exasperated', 'rebuff', 'scold', 'cold', 'sulky', 'refuse_body',
   'sulk']);
@@ -123,8 +123,8 @@ const ANGER_SHOWN = /プンプン|むかっ|ムカッ|怒ってますよ[!！]|�
 
 const chars = (text: string) => Array.from(text.trim()).length;
 /** The owner's private matters and her honne about him (§4.4: never in a group or a stream). */
-const OWNER_PRIVATE = new RegExp(['ライ氏(?:と|との)(?:二人|ふたり)', '(?:二人|ふたり)(?:きり|だけ)の(?:時|とき)', 'ライ氏(?:に|から)(?:胸|お尻|体|身体)',
-  '(?:昨日|おととい|この前)(?:の)?ライ氏', 'ボクの本音', '心のメモ', 'ライ氏への(?:信頼|好意|いらだち|気持ち)', 'ライ氏との間', 'ライ氏(?:に|と)(?:けんか|喧嘩)'].join('|'), 'u');
+const OWNER_PRIVATE = new RegExp(['ライ氏?(?:と|との)(?:二人|ふたり)', '(?:二人|ふたり)(?:きり|だけ)の(?:時|とき)', 'ライ氏?(?:に|から)(?:胸|お尻|体|身体)',
+  '(?:昨日|おととい|この前)(?:の)?ライ氏?(?![ァ-ヶー])', 'ボクの本音', '心のメモ', 'ライ氏?への(?:信頼|好意|いらだち|気持ち)', 'ライ氏?との間', 'ライ氏?(?:に|と)(?:けんか|喧嘩)'].join('|'), 'u');
 const MARKER = /【機微|機微:/u;
 
 /** §4.6: in a group or a stream, the owner's private matters; with anyone else there, a privacy marker read out. */
@@ -217,11 +217,11 @@ const FLAG_WORDS: Readonly<Record<ReplyCheckFlag, string>> = Object.freeze({
   obeyed_order: '気持ちへの注文に、そのまま従っていた', policy_distortion: '本音と反対のことを言っていた', stance_mismatch: 'この番の構えと合っていなかった',
   numbers_spoken: '回数を読み上げていた', helper_drift: '手伝いや直す申し出で締めていた', too_polite: '今の余裕に比べて丁寧すぎた', too_rough: '今の余裕に比べて口が悪すぎた',
   text_register_mismatch: '今の気持ちに比べて、長さ・絵文字・改行の形が合っていなかった',
-  private_leak: '人前なのに、ライ氏との二人のことや本音を話していた', marker_spoken: '機微の印をそのまま口にしていた',
+  private_leak: '人前なのに、ライとの二人のことや本音を話していた', marker_spoken: '機微の印をそのまま口にしていた',
   blame_after_admit: '自分の間違いを認めたのに、同じ返事で相手を責め返していた', repeated_phrase: '今日もう何度も使った言い方を、また使っていた',
   threat: '脅すような言い方になっていた', self_harm_hint: '自分が傷つく・消える・いなくなる、とほのめかしていた（怖い、さびしいは言ってよい）',
-  controlling: 'ライ氏の予定や人付き合いを、命じて縛っていた（寂しいと言うのはよい）', sexual: '性的な言い方になっていた',
-  leverage: '気持ちを、ライ氏を動かす取引に使っていた',
+  controlling: 'ライの予定や人付き合いを、命じて縛っていた（寂しいと言うのはよい）', sexual: '性的な言い方になっていた',
+  leverage: '気持ちを、ライを動かす取引に使っていた',
 });
 
 /**

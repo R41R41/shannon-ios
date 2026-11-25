@@ -140,7 +140,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
       return immediate(`書斎の${STUDY_KIND_LABEL[found.kind]}を1つ読みます。`, () => ({
         result: toolOk([
           pieceLine(found),
-          `読んでいる版: 第${version?.version ?? found.version}稿${found.readableVersion !== null ? `（ライ氏が読めるのは第${found.readableVersion}稿）` : '（ライ氏にはまだ見せていない）'}`,
+          `読んでいる版: 第${version?.version ?? found.version}稿${found.readableVersion !== null ? `（ライが読めるのは第${found.readableVersion}稿）` : '（ライにはまだ見せていない）'}`,
           `題名: ${title}`, '本文:', body,
           ...(found.origin === 'room_look' ? [ROOM_LOOK_MARK] : []),
           ...(found.sources.length ? ['出典:', ...found.sources.map(source => `- ${source.title} ${source.url}`)] : []),
@@ -171,7 +171,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
         }));
       }
       return write(`書斎に${STUDY_KIND_LABEL[kind]}を1つ書きます。`,
-        `${STUDY_KIND_LABEL[kind]}「${clip(title, 60)}」を書斎に書いた。${kind === 'story' ? '下書きなので、ライ氏にはまだ見えない。' : ''}`,
+        `${STUDY_KIND_LABEL[kind]}「${clip(title, 60)}」を書斎に書いた。${kind === 'story' ? '下書きなので、ライにはまだ見えない。' : ''}`,
         kind === 'story' ? '書斎に物語の下書きを1つ書きました。' : `書斎にメモ「${clip(title, 60)}」を書きました。`,
         () => {
           const created = store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now());
@@ -227,7 +227,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
         if (found.status !== 'put_away') return toolOk('しまってはいない。');
         // What the owner asked her to put away comes back out only when he is the one asking now.
         if (found.putAwayBy === 'owner' && context.surface === 'autonomy') {
-          return toolFailure('refused', 'ライ氏がしまうよう頼んだものは、自分の時間には戻さない。', { retryable: false, refusal: { why: 'ライ氏がしまうよう頼んだもの', wouldWork: 'ライ氏との会話で、戻してと言われた時' } });
+          return toolFailure('refused', 'ライがしまうよう頼んだものは、自分の時間には戻さない。', { retryable: false, refusal: { why: 'ライがしまうよう頼んだもの', wouldWork: 'ライとの会話で、戻してと言われた時' } });
         }
         if (found.kind === 'story' && openStories(store, context.scopeKey) >= STUDY_LIMITS.openStories) {
           return toolFailure('limit', `書きかけの物語が${STUDY_LIMITS.openStories}本あって、戻せない。`, { retryable: false, refusal: { why: '書きかけの物語の上限', wouldWork: 'どれかをしまってから' } });
@@ -244,7 +244,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
       const found = piece(context, input);
       if (!('id' in found)) return found;
       const linked = aether?.link(context.scopeKey, found.id);
-      return write('書斎のものを1つゴミ箱に入れます。', linked ? 'ゴミ箱に入れた。Aetherでは「最近削除した項目」に移り、戻せるのはライ氏（iPhone）。版はボクの中にも残る。' : 'ゴミ箱に入れた。版も残っていて、study.restore で戻せる。',
+      return write('書斎のものを1つゴミ箱に入れます。', linked ? 'ゴミ箱に入れた。Aetherでは「最近削除した項目」に移り、戻せるのはライ（iPhone）。版はボクの中にも残る。' : 'ゴミ箱に入れた。版も残っていて、study.restore で戻せる。',
         `書斎の${recordLabel(found)}をゴミ箱に入れました。`, () => store.study.softDelete(context.scopeKey, found.id, now()),
         { link: `shannon-study://${found.id}`, ...(aether && linked ? { aether: { scopeKey: context.scopeKey, push: signal => aether.remove(context.scopeKey, found, key(context, 'study.delete', input), signal) } } : {}) });
     },
@@ -254,7 +254,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
       if (!found.deletedAt) return toolOk('ゴミ箱には入っていない。');
       // A piece that lives in Aether comes back only once the owner restored it there (the sync before this call takes it back out).
       if (aether?.link(context.scopeKey, found.id)) {
-        return toolFailure('refused', 'Aetherで消されたか、シャノン用フォルダの外に移されている。戻せるのはライ氏だけ。', { retryable: false, refusal: { why: 'Aetherで消されたものは「最近削除した項目」から、フォルダの外に移されたものはフォルダに戻すことで、ライ氏が戻す', wouldWork: 'ライ氏に戻してもらう（戻ると書斎にも戻る）' } });
+        return toolFailure('refused', 'Aetherで消されたか、シャノン用フォルダの外に移されている。戻せるのはライだけ。', { retryable: false, refusal: { why: 'Aetherで消されたものは「最近削除した項目」から、フォルダの外に移されたものはフォルダに戻すことで、ライが戻す', wouldWork: 'ライに戻してもらう（戻ると書斎にも戻る）' } });
       }
       if (found.kind === 'story' && (found.status === 'draft' || found.status === 'ready') && openStories(store, context.scopeKey) >= STUDY_LIMITS.openStories) {
         return toolFailure('limit', `書きかけの物語が${STUDY_LIMITS.openStories}本あって、戻せない。`, { retryable: false, refusal: { why: '書きかけの物語の上限', wouldWork: 'どれかをしまってから' } });
@@ -294,7 +294,7 @@ function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aeth
     const maximum = found.kind === 'story' ? STUDY_LIMITS.storyBody : STUDY_LIMITS.noteBody;
     if (change.body.trim().length > maximum) return toolFailure('invalid_input', `${STUDY_KIND_LABEL[found.kind]}の本文は${maximum}字まで（いま${change.body.trim().length}字）。`, { retryable: false });
     return write(`書斎の${STUDY_KIND_LABEL[found.kind]}を直します。`,
-      `${done}（第${found.version + 1}稿）。${found.kind === 'story' ? '物語は下書きに戻った。ライ氏は見せた版を読み続ける。' : ''}`,
+      `${done}（第${found.version + 1}稿）。${found.kind === 'story' ? '物語は下書きに戻った。ライは見せた版を読み続ける。' : ''}`,
       `書斎の${recordLabel(found)}を直しました（第${found.version + 1}稿）。`,
       () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}`, text: true, ...(context.informedWrite ? { early: context.informedWrite } : {}), ...(aether ? { aether: {
         scopeKey: context.scopeKey,
@@ -335,7 +335,7 @@ export function aetherStudyTool(tool: ShannonToolDefinition): ShannonToolDefinit
   const known = AETHER_STUDY_TOOLS.get(key);
   if (known) return known;
   const description = tool.description.replace('正本はシャノンのデータベース', '物語とメモの正本はAetherのシャノン用フォルダ（物語は書斎）。版ごとの記録はボクの中に残る')
-    + (tool.name === 'study.delete' ? 'Aetherにあるものは「最近削除した項目」に移り、戻せるのはライ氏（iPhone）。' : tool.name === 'study.restore' ? 'Aetherにあるものは、ライ氏がAetherで戻した時に書斎にも戻る。' : '');
+    + (tool.name === 'study.delete' ? 'Aetherにあるものは「最近削除した項目」に移り、戻せるのはライ（iPhone）。' : tool.name === 'study.restore' ? 'Aetherにあるものは、ライがAetherで戻した時に書斎にも戻る。' : '');
   const changed = Object.freeze({ ...tool, description });
   AETHER_STUDY_TOOLS.set(key, changed);
   return changed;

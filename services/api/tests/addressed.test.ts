@@ -12,7 +12,7 @@ import { ADDRESSED_CASES, type AddressedCase } from './support/addressedCases.js
  * the part that is ours: when the question is asked at all, what it is shown, what its answers make of it, and what decides when Jev
  * does not answer. The real Jev's accuracy is measured by `addressedLiveEval.ts` (billable, with `TYPESAFE_API_KEY`).
  */
-const speakerOf = (item: AddressedCase) => ({ id: item.speaker ?? 'owner', name: item.speaker ?? 'ライ氏' });
+const speakerOf = (item: AddressedCase) => ({ id: item.speaker ?? 'owner', name: item.speaker ?? 'ライ' });
 const inputOf = (item: AddressedCase): AddressedInput => ({
   scopeKey: 'owner', transcript: item.transcript, speaker: speakerOf(item), humans: item.humans,
   recent: (item.recent ?? []).map(line => ({ who: line.who, text: line.text, secondsAgo: line.secondsAgo, ...(line.shannon ? { shannon: true as const } : {}) })),
@@ -179,22 +179,26 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
       ...(presenting === null ? {} : { introduces_her: { type: 'noul', noul: presenting } }), reply_needed: { type: 'noul', noul: needsReply },
     } }))) as unknown as typeof fetch;
     const item = ADDRESSED_CASES.find(candidate => candidate.id === 'call-weather')!;
-    expect(await judgeWith(answer('shannon', 0.95)).judge(inputOf(item))).toMatchObject({ addressed: true, introduced: true });
-    expect(await judgeWith(answer('other_person', 0.92)).judge(inputOf(item))).toMatchObject({ addressed: true, reason: 'named', introduced: true });
-    expect((await judgeWith(answer('other_person', 0.5)).judge(inputOf(item))).addressed).toBe(false);
-    expect((await judgeWith(answer('other_person', null)).judge(inputOf(item))).addressed).toBe(false);
-    expect((await judgeWith(answer('about_shannon', 0.99)).judge(inputOf(item))).addressed).toBe(false);
-    expect((await judgeWith(answer('self', 0.99)).judge(inputOf(item))).addressed).toBe(false);
-    expect((await judgeWith(answer('other_person', 0.95, 0.4)).judge(inputOf(item))).addressed).toBe(false);
+    // Only the Discord call reads a presentation (`presentation`): any other entrance keeps its own reading.
+    const inCall: AddressedInput = { ...inputOf(item), presentation: true };
+    expect(await judgeWith(answer('shannon', 0.95)).judge(inCall)).toMatchObject({ addressed: true, introduced: true });
+    expect(await judgeWith(answer('other_person', 0.92)).judge(inCall)).toMatchObject({ addressed: true, reason: 'named', introduced: true });
+    expect((await judgeWith(answer('other_person', 0.5)).judge(inCall)).addressed).toBe(false);
+    expect((await judgeWith(answer('other_person', null)).judge(inCall)).addressed).toBe(false);
+    expect((await judgeWith(answer('about_shannon', 0.99)).judge(inCall)).addressed).toBe(false);
+    expect((await judgeWith(answer('self', 0.99)).judge(inCall)).addressed).toBe(false);
+    expect((await judgeWith(answer('other_person', 0.95, 0.4)).judge(inCall)).addressed).toBe(false);
     // Answered, but not a presentation (a question to her): no mark; a missing answer is no mark and no failure.
-    expect(await judgeWith(answer('shannon', 0.1)).judge(inputOf(item))).toMatchObject({ addressed: true });
-    expect((await judgeWith(answer('shannon', 0.1)).judge(inputOf(item))).introduced).toBeUndefined();
-    expect(await judgeWith(answer('shannon', null)).judge(inputOf(item))).toMatchObject({ addressed: true });
-    expect((await judgeWith(answer('shannon', null)).judge(inputOf(item))).introduced).toBeUndefined();
+    expect(await judgeWith(answer('shannon', 0.1)).judge(inCall)).toMatchObject({ addressed: true });
+    expect((await judgeWith(answer('shannon', 0.1)).judge(inCall)).introduced).toBeUndefined();
+    expect(await judgeWith(answer('shannon', null)).judge(inCall)).toMatchObject({ addressed: true });
+    expect((await judgeWith(answer('shannon', null)).judge(inCall)).introduced).toBeUndefined();
+    expect((await judgeWith(answer('other_person', 0.95)).judge(inputOf(item))).addressed).toBe(false);
+    expect((await judgeWith(answer('shannon', 0.95)).judge(inputOf(item))).introduced).toBeUndefined();
   });
 
   it('名前なしの質問も残し、返事不要・不明な相手・弱い確信では会話中も黙る', async () => {
-    const input: AddressedInput = { scopeKey: 'owner', speaker: { id: 'owner', name: 'ライ氏' }, humans: 1,
+    const input: AddressedInput = { scopeKey: 'owner', speaker: { id: 'owner', name: 'ライ' }, humans: 1,
       owner: true, transcript: '明日の予定を教えてもらえる？' };
     const answer = (target: string, directed: number, needed: number) => (async () => new Response(JSON.stringify({ answers: {
       addressed_to_shannon: { type: 'noul', noul: directed }, target: { type: 'choice', choice: target },
@@ -277,7 +281,7 @@ describe('the local rules alone over the cases', () => {
 });
 
 describe('stop words (止めて, 待って, ストップ...) without her name (owner 2026-10-21)', () => {
-  const base = { scopeKey: 'owner', speaker: { id: 'o', name: 'ライ氏' }, humans: 1 };
+  const base = { scopeKey: 'owner', speaker: { id: 'o', name: 'ライ' }, humans: 1 };
   it('pass from the owner while she speaks or her body works, without asking Jev', async () => {
     const calls = { count: 0, bodies: [] as unknown[] };
     const judge = judgeWith(standInJev({ calls }));

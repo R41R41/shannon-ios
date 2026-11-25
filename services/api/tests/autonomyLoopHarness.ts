@@ -66,8 +66,8 @@ const DEFAULT_REPLIES: Record<Exclude<ModelCallKind, 'think'>, unknown> = {
   note: { title: '夕方の駅が懐かしい理由', body: '光の色と人の少なさが、懐かしさを作っているのだと思いました。物語では音を先に書くと効きそうです。', question: '', questionWhy: '' },
   draft: { title: '傘のある駅', body: STORY_BODY, note: '誰もいない場所に、誰かがいた気配だけを書こうとしました。' },
   revise: { title: '傘のある駅', body: `${STORY_BODY}最後に、傘はもうなかった。`, change: '終わりに傘がなくなる一文を足しました。余韻を残したかったからです。' },
-  reach_out: { message: 'ライ氏、いま何をしていますか。ボクは少し気になりました。' },
-  follow_up: { message: 'あれ、ライ氏、いませんか。' },
+  reach_out: { message: 'ライ、いま何をしていますか。ボクは少し気になりました。' },
+  follow_up: { message: 'あれ、ライ、いませんか。' },
 };
 
 export class FakeReader implements AutonomyPublicReader {

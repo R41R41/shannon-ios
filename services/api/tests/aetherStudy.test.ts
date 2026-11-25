@@ -88,7 +88,7 @@ describe('the Aether client (syzygy.aether-shannon-access.v1)', () => {
     expect(await access.read({ documentId: created.documentId, offset: 20_000 })).toMatchObject({ hasMore: false, bodyOffset: 20_000 });
     // A stale base version and a document outside her folder.
     await expect(access.update({ documentId: created.documentId, baseVersion: 7, body: 'x', idempotencyKey: aetherIdempotencyKey('t', '2') })).rejects.toMatchObject({ code: 'STALE_VERSION' });
-    const owners = fake.ownerDocument('ライ氏の仕様', '本文');
+    const owners = fake.ownerDocument('ライの仕様', '本文');
     await expect(access.update({ documentId: owners.id, baseVersion: 1, body: 'x', idempotencyKey: aetherIdempotencyKey('t', '3') })).rejects.toMatchObject({ code: 'OUTSIDE_SHANNON_FOLDER' });
     await expect(access.read({ documentId: 'doc_none' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     // Nothing of the token or a request is in an error.
@@ -115,13 +115,13 @@ describe('the Aether client (syzygy.aether-shannon-access.v1)', () => {
 describe('who may read what (owner decision 2026-10-06, enforced at the gate)', () => {
   it('reads the owner\'s documents only with him alone; with others present and in her own time only inside her folder', async () => {
     const { fake, call } = await harness();
-    const owners = fake.ownerDocument('ライ氏の仕様メモ', '鍵となる言葉: 灯台。ライ氏だけの話。');
+    const owners = fake.ownerDocument('ライの仕様メモ', '鍵となる言葉: 灯台。ライだけの話。');
     const mine = fake.put({ title: 'ボクの灯台メモ', body: '灯台の光の数え方。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
 
     const alone = await call('aether.search', { query: '灯台' });
     expect(alone.ok).toBe(true);
     expect(alone.text).toContain(owners.id);
-    expect((await call('aether.read', { documentId: owners.id })).text).toContain('ライ氏だけの話');
+    expect((await call('aether.read', { documentId: owners.id })).text).toContain('ライだけの話');
 
     for (const [audience, surface] of [['others', 'text'], ['others', 'voice'], ['owner_alone', 'autonomy']] as const) {
       const all = await call('aether.search', { query: '灯台' }, audience, surface);
@@ -132,7 +132,7 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
       expect(folder.text).not.toContain(owners.id);
       const read = await call('aether.read', { documentId: owners.id }, audience, surface);
       expect(read).toMatchObject({ ok: false, failure: 'refused' });
-      expect(read.text).not.toContain('ライ氏だけの話');
+      expect(read.text).not.toContain('ライだけの話');
       expect((await call('aether.read', { documentId: mine.id }, audience, surface)).text).toContain('灯台の光の数え方');
     }
     // A search held to her folder sent the scope to Aether; a read outside it asked for one character only.
@@ -156,7 +156,7 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
 
   it('holds a turn with others present to her folder through the session, one call at a time and reads run together (ADR-0003 stage 4)', async () => {
     const { fake, service } = await harness({ proposals: true });
-    const owners = fake.ownerDocument('ライ氏の仕様メモ', '鍵となる言葉: 灯台。ライ氏だけの話。');
+    const owners = fake.ownerDocument('ライの仕様メモ', '鍵となる言葉: 灯台。ライだけの話。');
     const mine = fake.put({ title: 'ボクの灯台メモ', body: '灯台の光の数え方。', projectIds: ['project_shannon_folder'], tags: ['シャノン'], type: 'note' });
     const now = () => '2026-10-06T01:00:00.000Z';
     // The server says what of the owner's must not be shown (here nothing; `aetherAudience.test.ts` tests it): without that the read fails closed.
@@ -166,7 +166,7 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
     expect(JSON.parse(await others.call('aether_search', JSON.stringify({ query: '灯台' })))).toMatchObject({ ok: false, failure: 'refused' });
     const refused = await others.call('aether_read', JSON.stringify({ documentId: owners.id }));
     expect(JSON.parse(refused)).toMatchObject({ ok: false, failure: 'refused' });
-    expect(refused).not.toContain('ライ氏だけの話');
+    expect(refused).not.toContain('ライだけの話');
     // Reads of one response run together through `start`, each with its own gated client, the same way.
     const outputs = (await runToolStep([
       { callId: 'c1', name: 'aether_read', arguments: JSON.stringify({ documentId: owners.id }) },
@@ -174,7 +174,7 @@ describe('who may read what (owner decision 2026-10-06, enforced at the gate)', 
       { callId: 'c3', name: 'aether_search', arguments: JSON.stringify({ query: '灯台', scope: 'shannonFolder' }) },
     ], others, { used: 0, toolsOff: false }, { parallel: true }) as { type: string; output?: string }[]).filter(item => item.type === 'function_call_output').map(item => item.output!);
     expect(JSON.parse(outputs[0]!)).toMatchObject({ ok: false, failure: 'refused' });
-    expect(outputs[0]).not.toContain('ライ氏だけの話');
+    expect(outputs[0]).not.toContain('ライだけの話');
     expect(text(outputs[1]!)).toContain('灯台の光の数え方');
     expect(text(outputs[2]!)).toContain(mine.id);
     expect(text(outputs[2]!)).not.toContain(owners.id);
@@ -265,7 +265,7 @@ describe('her folder in Aether and proposals v2', () => {
     expect(fake.documents.get(id)).toMatchObject({ projectIds: ['project_shannon_folder'], tags: ['シャノン'] });
     expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '灯台は夜に光る。昼は眠る。' })).toMatchObject({ ok: true });
     expect(await call('aetherFolder.update', { documentId: id, baseVersion: 1, body: '古い版から' })).toMatchObject({ ok: false, failure: 'conflict', refusal: { wouldWork: expect.stringContaining('読み直') } });
-    const owners = fake.ownerDocument('ライ氏の仕様', '古い本文');
+    const owners = fake.ownerDocument('ライの仕様', '古い本文');
     expect(await call('aetherFolder.update', { documentId: owners.id, baseVersion: 1, body: '新しい本文' })).toMatchObject({ ok: false, failure: 'refused', refusal: { wouldWork: expect.stringContaining('aether.propose') } });
     expect(fake.documents.get(owners.id)!.body).toBe('古い本文');
 
@@ -303,10 +303,10 @@ describe('her study in Aether', () => {
     // The owner edits the story in Aether: Shannon adopts it as her next version; he keeps reading the version she showed.
     store.study.markReady(scope, storyId, clock.at);
     store.study.markShown(scope, storyId, clock.at);
-    fake.ownerEdit(storyDocument!.id, { body: `${STORY}ライ氏が一行足した。` });
+    fake.ownerEdit(storyDocument!.id, { body: `${STORY}ライが一行足した。` });
     const detail = (await get(`/v1/autonomy/study/pieces/${storyDocument!.id}`)).body as Record<string, unknown>;
     expect(detail).toMatchObject({ id: storyId, title: '灯台の話', body: STORY, version: 1, revising: true, aetherDocumentId: storyDocument!.id, aetherVersion: 1 });
-    expect(store.study.versions(scope, storyId).at(-1)).toMatchObject({ version: 2, changeNote: AETHER_SIDE_CHANGE, body: `${STORY}ライ氏が一行足した。` });
+    expect(store.study.versions(scope, storyId).at(-1)).toMatchObject({ version: 2, changeNote: AETHER_SIDE_CHANGE, body: `${STORY}ライが一行足した。` });
     expect(store.study.aether.current(scope, storyId)).toMatchObject({ version: 2, aetherVersion: 2 });
   });
 
@@ -319,13 +319,13 @@ describe('her study in Aether', () => {
     expect(fake.documents.get(document.id)).toMatchObject({ revision: 2, body: `${STORY}続き。` });
 
     // Stale: the owner changed it after Shannon last saw it, and the write is refused; the newer text is in her study now.
-    fake.ownerEdit(document.id, { body: `${STORY}ライ氏の直し。` });
+    fake.ownerEdit(document.id, { body: `${STORY}ライの直し。` });
     const piece = store.study.get(scope, id) as StudyPiece;
     await expect(service.studyAether!.update(scope, piece, { body: 'ボクの直し' }, aetherIdempotencyKey('stale'))).rejects.toMatchObject({ code: 'STALE_VERSION' });
-    expect(store.study.get(scope, id)).toMatchObject({ body: `${STORY}ライ氏の直し。`, version: 3 });
+    expect(store.study.get(scope, id)).toMatchObject({ body: `${STORY}ライの直し。`, version: 3 });
     // Through her tool the sync comes first, so she writes on top of his change.
     expect(await call('study.update', { id, mode: 'append', body: 'ボクの続き。', changeNote: '足しました。' })).toMatchObject({ ok: true });
-    expect(fake.documents.get(document.id)!.body).toBe(`${STORY}ライ氏の直し。\n\nボクの続き。`);
+    expect(fake.documents.get(document.id)!.body).toBe(`${STORY}ライの直し。\n\nボクの続き。`);
 
     expect(await call('study.delete', { id })).toMatchObject({ ok: true, text: expect.stringContaining('最近削除した項目') });
     expect(fake.documents.get(document.id)!.status).toBe('deleted');
@@ -344,7 +344,7 @@ describe('her study in Aether', () => {
     const document = fake.inFolder()[0]!;
     store.study.markReady(scope, id, clock.at);
     // The owner moves it into one of his projects and rewrites it there: Aether answers 200 with inShannonFolder false.
-    fake.ownerEdit(document.id, { projectIds: ['project_owner'], body: 'ライ氏の仕事の本文。' });
+    fake.ownerEdit(document.id, { projectIds: ['project_owner'], body: 'ライの仕事の本文。' });
     for (const path of [`/v1/autonomy/study/pieces/${document.id}`, `/v1/autonomy/study/pieces/${id}`]) {
       expect((await get(path)).status).toBe(404);
     }
@@ -355,7 +355,7 @@ describe('her study in Aether', () => {
     expect(((await get('/v1/autonomy/study')).body as { pieces: unknown[] }).pieces).toEqual([]);
     expect(await call('study.restore', { id })).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('フォルダの外') });
     expect(store.study.find(scope, id, true)!.deletedAt).toBeDefined();
-    expect(JSON.stringify(store.study.versions(scope, id))).not.toContain('ライ氏の仕事');
+    expect(JSON.stringify(store.study.versions(scope, id))).not.toContain('ライの仕事');
     // Moved back into her folder: it comes back out of her trash at the next read.
     fake.ownerEdit(document.id, { projectIds: ['project_shannon_folder'] });
     expect((await get(`/v1/autonomy/study/pieces/${id}`)).status).toBe(200);

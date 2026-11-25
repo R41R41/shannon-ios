@@ -31,7 +31,7 @@ const CHANNEL = 'discord:111:222';
 const START = '2026-10-05T12:00:00.000Z';
 const TOKEN = 'b'.repeat(40);
 const BINDINGS = [
-  { platform: 'discord', conversationId: DM, ownerUserId: OWNER, title: 'ライ氏とのDM', audience: 'owner-private' },
+  { platform: 'discord', conversationId: DM, ownerUserId: OWNER, title: 'ライとのDM', audience: 'owner-private' },
   { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
 ];
 const ENVIRONMENT = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
@@ -307,7 +307,7 @@ describe('the owner\'s typed request reaches her body through the intent, as a s
 
 describe('what a platform reply is not told', () => {
   it('is never told what she did on her own, in the owner\'s DM or a channel, while the app\'s chat is', async () => {
-    const TEXT = 'ライ氏、お昼はもう食べましたか。';
+    const TEXT = 'ライ、お昼はもう食べましたか。';
     const ownOutreach: OwnOutreachReader = { recent: () => ({ messages: [{ createdAt: '2026-10-05T11:30:00.000Z', content: TEXT, read: true }], calls: [] }) };
     const { reply, api, model, close } = harness({ ownOutreach });
     await reply({ requestId: 'own-dm', userMessage: 'さっき電話した？' });
@@ -333,7 +333,7 @@ describe('what a platform reply is not told', () => {
 });
 
 describe('the ownOutreach selection of the capability context (review of 2026-10-06)', () => {
-  const TEXT = 'ライ氏、お昼はもう食べましたか。';
+  const TEXT = 'ライ、お昼はもう食べましたか。';
   const own = new OwnOutreach({ recent: () => ({ messages: [{ createdAt: '2026-10-05T11:30:00.000Z', content: TEXT, read: true }], calls: [] }) }, () => START);
   const prompt = async (selection: Parameters<typeof conversationCapabilityContext>[3]) =>
     (await conversationCapabilityContext('owner', 'さっき電話した？', { ownOutreach: own }, selection)).prompt;
@@ -395,24 +395,24 @@ describe('the ownOutreach selection of the capability context (review of 2026-10
 
 describe('a Discord friend\'s turn (owner decision S6, 2026-10-06)', () => {
   const HOSPITAL = 'ユーザーは来週オカメインコ病院に行く';
-  const RELEASE = 'ライ氏本人がこの場ではっきり求めた時';
+  const RELEASE = 'ライ本人がこの場ではっきり求めた時';
   it('gets no protected line of the owner\'s and no rule that he may release one, in a reply and in the context; his own turn keeps both', async () => {
     const { reply, model, store, bridge, close } = harness();
     store.apply('owner', { type: 'user-fact-upserted', fact: { id: 'fact-hospital', statement: HOSPITAL, confidence: 0.9, observedAt: START,
       disclosure: { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', category: 'health', reason: '病院', decidedBy: 'rule' } } });
     await reply({ requestId: 'd-owner', conversationId: CHANNEL, conversationKind: 'channel', userMessage: 'オカメインコ病院の話' });
-    expect(promptOf(model.requests.at(-1)!)).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(promptOf(model.requests.at(-1)!)).toContain(`【機微:健康・ライだけが知っている】${HOSPITAL}`);
     expect(promptOf(model.requests.at(-1)!)).toContain(RELEASE);
-    await reply({ requestId: 'd-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'ライ氏はオカメインコ病院に行くの？' });
+    await reply({ requestId: 'd-friend', conversationId: CHANNEL, conversationKind: 'channel', sourceUserId: FRIEND, sourceDisplayName: 'ミキ', userMessage: 'ライはオカメインコ病院に行くの？' });
     const friend = promptOf(model.requests.at(-1)!);
     expect(friend).toContain('[Shannon shared audience]');
-    for (const word of ['オカメインコ病院に行く', RELEASE, 'When ライ氏 himself clearly asks']) expect(friend).not.toContain(word);
+    for (const word of ['オカメインコ病院に行く', RELEASE, 'When ライ himself clearly asks']) expect(friend).not.toContain(word);
     expect(friend).not.toMatch(/【機微:(?!…】)/u);
     // `/v1/platform/context` for the same people: the friend's projection is open items only, the owner's as before.
     const context = (sourceUserId: string) => bridge.context({ platform: 'discord', conversationId: CHANNEL, sourceUserId, conversationKind: 'channel' }).projection;
     expect(context(FRIEND)).not.toContain(HOSPITAL);
     expect(context(FRIEND)).not.toContain(RELEASE);
-    expect(context(OWNER)).toContain(`【機微:健康・ライ氏だけが知っている】${HOSPITAL}`);
+    expect(context(OWNER)).toContain(`【機微:健康・ライだけが知っている】${HOSPITAL}`);
     expect(context(OWNER)).toContain(RELEASE);
     await close();
   });

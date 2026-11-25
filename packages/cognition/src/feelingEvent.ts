@@ -161,7 +161,7 @@ export function utteranceKind(words: string): Extract<FeelingEventKind, 'spoke' 
 }
 
 const OPENERS: readonly [ReplyOpener, RegExp][] = [
-  ['rai_shi', /^ライ氏(?:[、,!！…ー〜]|っ)/u],
+  ['rai_shi', /^ライ氏?(?:[、,!！…ー〜]|っ)/u],
   ['hya', /^(?:ひゃ|ヒャ)/u],
   ['eh', /^(?:えっ(?!ち)|えー|ええ)/u],
 ];

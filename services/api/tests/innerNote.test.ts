@@ -33,7 +33,7 @@ const T0 = '2026-10-14T13:30:00.000Z'; // 22:30 in Tokyo
 function draft(overrides: Partial<InnerNoteDraft> = {}): InnerNoteDraft {
   return {
     text: { honne: 'びっくりした。いやってほどじゃない。', tatemae: 'ツンとして口数を減らす。', reason: '安く見られたくない。', plan: 'しばらくこのまま。',
-      bottom: 'ライ氏のことは好きなまま。' },
+      bottom: 'ライのことは好きなまま。' },
     shown: 'sulky', tell: 'blush', intent: 'keep', scale: 'ordinary', dayReason: null, untilMinutes: 30, changeReason: null,
     routeSummary: 'Shannon is acting a little sulky but is not truly hurt.', summary: null, ...overrides,
   };
@@ -64,7 +64,7 @@ function setup(answers: Answer[] = [], limits: Record<string, number> = {}, opti
 }
 
 const touch = (at = T0, audience: 'owner' | 'others' = 'owner') => ({ scopeKey: OWNER, audience, at, touchId: `t-${at}`, sourceId: `experience:burst-${at}`,
-  phrase: 'ライ氏に胸をつつかれた（ほんの一瞬）', stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' });
+  phrase: 'ライに胸をつつかれた（ほんの一瞬）', stance: 'dislike', reflex: 'flinch', said: 'ひゃっ' });
 const forgotten = (memoryId: string, sourceEvidence?: string) => ({ memoryId, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: T0,
   changeReason: 'test', ...(sourceEvidence ? { sourceEvidence } : {}) }) as never;
 
@@ -426,7 +426,7 @@ describe('touches are sessions, and never starve his words (touch coalescing)', 
   const START = Date.parse('2026-10-14T12:00:00.000Z'); // 21:00 in Tokyo: the day has hours left
   const clock = (seconds: number) => new Date(START + seconds * 1000).toISOString();
   const pet = (at: string, stance = 'welcome', kind = 'pet') => ({ scopeKey: OWNER, audience: 'owner' as const, at, touchId: `t-${at}`,
-    sourceId: `experience:burst-${at}`, phrase: 'ライ氏に頭をなでられた', kind, stance });
+    sourceId: `experience:burst-${at}`, phrase: 'ライに頭をなでられた', kind, stance });
   const touchOnly = (facts: InnerNoteReflectionFacts[]) => facts.filter(fact => fact.events.every(event => event.kind === 'touch'));
 
   async function petFor(service: InnerNoteService, at: (value: string) => void, minutes: number, stance: (index: number) => string = () => 'welcome') {
@@ -551,7 +551,7 @@ describe('readers: switched off is byte for byte what it was (ADR-0012 stage 1)'
     expect(innerNoteEnabled({ SHANNON_INNER_NOTE: 'on' })).toBe(true);
     expect(replyFeelingInstructions({})).toBe(REPLY_FEELING_INSTRUCTIONS);
     expect(replyFeelingInstructions({ SHANNON_INNER_NOTE: 'on' })).toBe(INNER_NOTE_REPLY_FEELING_INSTRUCTIONS);
-    expect(INNER_NOTE_REPLY_FEELING_INSTRUCTIONS).not.toMatch(/すでに謝ってもらった|今回のライ氏の発言そのものに|ふだんの会話はnullかsubtle/u);
+    expect(INNER_NOTE_REPLY_FEELING_INSTRUCTIONS).not.toMatch(/すでに謝ってもらった|今回のライの発言そのものに|ふだんの会話はnullかsubtle/u);
   });
 
   it('changes no identity, block, line or face without a port', () => {

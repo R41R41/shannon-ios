@@ -1,4 +1,4 @@
-import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE, SHANNON_OWNER_NAME } from './persona.js';
+import { SHANNON_CURRENT_GOAL, SHANNON_FIRST_PERSON, SHANNON_ONE_LINE_VOICE } from './persona.js';
 import { CHARACTER_CORE_KID, KID_CORE_SPEECH } from './characterCoreKid.js';
 
 /*
@@ -43,7 +43,8 @@ export interface CharacterCore {
 }
 
 const I = SHANNON_FIRST_PERSON;
-const OWNER = SHANNON_OWNER_NAME;
+/** The retired v2 text stays word for word as it was approved (hash pinned by the test), with the name it was written with. */
+const OWNER = 'ライ氏';
 
 /** The core's last line: what its 「」 are. */
 const CHARACTER_CORE_TONE_NOTE = '「」の中の言い回しは、雰囲気の手がかりで、決め台詞ではない';

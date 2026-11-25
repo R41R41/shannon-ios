@@ -145,8 +145,8 @@ describe('showing a piece through the initiative path', () => {
     const unread = initiatives.unreadMessages(scope);
     expect(unread).toHaveLength(1);
     expect(unread[0]).toMatchObject({ threadId, sourceTitle: 'シャノンの書斎', expression: 'excited' });
-    expect(unread[0]!.content).toBe('ライ氏、短い物語を書きました。「傘のある駅」です。読んだら、どう思ったか聞かせてください。ボクは、けっこう気に入っています。');
-    expect(studyShowingMessage({ ...piece, version: 2, revised: true })).toBe('ライ氏、「傘のある駅」を直しました。前の稿より、ボクは好きなものになったと思います。もう一度読んでもらえると嬉しいです。');
+    expect(unread[0]!.content).toBe('ライ、短い物語を書きました。「傘のある駅」です。読んだら、どう思ったか聞かせてください。ボクは、けっこう気に入っています。');
+    expect(studyShowingMessage({ ...piece, version: 2, revised: true })).toBe('ライ、「傘のある駅」を直しました。前の稿より、ボクは好きなものになったと思います。もう一度読んでもらえると嬉しいです。');
     expect(persistent.conversationHistory(scope, threadId).at(-1)).toMatchObject({ role: 'assistant', content: unread[0]!.content, studyPiece: { id: 'piece-1', title: '傘のある駅' } });
     // It used the day's one slot, under the same key the initiative loop uses.
     const database = new DatabaseSync(path);
@@ -291,7 +291,7 @@ describe('what the owner\'s own prompts say about her activity', () => {
     const on = await chat(running);
     for (const prompt of [on.text, on.voice, on.voiceTurn]) {
       expect(prompt).not.toContain('仕組みは準備中');
-      expect(prompt).toContain('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライ氏が止められる）:');
+      expect(prompt).toContain('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライが止められる）:');
       expect(prompt).toContain('- 禁止: 1日2,000円のモデル・API予算以外の出費、無断の連絡、他人のふり、内緒と言われたことを作品やメモに書くこと、自分の複製。');
     }
     // A guest never hears either wording.

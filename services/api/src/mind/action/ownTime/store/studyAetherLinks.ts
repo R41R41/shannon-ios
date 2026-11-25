@@ -306,7 +306,7 @@ function hasTable(database: DatabaseSync, name: string): boolean {
 }
 
 /** The change note of a version that came from Aether rather than from a revision of hers. */
-export const AETHER_SIDE_CHANGE = 'Aetherの側で変わった版です（ライ氏が直したか、Aetherにだけ届いていた書き込み）。';
+export const AETHER_SIDE_CHANGE = 'Aetherの側で変わった版です（ライが直したか、Aetherにだけ届いていた書き込み）。';
 
 interface LinkRow { piece_id: string; version: number; document_id: string; aether_version: number; linked_at: string }
 

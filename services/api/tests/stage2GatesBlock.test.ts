@@ -115,7 +115,7 @@ describe('the skill sleep\'s writes', () => {
     const free = id('free-one');
     for (const skillId of [pinned, owned, free]) skills.store.setStatus('owner', skillId, 'active', 'test', at(1));
     skills.store.setPinned('owner', pinned, true);
-    expect(skills.adoptOwnerEdit('owner', owned, encodeSkill({ ...doc('owned-one', '1. 散歩しながら話す'), description: 'ライ氏が直した' }), { documentId: 'doc-1', version: 2 }, ok, at(2))).toBe('adopted');
+    expect(skills.adoptOwnerEdit('owner', owned, encodeSkill({ ...doc('owned-one', '1. 散歩しながら話す'), description: 'ライが直した' }), { documentId: 'doc-1', version: 2 }, ok, at(2))).toBe('adopted');
     const page = (skills.createPattern('owner', { kind: 'strategy', title: '五つ挙げる', body: '五つ挙げる。' }, [], ok, at(2)) as { patternId: string }).patternId;
     return { skills, pinned, owned, free, page };
   }

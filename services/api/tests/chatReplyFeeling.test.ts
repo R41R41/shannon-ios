@@ -165,7 +165,7 @@ describe('the field of the structured reply', () => {
     expect(body.max_output_tokens).toBe(plain.max_output_tokens);
     for (const phrase of ['strongはまれ', 'strongで何日も残るのは', '人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない', 'moderate=数時間は気分として残る',
       '新しい出来事がなければ、前より弱くするかnullにする', '別の気持ちに替えて強く出し続けたりしない', 'すでに謝ってもらったことを理由にしない',
-      'moderate以上にしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ', '特に動いていなければnull', 'replyの文面と食い違う気持ちは選ばない']) {
+      'moderate以上にしてよいのは、今回のライの発言そのものに実際の原因があるときだけ', '特に動いていなければnull', 'replyの文面と食い違う気持ちは選ばない']) {
       expect(REPLY_FEELING_INSTRUCTIONS).toContain(phrase);
     }
     const { feeling: _feeling, ...rest } = body.text.format.schema.properties;
@@ -252,15 +252,15 @@ describe('a text conversation may leave a feeling that lingers', () => {
     const night = await chat(HARSH, QUIET, strong('hurt'));
     expect(model.requests.at(-1)!.offerReplyFeeling).toBe(true);
     expect(night.messageEmotion.expression).toBe(night.state.presence.mood.expression);
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9, target: 'ライ氏', cause: '生成した応答の内容と会話文脈' });
-    expect(state().lingering).toMatchObject([{ kind: 'hurt', target: 'ライ氏', span: 'lingering', strength: 0.9, startedAt: NIGHT }]);
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9, target: 'ライ', cause: '生成した応答の内容と会話文脈' });
+    expect(state().lingering).toMatchObject([{ kind: 'hurt', target: 'ライ', span: 'lingering', strength: 0.9, startedAt: NIGHT }]);
     // The resolver's notes to the reducer are not stored, and the response carries no new key.
     expect(JSON.stringify(state())).not.toMatch(/"decided"|"continued"|"presentAt"/u);
     expect(JSON.stringify(night)).not.toMatch(/"replyFeeling"|"decided"|"continued"/u);
 
     advance(9 * HOUR);
     await chat('おはよう', 'おはようございます。');
-    expect(prompt()).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話で傷ついたことを、まだ引きずっている（hurt \/ 強さ 0\.88）。/u);
+    expect(prompt()).toMatch(/まだ残っている気持ち: 9時間前にライとの会話で傷ついたことを、まだ引きずっている（hurt \/ 強さ 0\.88）。/u);
     // A day and a half of the wall clock later, with two awake hours in between, it is still there.
     for (let index = 0; index < 12; index += 1) { advance(10 * MINUTE); await chat('次の手順を教えて', PLAIN); }
     advance(24 * HOUR);
@@ -470,7 +470,7 @@ describe('every existing rule applies to it unchanged', () => {
       expect(hurt.plain.state.expressiveEmotion!.primary, reply).toBe(beside);
     }
     // A great joy lingers as the joy she chose, also when she says 「嬉しい」 or thanks him.
-    for (const reply of ['嬉しいです、ライ氏。', 'ありがとうございます。胸がいっぱいです。', 'えへへ、照れます。']) {
+    for (const reply of ['嬉しいです、ライ。', 'ありがとうございます。胸がいっぱいです。', 'えへへ、照れます。']) {
       const joy = await both('君の物語、読んで泣いたよ', reply, strong('happy'));
       expect(joy.chosen.state.lingering, reply).toMatchObject([{ kind: 'happy', span: 'lingering', strength: 0.9 }]);
       expect(joy.chosen.state.lingering).toHaveLength(1);
@@ -701,9 +701,9 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     const seen = { ...off.seen, requests: off.seen.requests.map(({ clock: _clock, ...rest }) => rest) };
     const withoutThread = { ...seen, requests: seen.requests.map(({ threadKey: _thread, richBlocks: _rich, ...rest }) => rest) };
     const withoutRich = { ...seen, requests: seen.requests.map(({ richBlocks: _rich, ...rest }) => rest) };
-    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(withoutRich))).digest('hex')).toBe('67ed40ca501812817ac1f3382e892021a83132622c07c896bd3aaa60bdef711f'); // 6f49a12a… before 2026-11-23 (the recalled lines are dated)
-    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(withoutThread))).digest('hex')).toBe('ed421c6a1b45e2c7e9df6344d4d2c068de1d018fcc86e7f9a3bd32a19947f565'); // b1c796c6… before 2026-11-23
-    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(seen))).digest('hex')).toBe('67c6ee4f0b22c2330638a6cb56c020cb23f508aab9f8f829f2b1336c40141974'); // 913f7728… before 2026-11-23 (the recalled lines are dated), 08e050f8… before 2026-10-19
+    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(withoutRich))).digest('hex')).toBe('7eeece430b77fade631ccc899eb31f1f8ec7d3b09fee8b531e87f5af58dc8b92'); // 6f49a12a… before 2026-11-23 (the recalled lines are dated)
+    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(withoutThread))).digest('hex')).toBe('c7173190bc6a56ab5fd30128fe870db81b62da76d3ac0b02ca2eb595d92eae52'); // b1c796c6… before 2026-11-23
+    expect(createHash('sha256').update(JSON.stringify(toLegacyPersonaDeep(seen))).digest('hex')).toBe('a5d1e0a71760d6e066cb608ef9482f6cc62a4b1d6bc4b5e26ace693f46575a23'); // 913f7728… before 2026-11-23 (the recalled lines are dated), 08e050f8… before 2026-10-19
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

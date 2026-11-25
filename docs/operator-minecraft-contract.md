@@ -79,7 +79,7 @@ Right after a login the player count may still be unknown (RCON `list uuids` is 
 then looks again for up to 12 s, and answers `not_settled` (「ログイン直後で…まだ確かめられません」) if it is still unknown;
 a stopped server or another player is `refused` with that reason. The command line prints the code and the message.
 When it ends, her notice (【知らせ:作業終了】) names it as the operator's: the tool is `operator.minecraft.<action>` (its source is
-`operator:<uuid>`, which only this audited path makes) and the line reads 「運用者がライ氏の代わりに頼んだ〈minecraft.start〉が終わった」,
+`operator:<uuid>`, which only this audited path makes) and the line reads 「運用者がライの代わりに頼んだ〈minecraft.start〉が終わった」,
 never 「受け付けた…」 as if she had accepted it.
 
 ## The body re-check (`release`)
@@ -127,12 +127,12 @@ released. That original receipt, with nothing of the lease sent after it left un
 Who handed a request over is never written as the owner's words. It is marked in four places:
 
 1. the task title starts with 「（運用者経由）」;
-2. its first inbox line: 「この依頼は運用者（label）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。」;
+2. its first inbox line: 「この依頼は運用者（label）がライの代わりに渡したものです。ライが直接言った言葉ではありません。」;
 3. only with `SHANNON_OPERATOR_TALK_NOTES=on` (off by default since 2026-10-19: these notices were a quarter of her lines in a week),
    a note in the owner's Talk (note kind `operator-note`) when a request starts, is cancelled or reaches its time limit, and when a
    lifecycle operation is asked. The conversation store keeps only `user` and `assistant` messages (a CHECK of
    `conversation_messages`), so the note is stored as `assistant`; its words are therefore a marked, neutral notice in the third
-   person (「［運用者の操作のお知らせ］運用者がライ氏の代わりに…」), never her voice and never his request;
+   person (「［運用者の操作のお知らせ］運用者がライの代わりに…」), never her voice and never his request;
 4. the audit (below), and the activity record (自律活動 › 記録), domain `minecraft_lifecycle`, whose summary names
    「運用者（label）」. The activity record's actor column admits only `shannon` and `owner`, so the actor is `owner` and the
    sentence says it was the operator.
@@ -143,7 +143,7 @@ Its result is never told as something he asked for; whether a task is the operat
 `request` row naming it, `operatorRequester`), never from its title, so his own request that starts with the same words stays his.
 When the audit cannot be read, the doubtful case never claims he asked: a title with 「（運用者経由）」 gets the operator's line,
 and any other task the neutral fixed line 「依頼「…」の結果が届いています。詳しくは画面にあります。」 (no model, no 「頼まれ」). The spoken form of its report (what a call says, and a report card's short
-answer) is the fixed line 「運用者がライ氏の代わりに渡した依頼「…」の結果が届いています。詳しくは画面にあります。」, written without a
+answer) is the fixed line 「運用者がライの代わりに渡した依頼「…」の結果が届いています。詳しくは画面にあります。」, written without a
 model (`handedOverReportLine`); the report itself stays on the screen. Such a request has no source Talk, so no report card is
 written for it.
 

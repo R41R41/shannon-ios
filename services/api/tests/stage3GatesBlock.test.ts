@@ -62,7 +62,7 @@ function world(environment: Record<string, string> = {}) {
     sink: withheld.withheld.sink, emit: inbox.emit };
 }
 
-const WONDER = 'ライ氏はいま何をしているのでしょう。';
+const WONDER = 'ライはいま何をしているのでしょう。';
 const SHARE = '書斎で新しい物語の続きを書きました。';
 
 describe('reachOuts.say', () => {
@@ -99,7 +99,7 @@ describe('reachOuts.say', () => {
     const w = world();
     expect(w.speaker.say(SCOPE, { reason: 'wonder', text: WONDER, dayKey: w.day(), maximumPerDay: 20, subject: 'piece:p1' }, w.now())).toBe('sent');
     w.advance(6 * MINUTE);
-    expect(w.speaker.say(SCOPE, { reason: 'wonder', text: '今日はどんな一日ですか、ライ氏。', dayKey: w.day(), maximumPerDay: 20, subject: 'piece:p1' }, w.now())).toBe('held:intent_repeat');
+    expect(w.speaker.say(SCOPE, { reason: 'wonder', text: '今日はどんな一日ですか、ライ。', dayKey: w.day(), maximumPerDay: 20, subject: 'piece:p1' }, w.now())).toBe('held:intent_repeat');
     // Without a subject the reason alone is not a repeat (review M2): the topic decides.
     expect(w.speaker.say(SCOPE, { reason: 'wonder', text: 'ボクは雲の形を数えていました。', dayKey: w.day(), maximumPerDay: 20 }, w.now())).toBe('sent');
     // Another reason, the same words: the topic is reused (similarity 1 within 5 hours).
@@ -112,7 +112,7 @@ describe('reachOuts.say', () => {
     const database = new DatabaseSync(w.path, { readOnly: true });
     const topics = JSON.stringify(database.prepare('SELECT * FROM proactive_topics').all());
     database.close();
-    expect(topics).not.toMatch(/ライ氏|書斎|物語/u);
+    expect(topics).not.toMatch(/ライ|書斎|物語/u);
     expect(topics).toMatch(/[0-9a-f]{512}/u);
     w.close();
   });

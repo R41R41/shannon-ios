@@ -28,11 +28,11 @@ type Request = (port: DeviceActionToolPort, kind: DeviceActionKind, payload: Pay
 interface Proposal { kind: DeviceActionKind; scopeKey: string; payload: Payload; turnKey?: string; threadId?: string; expiresAt: number }
 
 const OFF = toolFailure('unavailable', '端末に頼む仕組みが、いまのサーバーでは使えない。', { retryable: false });
-const OLD_APP = toolFailure('not_offered', 'ライ氏の端末のシャノンのアプリが、予定を変える・消す・戻すことにまだ対応していない。', {
-  retryable: false, refusal: { why: 'アプリの更新が要る', wouldWork: 'ライ氏がiPhoneかMacのシャノンのアプリを新しくしたあと' },
+const OLD_APP = toolFailure('not_offered', 'ライの端末のシャノンのアプリが、予定を変える・消す・戻すことにまだ対応していない。', {
+  retryable: false, refusal: { why: 'アプリの更新が要る', wouldWork: 'ライがiPhoneかMacのシャノンのアプリを新しくしたあと' },
 });
-const NO_TURN = toolFailure('refused', '予定を変える・消すのは、ライ氏との会話の返事の中でだけできる。', {
-  retryable: false, refusal: { why: 'ライ氏の確かめを受ける会話の返事ではない', wouldWork: 'ライ氏と話している時に頼まれて' },
+const NO_TURN = toolFailure('refused', '予定を変える・消すのは、ライとの会話の返事の中でだけできる。', {
+  retryable: false, refusal: { why: 'ライの確かめを受ける会話の返事ではない', wouldWork: 'ライと話している時に頼まれて' },
 });
 const words = (input: ToolInput, key: string) => stringInput(input, key)?.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim() ?? '';
 const invalid = (problem: string) => toolFailure('invalid_input', `入力が正しくない（${problem}）。`, { retryable: false });
@@ -54,11 +54,11 @@ class Proposals {
   take(token: string, kind: DeviceActionKind, context: ToolExecutionContext, now: number): Proposal | ToolResult {
     const proposal = this.open.get(token);
     if (!proposal || proposal.scopeKey !== context.scopeKey) {
-      return toolFailure('not_found', 'その confirm の変更案はない（案は15分で消える）。もう一度案を作ってライ氏に見せる。', { retryable: false });
+      return toolFailure('not_found', 'その confirm の変更案はない（案は15分で消える）。もう一度案を作ってライに見せる。', { retryable: false });
     }
     if (proposal.expiresAt <= now) {
       this.open.delete(token);
-      return toolFailure('conflict', '変更案の期限（15分）が切れた。もう一度案を作ってライ氏に見せる。', { retryable: false });
+      return toolFailure('conflict', '変更案の期限（15分）が切れた。もう一度案を作ってライに見せる。', { retryable: false });
     }
     const refusal = this.refusal(proposal, kind, context);
     if (refusal) return refusal;
@@ -69,8 +69,8 @@ class Proposals {
   private refusal(proposal: Proposal, kind: DeviceActionKind, context: ToolExecutionContext): ToolResult | null {
     if (proposal.kind !== kind) return invalid(`その confirm は ${proposal.kind.replace('.', '_')} の案`);
     if (!context.memory.turnKey || proposal.turnKey === context.memory.turnKey) {
-      return toolFailure('refused', 'まだライ氏が案に答えていない。案を見せて、次の返事ではいと言われてから confirm で呼ぶ。', {
-        retryable: false, refusal: { why: '同じ返事の中では確認にならない', wouldWork: 'ライ氏が案を見て答えた次の返事で' },
+      return toolFailure('refused', 'まだライが案に答えていない。案を見せて、次の返事ではいと言われてから confirm で呼ぶ。', {
+        retryable: false, refusal: { why: '同じ返事の中では確認にならない', wouldWork: 'ライが案を見て答えた次の返事で' },
       });
     }
     if (proposal.threadId && context.threadId && proposal.threadId !== context.threadId) return invalid('その案は別の会話で作ったもの');
@@ -157,7 +157,7 @@ function proposalText(token: string, kind: DeviceActionKind, lines: readonly str
   const tool = kind.replace('.', '_');
   return [
     `まだ何も変えていない。変更案（confirm: ${token}、15分有効）:`, ...lines,
-    `ライ氏にこの内容を見せて確かめる。次の返事ではいと言われたら、${tool} を confirm: "${token}" だけで呼ぶ。違う・待ってと言われたら呼ばない。`,
+    `ライにこの内容を見せて確かめる。次の返事ではいと言われたら、${tool} を confirm: "${token}" だけで呼ぶ。違う・待ってと言われたら呼ばない。`,
   ].join('\n');
 }
 
@@ -190,18 +190,18 @@ function proposeDelete(port: DeviceActionToolPort, proposals: Proposals, input: 
 
 function propose(port: DeviceActionToolPort, proposals: Proposals, context: ToolExecutionContext, kind: DeviceActionKind, payload: Payload,
   lines: readonly string[]) {
-  return { summary: 'ライ氏のカレンダーの変更案を作る。', run: async (): Promise<ToolRun> => {
+  return { summary: 'ライのカレンダーの変更案を作る。', run: async (): Promise<ToolRun> => {
     const now = Date.parse(port.now());
     const token = proposals.add({ kind, scopeKey: context.scopeKey, payload, expiresAt: now + CALENDAR_EDIT_LIMITS.proposalMilliseconds,
       ...(context.memory.turnKey ? { turnKey: context.memory.turnKey } : {}), ...(context.threadId ? { threadId: context.threadId } : {}) }, now);
-    return { result: toolOk(proposalText(token, kind, lines)), record: { summary: '会話の中で、ライ氏のカレンダーの変更案を見せました。', outcome: 'done' } };
+    return { result: toolOk(proposalText(token, kind, lines)), record: { summary: '会話の中で、ライのカレンダーの変更案を見せました。', outcome: 'done' } };
   } };
 }
 
 function confirmed(port: DeviceActionToolPort, proposals: Proposals, request: Request, kind: DeviceActionKind, token: string, context: ToolExecutionContext) {
   const proposal = proposals.take(token, kind, context, Date.parse(port.now()));
   if ('ok' in proposal) return proposal;
-  return { summary: 'ライ氏が確かめたカレンダーの変更を端末に渡す。', run: (signal?: AbortSignal) => request(port, kind, { ...proposal.payload, proposal: token }, context, signal) };
+  return { summary: 'ライが確かめたカレンダーの変更を端末に渡す。', run: (signal?: AbortSignal) => request(port, kind, { ...proposal.payload, proposal: token }, context, signal) };
 }
 
 const record = (value: unknown): Payload | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Payload : null;

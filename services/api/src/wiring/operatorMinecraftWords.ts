@@ -153,7 +153,7 @@ export const isRecoveredPause = (task: { phase: string; status?: string; pauseRe
 
 export const MESSAGES: Partial<Record<OperatorCode, string>> = {
   disabled: '運用者のマイクラ操作はサーバーで有効になっていません（SHANNON_OPERATOR_MINECRAFT）。',
-  owner_not_alone: 'ライ氏以外の人がいる間は始めません。',
+  owner_not_alone: 'ライ以外の人がいる間は始めません。',
   body_unavailable: 'マイクラの体が一つに決まっていないか、接続されていません。',
   minecraft_busy: 'ほかのマイクラの作業がまだ動いています。先に止めるか終わるのを待ってください。',
   lease_conflict: 'マイクラの管理操作がまだ動いています。',
@@ -161,7 +161,7 @@ export const MESSAGES: Partial<Record<OperatorCode, string>> = {
   rate_limited: `1時間に${OPERATOR_LIMITS.requestsPerHour}件までです。`,
   flooded: '呼び出しが多すぎるので、しばらく受け付けません（監査はまとめて残します）。',
   not_found: '運用者が始めた進行中のマイクラの依頼が見つかりません。',
-  not_operator_task: 'このタスクは運用者が始めたものではないので止めません（ライ氏の依頼は本人の「止まって」で止めます）。',
+  not_operator_task: 'このタスクは運用者が始めたものではないので止めません（ライの依頼は本人の「止まって」で止めます）。',
   not_running: 'このタスクはもう終わっているか、止めている途中です。',
   lifecycle_unavailable: 'マイクラ管理が設定されていないか、新しい状態が届いていません。',
   released: 'マイクラの体が止まっていて入力も離していることを体に確かめ直し、保持を解放しました。',
@@ -190,7 +190,7 @@ export const BUDGET_NEXT = {
 } as const;
 
 export const BUDGET_NOT_RUNNING =
-  'このタスクはもう止まっているか、止めている途中です。予算を変えても再開はしません（止まった理由が予算でも同じです。再開はライ氏の操作で、新しく頼むこともできます）。';
+  'このタスクはもう止まっているか、止めている途中です。予算を変えても再開はしません（止まった理由が予算でも同じです。再開はライの操作で、新しく頼むこともできます）。';
 
 export const SKILL_IMPORT_MESSAGES = {
   'dry-run': '取り込みの計画です。問題が無ければ plan hash で apply します。',

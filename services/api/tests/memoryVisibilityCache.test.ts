@@ -46,7 +46,7 @@ function build(scopes: readonly string[] = ['owner']) {
     const snapshot = world.store.snapshot(scope);
     const tea = snapshot.userFacts.find(fact => fact.statement.includes('紅茶'))!.id;
     const cat = snapshot.userFacts.find(fact => fact.statement.includes('猫'))!.id;
-    say(scope, 'おすすめの飲み物は？', 'ライ氏は紅茶が好きなので、ダージリンはどうですか。');
+    say(scope, 'おすすめの飲み物は？', 'ライは紅茶が好きなので、ダージリンはどうですか。');
     say(scope, '午後に何か飲みたい', '温かい一杯を用意しましょうか。', { recalledMemoryIds: [tea] });
     say(scope, '昨日の話の続き', '私は紅茶が好き。と話してくれましたね。');
     for (const line of unrelated) say(scope, `${line}（続き）`, `${line}の続きですね。`);

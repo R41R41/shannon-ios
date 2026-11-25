@@ -277,22 +277,22 @@ describe('her one phrase: an enum, exact match only', () => {
   });
 
   it('uses only an exact phrase of the list, in a place it takes; anything else is the fact alone', () => {
-    expect(commitmentMessage({ phrase: 'ライ氏、', position: 'before' }, TIMED)).toBe('ライ氏、9時20分の約束：「起こして」');
+    expect(commitmentMessage({ phrase: 'ライ、', position: 'before' }, TIMED)).toBe('ライ、9時20分の約束：「起こして」');
     expect(commitmentMessage({ phrase: '忘れてませんよね？', position: 'before' }, TIMED)).toBe('9時20分の約束：「起こして」忘れてませんよね？');
     expect(commitmentMessage({ phrase: '…ごめん、遅れちゃった。', position: 'after' }, { ...TIMED, overdueMinutes: 47 }))
       .toBe('9時20分の約束：「起こして」（47分遅れのお知らせ）…ごめん、遅れちゃった。');
-    for (const answer of [{ phrase: 'ライ氏', position: 'before' }, { phrase: 'ライ氏、 ', position: 'before' }, { phrase: '', position: 'before' }, null, 'ライ氏、',
-      { phrase: 'ライ氏、9時20分ですよ！', position: 'before' }, { line: '今、9時20分だよ！' }]) {
+    for (const answer of [{ phrase: 'ライ', position: 'before' }, { phrase: 'ライ、 ', position: 'before' }, { phrase: '', position: 'before' }, null, 'ライ、',
+      { phrase: 'ライ、9時20分ですよ！', position: 'before' }, { line: '今、9時20分だよ！' }]) {
       expect(commitmentMessage(answer, TIMED), JSON.stringify(answer)).toBe('9時20分の約束：「起こして」');
     }
     // With anyone else there no phrase is used.
-    expect(commitmentMessage({ phrase: 'ライ氏、', position: 'before' }, { ...TIMED, others: true })).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
+    expect(commitmentMessage({ phrase: 'ライ、', position: 'before' }, { ...TIMED, others: true })).toBe('9時20分の約束の時刻です（内容はアプリで確認できます）。');
   });
 
   it('never lets the model\'s free text reach him: whatever it answers, the message is the fact sentence and at most one listed phrase', () => {
     let seed = 7;
     const random = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-    const junk = ['今、9時20分だよ！', '明日の9時半ね', 'ライ氏、', '…ごめん、遅れちゃった。', '起きてー！', '{時刻}ですよ', 'ほらほら！今だよ', 'ok', '', '忘れてませんよね？ 9時'];
+    const junk = ['今、9時20分だよ！', '明日の9時半ね', 'ライ、', '…ごめん、遅れちゃった。', '起きてー！', '{時刻}ですよ', 'ほらほら！今だよ', 'ok', '', '忘れてませんよね？ 9時'];
     const allowed = new Set(PROMISE_PHRASES_V1.map(entry => entry.text));
     for (let index = 0; index < 2_000; index += 1) {
       const facts = { ...TIMED, title: index % 2 ? '起こして' : '歯医者に電話する', overdueMinutes: index % 3 ? 0 : 47 };
@@ -358,7 +358,7 @@ describe('at the moment it is due', () => {
   });
 
   it('never loses the promise: no phrase, a phrase off the list or no writer give the fact sentence alone', async () => {
-    for (const writer of [new FakeWriter(null), new FakeWriter({ phrase: 'ライ氏、15時の会議の約束です。', position: 'before' }), null]) {
+    for (const writer of [new FakeWriter(null), new FakeWriter({ phrase: 'ライ、15時の会議の約束です。', position: 'before' }), null]) {
       const f = fixture();
       f.setNow(NINE);
       const prepared = await prepare(f, writer)(NINE);
@@ -371,7 +371,7 @@ describe('at the moment it is due', () => {
   it('uses the private-safe fact sentence with anyone else at her body, and asks the model nothing', async () => {
     const f = fixture();
     f.setNow(NINE);
-    const writer = new FakeWriter({ phrase: 'ライ氏、', position: 'before' });
+    const writer = new FakeWriter({ phrase: 'ライ、', position: 'before' });
     const prepared = await prepare(f, writer, true)(NINE);
     expect(writer.asked).toEqual([]);
     f.initiatives.runOnce(NINE, 'Asia/Tokyo', new Map(), undefined, prepared);
@@ -381,7 +381,7 @@ describe('at the moment it is due', () => {
 
   it('writes nothing in the quiet hours', async () => {
     const f = fixture();
-    const writer = new FakeWriter({ phrase: 'ライ氏、', position: 'before' });
+    const writer = new FakeWriter({ phrase: 'ライ、', position: 'before' });
     expect(await prepare(f, writer)('2026-09-24T15:00:00.000Z')).toEqual(new Map()); // 00:00 in Tokyo
     expect(writer.asked).toEqual([]);
     f.close();

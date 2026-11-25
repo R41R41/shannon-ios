@@ -13,7 +13,7 @@ describe('expressive emotion state', () => {
       provisionalPrimary: 'excited',
       provisionalIntensity: 0.72,
       transcript: '実装できたよ！',
-      reply: 'やったー！ちゃんと完成しました、ライ氏！',
+      reply: 'やったー！ちゃんと完成しました、ライ！',
       now: '2026-09-28T10:00:00.000Z',
     });
     const second = resolveShannonEmotionState({
@@ -71,7 +71,7 @@ describe('expressive emotion state', () => {
       provisionalPrimary: 'bashful',
       provisionalIntensity: 0.64,
       transcript: 'かわいいね',
-      reply: 'そ、そんなこと言われると照れますよ、ライ氏。',
+      reply: 'そ、そんなこと言われると照れますよ、ライ。',
       now: '2026-09-28T10:01:00.000Z',
     });
     const updated = reduceCompanionState(initial, {
@@ -83,11 +83,11 @@ describe('expressive emotion state', () => {
 
     expect(restored.expressiveEmotion?.primary).toBe('bashful');
     expect(restoredLegacy.expressiveEmotion?.primary).toBe('neutral');
-    expect(buildExpressiveEmotionPrompt(emotion)).toContain('ライ氏');
+    expect(buildExpressiveEmotionPrompt(emotion)).toContain('ライ');
     expect(buildExpressiveEmotionPrompt(emotion)).toContain('never induce guilt');
     const guestPrompt = buildExpressiveEmotionPrompt(emotion, 'guest');
-    expect(guestPrompt).toContain('do not address them as ライ氏');
-    expect(guestPrompt).not.toContain('address the owner as ライ氏');
+    expect(guestPrompt).toContain('do not address them as ライ');
+    expect(guestPrompt).not.toContain('address the owner as ライ');
     expect(guestPrompt).toContain('never induce guilt');
   });
 });

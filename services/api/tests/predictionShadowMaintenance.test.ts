@@ -69,7 +69,7 @@ describe('the write lock', () => {
     const reads = watchFullReads();
     const shadow = new PredictionShadow({ database, createsSchema: true, log: () => {} });
     const state = new SQLiteShannonStore({ path, now: () => '2026-10-05T23:00:00.000Z', moodHistory: null, predictionShadow: false }).snapshot(scope);
-    shadow.stateWritten(scope, state, '2026-10-05T23:00:00.000Z', { type: 'expressive-emotion-updated', emotion: resolveShannonEmotionState({ provisionalPrimary: 'happy', provisionalIntensity: 0.6, transcript: '', now: '2026-10-05T23:00:00.000Z', target: 'ライ氏' }) });
+    shadow.stateWritten(scope, state, '2026-10-05T23:00:00.000Z', { type: 'expressive-emotion-updated', emotion: resolveShannonEmotionState({ provisionalPrimary: 'happy', provisionalIntensity: 0.6, transcript: '', now: '2026-10-05T23:00:00.000Z', target: 'ライ' }) });
     shadow.forget(scope, ['burst-3']);
     shadow.recompute(scope);
     expect(reads.length).toBeGreaterThan(0);
@@ -155,7 +155,7 @@ describe('retention and forgetting', () => {
     const on = new SQLiteShannonStore({ path, now: () => clock.at, moodHistory: null, predictionShadow: true, predictionShadowDefer: task => task() });
     const shadow = on.predictionShadow()!;
     (shadow as unknown as { log: (line: string) => void }).log = () => {};
-    on.apply(scope, { type: 'expressive-emotion-updated', emotion: resolveShannonEmotionState({ provisionalPrimary: 'happy', provisionalIntensity: 0.6, transcript: '', now: clock.at, target: 'ライ氏' }) });
+    on.apply(scope, { type: 'expressive-emotion-updated', emotion: resolveShannonEmotionState({ provisionalPrimary: 'happy', provisionalIntensity: 0.6, transcript: '', now: clock.at, target: 'ライ' }) });
     shadow.touch(scope, { burstId: 'burst-x', kind: 'pet', region: 'head', audience: 'owner', count: 1 }, on.snapshot(scope), clock.at);
     const database = new DatabaseSync(path);
     const count = (where: string) => (database.prepare(`SELECT COUNT(*) AS n FROM shannon_prediction_outcomes WHERE ${where}`).get() as { n: number }).n;

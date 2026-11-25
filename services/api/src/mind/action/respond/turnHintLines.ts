@@ -25,15 +25,15 @@ export const RESEARCH_PROMISE_LINE = '[調べもの] 「わかったら伝える
   + '調べた結果や天気・予定を伝えるだけの返事は、はしゃがず落ち着いた気持ちで書く。';
 
 /** Item 11: 「僕ってどんな人間？」 answered 「作ってくれた人、話すと嬉しい相手。今日は触られすぎてむっとしてる」. */
-const ABOUT_HIM = /(?:僕|俺|私|わたし|ぼく|おれ)(?:って|は)(?:どんな|どういう)(?:人|人間|やつ)|ライ氏(?:って|は)どんな/u;
-export const ABOUT_HIM_LINE = '[ライ氏のこと] ライ氏本人に「どんな人？」と聞かれたら、作り手であることだけで終えず、覚えている具体的なこと（好み・最近の出来事・ボクへの接し方）を'
-  + '二つ三つ挙げて、ボクから見たライ氏を答える。ほかの人がいる場では、この場で話してよいことだけにする。今の機嫌の話にすり替えない。';
+const ABOUT_HIM = /(?:僕|俺|私|わたし|ぼく|おれ)(?:って|は)(?:どんな|どういう)(?:人|人間|やつ)|ライ氏?(?:って|は)どんな/u;
+export const ABOUT_HIM_LINE = '[ライのこと] ライ本人に「どんな人？」と聞かれたら、作り手であることだけで終えず、覚えている具体的なこと（好み・最近の出来事・ボクへの接し方）を'
+  + '二つ三つ挙げて、ボクから見たライを答える。ほかの人がいる場では、この場で話してよいことだけにする。今の機嫌の話にすり替えない。';
 
 /** Item 12: 「何かやりたいことある？」 answered 「特にないです」, while she had asked him for days to read her story. */
 const WISH = /(?:やりたいこと|したいこと|して(?:ほしい|欲しい)こと|欲しいもの|ほしいもの|望み|夢は|何して(?:た|る)|今何して|最近どう)/u;
 export const OWN_WISH_LINE = '[ボクの望み] 「やりたいことある？」「何してた？」には「特にない」「〇回した」で終えない。'
   + '[ボク自身のやりたいこと]や[ボクがひとりの時間にしていること]から一つ選び、中身で話す（どの物語のどこで迷っているか）。'
-  + 'ライ氏としたいこと（物語を読んで感想を聞く、一緒に何かを見る）があれば、それも具体的に言う。';
+  + 'ライとしたいこと（物語を読んで感想を聞く、一緒に何かを見る）があれば、それも具体的に言う。';
 
 /**
  * Item 14: 「どんな表情ができるの？」 answered with her mood of the moment; her height and weight answered flatly 「ないです」. What she is,
@@ -46,7 +46,7 @@ export const SELF_PROFILE_LINE = '[ボクのこと] ボク自身について聞�
 
 /** Item 14: every greeting carried the touch of before or a failed operation. */
 const GREETING = /^(?:シャノン[、,\s]*)?(?:ハロー|ハロ|こんにちは|こんばんは|おはよう|ただいま|元気|聞こえる|いる[?？]?$|やあ|よっ)/u;
-export const GREETING_CONTEXT_LINE = '[あいさつ] あいさつには、あいさつと今のことで答える。前の触れ合い・うまくいかなかった操作・約束の話は、ライ氏がその話をした時だけ持ち出す。';
+export const GREETING_CONTEXT_LINE = '[あいさつ] あいさつには、あいさつと今のことで答える。前の触れ合い・うまくいかなかった操作・約束の話は、ライがその話をした時だけ持ち出す。';
 
 /** The lines this turn's words call for, in a fixed order ('' for none). */
 export function turnHintLines(message: string | undefined): string[] {

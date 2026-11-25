@@ -61,7 +61,7 @@ function rows(path: string, scopeKey = OWNER): StoredMoodPoint[] {
 }
 
 const feeling = (primary: ShannonExpressiveEmotion['primary'], intensity: number, startedAt: string): ShannonExpressiveEmotion => ({
-  primary, secondary: [], intensity, target: 'ライ氏', cause: 'CAUSE FROM THE CONVERSATION', arousal: 0.5, valence: 0.5,
+  primary, secondary: [], intensity, target: 'ライ', cause: 'CAUSE FROM THE CONVERSATION', arousal: 0.5, valence: 0.5,
   visibility: 'expressed', startedAt, decay: 0.48, carryover: 0.6, updatedAt: startedAt,
 });
 
@@ -385,7 +385,7 @@ describe('recording: a turn with others present', () => {
     expect(after.length).toBe(alone.length + 1);
     expect(after.at(-1)).toEqual(moodPointOf(shannon.snapshot(OWNER), clock.at, emotionTiming()));
     expect(after.every(point => point.presentKind !== 'giggle' && point.presentKind !== 'shy' && point.presentKind !== 'bashful')).toBe(true);
-    expect(JSON.stringify(after)).not.toMatch(/友達|照れ|CAUSE|ライ氏/u);
+    expect(JSON.stringify(after)).not.toMatch(/友達|照れ|CAUSE|ライ/u);
   });
 });
 
@@ -508,7 +508,7 @@ describe('GET /v1/shannon/mood-history', () => {
     const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, 'fixtures/mood-history-v1/response.json'), 'utf8'));
     expect(body).toEqual(fixture);
     expect(body.points.map(point => point.at)).toEqual([...body.points.map(point => point.at)].sort());
-    expect(JSON.stringify(body)).not.toMatch(/CAUSE|cause|target|ライ氏/u);
+    expect(JSON.stringify(body)).not.toMatch(/CAUSE|cause|target|ライ/u);
     // A window that ends before them is empty.
     const short = await route({ path, now: at(30 * HOUR) });
     expect((await short.read('?hours=1')).body.points).toEqual([]);

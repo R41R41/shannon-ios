@@ -1,10 +1,10 @@
 import type { FeelingAudience, FeelingChannel, FeelingEvent, ReplyHabit, ReplyOpener } from './feelingEvent.js';
 
 /**
- * The repetition watch v0 (Syzygy ADR-0013 D9): of her own recent words in front of one audience, how they opened (「ライ氏、」,
+ * The repetition watch v0 (Syzygy ADR-0013 D9): of her own recent words in front of one audience, how they opened (「ライ、」,
  * 「ひゃっ」), her habits (「えへへ」) and the drawers she reached into twice in a row. Pure; counted from the closed facts of her
  * own reply events (never her words). The watch is per audience: what she said to the owner alone is not counted in front of others.
- * 2026-10-14: twelve of fourteen replies opened with 「ライ氏、」 and every touch line with 「ひゃっ」.
+ * 2026-10-14: twelve of fourteen replies opened with 「ライ、」 and every touch line with 「ひゃっ」.
  */
 export interface RepetitionWatch {
   audience: FeelingAudience;
@@ -21,7 +21,7 @@ export interface RepetitionWatch {
 
 export const REPETITION_LIMITS = Object.freeze({ replies: 8, touchLines: 5, overusedShare: 0.3, overusedHabit: 2 });
 
-const OPENER_WORDS: Readonly<Record<ReplyOpener, string>> = Object.freeze({ rai_shi: '「ライ氏、」', hya: '「ひゃっ」', eh: '「えっ」', other: '' });
+const OPENER_WORDS: Readonly<Record<ReplyOpener, string>> = Object.freeze({ rai_shi: '「ライ、」', hya: '「ひゃっ」', eh: '「えっ」', other: '' });
 const HABIT_WORDS: Readonly<Record<ReplyHabit, string>> = Object.freeze({ ehehe: '「えへへ」', apology: '謝る言葉' });
 
 function runOf(openers: readonly ReplyOpener[]): { opener: ReplyOpener; run: number } | null {
@@ -90,7 +90,7 @@ export const PHRASE_LIMITS = Object.freeze({
   shortest: 5, hiraganaShortest: 7, longest: 16,
   /** A phrase is mostly kana (her way of saying), at least this share of hiragana. */
   kanaShare: 0.5,
-  /** An opening clause of at most this many characters is an opener of its own (「ふん」「ライ氏」「おかえり」). */
+  /** An opening clause of at most this many characters is an opener of its own (「ふん」「ライ」「おかえり」). */
   opener: 8,
   /** An ending is the last clause when it is this short, else its last `ending` characters. */
   shortClause: 6, ending: 4,
@@ -185,14 +185,14 @@ export function phraseLine(watch: PhraseWatch): string {
 }
 
 /**
- * 「元気？」 (owner 2026-10-19: asked fifteen times in a week, answered 「元気ですよ。ライ氏は元気ですか？」 almost every time): a short
+ * 「元気？」 (owner 2026-10-19: asked fifteen times in a week, answered 「元気ですよ。ライは元気ですか？」 almost every time): a short
  * how-are-you is answered with one real thing of the day, hers or his, not the stock reply. '' for anything else.
  */
 const HOW_ARE_YOU = /(?:元気|げんき)(?:\?|？|ですか|にして|してる|〜|ー)|調子(?:は|どう)|how are you/iu;
 export function greetingLine(words: string): string {
   const text = words.trim();
   return text && Array.from(text).length <= 40 && HOW_ARE_YOU.test(text)
-    ? '「元気？」には決まった返事でなく、今日のボクかライ氏の出来事から一つ具体的に添えて答える（物語の進み、体調、昨日の話の続きなど）。' : '';
+    ? '「元気？」には決まった返事でなく、今日のボクかライの出来事から一つ具体的に添えて答える（物語の進み、体調、昨日の話の続きなど）。' : '';
 }
 
 /** The phrases a reply repeats from the day's watch (for the reply check), at most a few. */

@@ -27,7 +27,7 @@ const MINUTE = 60_000;
 const MAC = 'mac-1';
 const PHONE = 'phone-1';
 const BODY = 'body-pc';
-const TEXT = 'ライ氏、いま何をしていますか。';
+const TEXT = 'ライ、いま何をしていますか。';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-private-reach-outs-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -314,7 +314,7 @@ describe('POST /v1/private-listening/reach-outs/{id}/delivery', () => {
     w.claim(id, MAC);
     expect(errorOf(w.deliver(id, 'shown_spoken', PHONE))).toBe('REACH_OUT_NOT_CLAIMED');
     for (const outcome of ['shown', 'away', 'heard', '', null]) expect(w.deliver(id, outcome, MAC).status).toBe(400);
-    expect(w.deliver(id, 'shown_spoken', MAC, { said: 'ライ氏、' }).status).toBe(400);
+    expect(w.deliver(id, 'shown_spoken', MAC, { said: 'ライ、' }).status).toBe(400);
     expect(w.reports.delivery(scope, id)).toBeNull();
     w.close();
   });
@@ -583,11 +583,11 @@ describe('what she observes', () => {
 
   it('is told that an app said it through his earphones, in fixed words that name the device', () => {
     const lines = reachOutHappenedLines({ ...facts, surface: 'mac' }, { at: '2026-10-02T03:03:00.000Z', timeZone: 'Asia/Tokyo' });
-    expect(lines.join('\n')).toContain('- イヤホンからの知らせ: Macのイヤホンで、ライ氏にだけ聞こえる声で伝えた。');
+    expect(lines.join('\n')).toContain('- イヤホンからの知らせ: Macのイヤホンで、ライにだけ聞こえる声で伝えた。');
     expect(lines.join('\n')).not.toContain('体からの知らせ');
     expect(lines.join('\n')).toContain('3分待ったが、返事はまだない。');
     expect(reachOutMemoryLine({ facts: { ...facts, surface: 'iphone' }, after: [], repliedSince: false }, 'Asia/Tokyo'))
-      .toContain('iPhoneのイヤホンで、ライ氏にだけ聞こえる声で伝えた。');
+      .toContain('iPhoneのイヤホンで、ライにだけ聞こえる声で伝えた。');
     // Her body's own report reads as before.
     expect(reachOutHappenedLines(facts, { at: '2026-10-02T03:03:00.000Z', timeZone: 'Asia/Tokyo' }).join('\n')).toContain('- 体からの知らせ: 画面に出して、声でも読み上げた。');
   });
@@ -611,7 +611,7 @@ describe('what she observes', () => {
     expect(rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent], planned: [], pending: { followUp: false, look: false, thinkAfterLook: false } }).rules).not.toContain(EARPHONE_NO_ANSWER_RULE);
 
     // After the second call: if that too stays unanswered he is not there; this message is let go. No follow_up is offered again.
-    expect(EARPHONE_GIVEN_UP_RULE).toBe('- さっきの話しかけには、もう一度だけ声をかけた。それにも返事がなければ、ライ氏はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。');
+    expect(EARPHONE_GIVEN_UP_RULE).toBe('- さっきの話しかけには、もう一度だけ声をかけた。それにも返事がなければ、ライはいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。');
     const again = { id: 'o2', cycleId: 'c1', ordinal: 3, step: 'reach_out' as const, outcome: 'done' as const, observedAt: at, reachOut: { ...facts, id: 'a2', reason: 'follow_up' as const, delivery: 'unknown' as const, waitedSeconds: 0 } };
     const second = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent, again], planned: [], pending: null });
     expect(second.rules).toContain(EARPHONE_GIVEN_UP_RULE);
@@ -631,7 +631,7 @@ describe('what she observes', () => {
     expect(reachOutMemoryLine({ facts, after: [{ step: 'follow_up', done: true }], repliedSince: false }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
     // Where it cannot be told whether he answered since, nothing is concluded.
     expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }] }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
-    expect(EARPHONE_NO_ANSWER_LINE).toBe('- イヤホンで伝えたあと、待っているあいだにライ氏の声も文字も届かなかった。');
+    expect(EARPHONE_NO_ANSWER_LINE).toBe('- イヤホンで伝えたあと、待っているあいだにライの声も文字も届かなかった。');
   });
 
   it('keeps the surface as a closed value in the observation, and drops anything else', () => {

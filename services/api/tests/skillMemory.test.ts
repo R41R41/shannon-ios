@@ -208,7 +208,7 @@ describe('what never enters a skill or a page', () => {
   it('adopts the owner\'s edit as a new version and never writes over it; an edit with a secret or an injection is held', () => {
     const skills = memory();
     const id = create(skills, 'weekly-review');
-    const edited = encodeSkill(skill('weekly-review', { steps: '1. ライ氏と今週の良かったことを三つ話す\n2. 来週の一つを決める' }));
+    const edited = encodeSkill(skill('weekly-review', { steps: '1. ライと今週の良かったことを三つ話す\n2. 来週の一つを決める' }));
     expect(skills.adoptOwnerEdit(scope, id, edited, { documentId: 'doc-1', version: 3 }, check, minutes(at, 5))).toBe('adopted');
     expect(skills.store.get(scope, id)).toMatchObject({ version: 2, madeBy: 'owner_edit', status: 'active', body: edited, aetherDocumentId: 'doc-1', aetherVersion: 3, exportedHash: skillHash(edited) });
     expect(skills.store.revisions(scope, id).at(-1)).toMatchObject({ actor: 'owner', reason: 'owner_edit' });
@@ -245,7 +245,7 @@ describe('the sleep: maintainer and proposer', () => {
     { choiceId: 'c1', choice: 'tool.aether.search', surface: 'text', subjectKind: 'talk', subjectId: 'talk-1', chosenAt: at, status: 'settled', growth: 1, serve: 1, reward: 0.6, settleCode: 'next_turn' },
     { choiceId: 'c2', choice: 'tool.aether.read', surface: 'text', subjectKind: 'talk', subjectId: 'talk-1', chosenAt: minutes(at, 1), status: 'settled', growth: 0, serve: 0, reward: -0.3, settleCode: 'next_turn' },
   ];
-  const experiences = [{ id: 'turn-1', observedAt: at, summary: '資料の場所を一緒に探した', text: 'ライ氏: 来週の月曜日は朝から病院に行ってそのあと会社で会議がある\nシャノン: おつかれさまでした' }];
+  const experiences = [{ id: 'turn-1', observedAt: at, summary: '資料の場所を一緒に探した', text: 'ライ: 来週の月曜日は朝から病院に行ってそのあと会社で会議がある\nシャノン: おつかれさまでした' }];
   const sources = (extra: Partial<SkillSeedSources> = {}): SkillSeedSources => ({
     knowledge: () => [], experiences: () => experiences, choices: () => failed, visible: () => () => true, check: () => pass, ...extra,
   });

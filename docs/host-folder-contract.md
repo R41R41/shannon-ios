@@ -51,7 +51,7 @@ A paired device asks which host it is bound to, so that an application does not 
 Owner decisions of 2026-10-06, effective only while two or more hosts have a bound device; with one host nothing below changes.
 
 - **Names.** The `host` field of every folder tool lists the hosts with their labels (「owner-windows（WindowsのPC）、owner-mac（Mac）」) and says how one is chosen: the one the owner names (the Mac or the PC), else none.
-- **Her words for it** (2026-10-06, after 「Macのシャノン用フォルダに何がある?」 called no tool). With one host or more, the folder tools describe 「ライ氏のPCやMacにあるボク専用のフォルダ」; `folder.list` says the owner may call it 「シャノン用フォルダ」 too, a different place from her Aether folder; and while they are offered her tool instructions say to use `folder_*` for it, with the host he names. With her Aether tools offered as well, 「Aetherのシャノン用フォルダ」 means `aetherFolder_*` (read with `aether_read`; 「Aether」 alone, his documents, stays `aether_search` and `aether_read`), and 「シャノン用フォルダ」 alone is asked about in one line.
+- **Her words for it** (2026-10-06, after 「Macのシャノン用フォルダに何がある?」 called no tool). With one host or more, the folder tools describe 「ライのPCやMacにあるボク専用のフォルダ」; `folder.list` says the owner may call it 「シャノン用フォルダ」 too, a different place from her Aether folder; and while they are offered her tool instructions say to use `folder_*` for it, with the host he names. With her Aether tools offered as well, 「Aetherのシャノン用フォルダ」 means `aetherFolder_*` (read with `aether_read`; 「Aether」 alone, his documents, stays `aether_search` and `aether_read`), and 「シャノン用フォルダ」 alone is asked about in one line.
 - **Choosing when none is named.** The hosts whose device can take this operation now (present, not stopped on its side, and listing the operation) are counted. One: it is used. Two or more: nothing is queued; she is told both are connected and asks the owner which (in her own time she names one). None: the first host whose device answered (stopped, or unable to do the operation) is used, otherwise the first registered; the call then fails with that host's reason (「PCやMacのフォルダはいま見られない」 and so on).
 - **v1 copies.** A host whose device's last v2 claim did not list `write` (the Mac application reads only in A18 S2) is never planned a copy; a host whose device has not made a v2 claim keeps v1's meaning.
 - Revoking the device (`POST /v1/devices`) stops it at authentication. Removing or changing the entry needs a restart of both services.
@@ -212,7 +212,7 @@ Everything below is new in v2. Routes, registration, transport, authentication, 
 | `protocol` | `2` | yes, for v2 | Without it the claim is a v1 claim: no wait, only `write` steps, and none of the fields below is accepted. |
 | `operations` | array of operation names | yes, for v2 | What this device can carry out. The server hands out only these, and a tool call for an operation the present device did not list fails at once (`unsupported_operation`). Unknown names are `400`. |
 | `waitSeconds` | integer, 0–25 | no (default 0) | **Long-poll.** With nothing to hand out, the server holds the request open up to this long and answers as soon as a step is queued (in practice within about a second). `0` answers at once. |
-| `localStop` | boolean | no (default false) | The owner's stop switch **on the device** is on. The server answers `{ "step": null }` at once, hands out nothing, and every tool call fails with 「ライ氏がPCやMacの側でフォルダの操作を止めている」 until a claim says `false`. |
+| `localStop` | boolean | no (default false) | The owner's stop switch **on the device** is on. The server answers `{ "step": null }` at once, hands out nothing, and every tool call fails with 「ライがPCやMacの側でフォルダの操作を止めている」 until a claim says `false`. |
 
 Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries `operation`, `id`, `expiresAt`, and the fields of its operation:
 
@@ -237,7 +237,7 @@ Response `200`: `{ "step": <step> | null }`, as in v1. A v2 step always carries 
 ### Presence and the local stop switch
 
 - A host is **present** while its bound device has a claim open, or made one in the last **40 s**. A tool call for a host that is not present fails at once with failure `unavailable` and the words 「PCやMacのフォルダはいま見られない（PCやMacが起きていないか、体のアプリが動いていない）」. Nothing is queued, so nothing runs later by surprise.
-- While the last claim said `localStop: true`, a tool call fails at once with 「ライ氏がPCやMacの側でフォルダの操作を止めている」. Nothing is queued.
+- While the last claim said `localStop: true`, a tool call fails at once with 「ライがPCやMacの側でフォルダの操作を止めている」. Nothing is queued.
 - If the local stop switch is turned on while a step is held, the device does not carry it out and reports `refused` / `stopped_locally`.
 - The server's stop switch (pause) stops the steps of **her own time** (they are not handed out; queued ones wait) but not the steps of a **conversation** with the owner: those are his own requests, made while he is talking to her.
 - Presence is stored per host (table `autonomy_host_presence`), so the activity-loop process sees the same presence as the API process.

@@ -128,10 +128,10 @@ describe('deciding and speaking', () => {
     await said({ durationMs: 3_000, strength: 0.2 });
     const prompt = speaker.prompts[0]!;
     expect(prompt.startsWith(SHANNON_ONE_LINE_VOICE)).toBe(true);
-    expect(prompt).toContain('- いま: ライ氏に頭をなでられている（3秒ほど、やさしく）');
+    expect(prompt).toContain('- いま: ライに頭をなでられている（3秒ほど、やさしく）');
     expect(prompt).toContain('- いまの気持ち: happy / 強度 ');
-    expect(prompt).toContain('理由 ライ氏に頭をなでてもらった');
-    expect(prompt).toContain('- この場: ライ氏と二人だけ');
+    expect(prompt).toContain('理由 ライに頭をなでてもらった');
+    expect(prompt).toContain('- この場: ライと二人だけ');
     expect(prompt).toContain('- 頭をなでられた: いまのが1回目');
     expect(prompt).toContain('- 直前にボクが言ったこと: なし');
     for (const rule of BODY_REACTION_RULES) expect(prompt).toContain(rule);
@@ -144,11 +144,11 @@ describe('deciding and speaking', () => {
   });
 
   it('words each touch, while it goes on and once it is over', () => {
-    expect(bodyTouchLine({ type: 'pet', durationMs: 3_000, strength: 0.2, ongoing: true }, 'owner')).toBe('ライ氏に頭をなでられている（3秒ほど、やさしく）');
-    expect(bodyTouchLine({ type: 'poke', durationMs: 120, ongoing: false }, 'owner')).toBe('ライ氏につつかれた（ほんの一瞬）');
-    expect(bodyTouchLine({ type: 'carry', durationMs: 8_400, strength: 0.9, ongoing: false }, 'owner')).toBe('ライ氏に画面の上で運ばれて、下ろされた（8秒ほど、強めに）');
-    expect(bodyTouchLine({ type: 'tickle', durationMs: 1_200, strength: 0.5, ongoing: true }, 'others')).toBe('ライ氏か、そばにいる誰かにくすぐられている（1秒ほど）');
-    expect(bodyTouchLine({ type: 'holdHand', durationMs: 90_000, ongoing: true }, 'owner')).toBe('ライ氏に手をつないでもらっている（2分ほど）');
+    expect(bodyTouchLine({ type: 'pet', durationMs: 3_000, strength: 0.2, ongoing: true }, 'owner')).toBe('ライに頭をなでられている（3秒ほど、やさしく）');
+    expect(bodyTouchLine({ type: 'poke', durationMs: 120, ongoing: false }, 'owner')).toBe('ライにつつかれた（ほんの一瞬）');
+    expect(bodyTouchLine({ type: 'carry', durationMs: 8_400, strength: 0.9, ongoing: false }, 'owner')).toBe('ライに画面の上で運ばれて、下ろされた（8秒ほど、強めに）');
+    expect(bodyTouchLine({ type: 'tickle', durationMs: 1_200, strength: 0.5, ongoing: true }, 'others')).toBe('ライか、そばにいる誰かにくすぐられている（1秒ほど）');
+    expect(bodyTouchLine({ type: 'holdHand', durationMs: 90_000, ongoing: true }, 'owner')).toBe('ライに手をつないでもらっている（2分ほど）');
     expect(Object.keys(BODY_TOUCH_PHRASES).sort()).toEqual(['carry', 'holdHand', 'pet', 'poke', 'tickle']);
   });
 
@@ -198,7 +198,7 @@ describe('deciding and speaking', () => {
     const { said, speaker, advance } = await reactionHarness();
     speaker.script = call => [
       { say: true, text: HEHE, feeling: 'bashful' as const },
-      { say: true, text: 'また？ ライ氏、今日は甘えん坊ですね。', feeling: 'teasing' as const },
+      { say: true, text: 'また？ ライ、今日は甘えん坊ですね。', feeling: 'teasing' as const },
       { say: false, text: '', feeling: 'content' as const },
       { say: true, text: 'もうっ、つつかないでください。', feeling: 'cuteAngry' as const },
     ][call - 1]!;
@@ -215,13 +215,13 @@ describe('deciding and speaking', () => {
     expect(second).toContain('- 頭をなでられた: この数分で2回目');
     expect(second).toContain(`- 直前にボクが言ったこと: 「${HEHE}」`);
     expect(third).toContain('- 頭をなでられた: この数分で3回目');
-    expect(third).toContain(`- 直前にボクが言ったこと: 「${HEHE}」「また？ ライ氏、今日は甘えん坊ですね。」`);
+    expect(third).toContain(`- 直前にボクが言ったこと: 「${HEHE}」「また？ ライ、今日は甘えん坊ですね。」`);
     // The feeling she is told escalates with the count (the one table): happy, then bashful from the third pat.
     expect(first).toContain('いまの気持ち: happy');
     expect(third).toContain('いまの気持ち: bashful');
     expect(third).toContain('（続けて3回目）');
     // Another kind of touch: its own count, and the earlier kind as something that happened a moment ago.
-    expect(fourth).toContain('- いま: ライ氏につつかれた（ほんの一瞬）');
+    expect(fourth).toContain('- いま: ライにつつかれた（ほんの一瞬）');
     expect(fourth).toContain('- つつかれた: いまのが1回目');
     expect(fourth).toContain('- 頭をなでられた: 1分前までに3回');
     expect(new Set(speaker.prompts).size).toBe(4);
@@ -235,7 +235,7 @@ describe('deciding and speaking', () => {
     const prompt = speaker.prompts[0]!;
     expect(prompt).toContain('[いまの会話]');
     const lines = prompt.slice(prompt.indexOf('[いまの会話]')).split('\n\n')[0]!.split('\n').slice(1);
-    expect(lines).toEqual(['ボク: はい、ライ氏。', 'ライ氏: まず一章からやるよ', 'ボク: はい、ライ氏。']);
+    expect(lines).toEqual(['ボク: はい、ライ。', 'ライ: まず一章からやるよ', 'ボク: はい、ライ。']);
     advance(BODY_REACTION_LIMITS.conversationFreshMilliseconds + SECOND);
     await said();
     expect(speaker.prompts[1]).not.toContain('[いまの会話]');
@@ -249,7 +249,7 @@ describe('others present', () => {
     const answer = await said({ type: 'tickle', durationMs: 1_200 }, { audience: 'others' });
     expect(answer).toMatchObject({ status: 'said', message: { text: HEHE, listenSeconds: 6 } });
     const prompt = speaker.prompts[0]!;
-    expect(prompt).toContain('- いま: ライ氏か、そばにいる誰かにくすぐられている（1秒ほど）');
+    expect(prompt).toContain('- いま: ライか、そばにいる誰かにくすぐられている（1秒ほど）');
     expect(prompt).toContain('- この場: ほかの人もいる');
     expect(prompt).toContain(BODY_REACTION_OTHERS_RULE);
     for (const secret of ['[いまの会話]', '診察', '内緒']) expect(prompt).not.toContain(secret);
@@ -292,7 +292,7 @@ describe('her feeling', () => {
     const answer = await said({ type: 'poke', durationMs: 100, ongoing: false });
     const after = state();
     expect(after.version).toBeGreaterThan(before.version);
-    expect(after.expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏につつかれた' });
+    expect(after.expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライにつつかれた' });
     expect(after.emotion.arousal).toBeGreaterThan(before.emotion.arousal);
     expect(answer.mood).toEqual({ expression: presentShannonMood(after, now()).expression });
     expect(answer.mood.expression).toBe('surprised');
@@ -307,7 +307,7 @@ describe('her feeling', () => {
       advance(20 * SECOND);
     }
     expect(faces).toEqual(['surprised', 'annoyed', 'annoyed', 'annoyed']);
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'sulky', cause: 'ライ氏につつかれた（続けて4回目）' });
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'sulky', cause: 'ライにつつかれた（続けて4回目）' });
     expect(state().emotion.valence).toBeLessThan(0);
   });
 
@@ -317,7 +317,7 @@ describe('her feeling', () => {
     speaker.decision = { say: true, text: 'もうっ、びっくりするじゃないですか。', feeling: 'happy' };
     const answer = await said({ type: 'tickle', durationMs: 4_000, ongoing: false });
     expect(answer.message).toMatchObject({ expression: 'annoyed' });
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'cuteAngry', cause: 'ライ氏にくすぐられた' });
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'cuteAngry', cause: 'ライにくすぐられた' });
     expect(answer.mood).toEqual({ expression: presentShannonMood(state(), now()).expression });
     // A borrowed face carries its feeling name; a word about being carried leaves no feeling behind (owner 2026-10-19).
     const before = state().expressiveEmotion;
@@ -329,7 +329,7 @@ describe('her feeling', () => {
   it('leaves a stronger feeling from the conversation in place, for the touch and for her line about it', async () => {
     const { said, stateStore, state, now } = await reactionHarness();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sad', secondary: [], intensity: 0.85, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.6,
+      primary: 'sad', secondary: [], intensity: 0.85, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.6,
       visibility: 'expressed', startedAt: now(), decay: 0.24, carryover: 0.7, updatedAt: now(),
     } });
     const answer = await said();
@@ -466,7 +466,7 @@ describe('the deadline', () => {
     const answer = await said(neck);
     expect(answer).toMatchObject({ status: 'quiet', message: null, mood: { expression: 'surprised' } });
     // Only the reflex: surprise, a little more awake, and nothing pleasant or unpleasant.
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライ氏に首をつつかれた' });
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'surprised', cause: 'ライに首をつつかれた' });
     expect(state().emotion.valence).toBe(before.emotion.valence);
     expect(state().emotion.openness).toBe(before.emotion.openness);
     expect(state().emotion.arousal).toBeGreaterThan(before.emotion.arousal);

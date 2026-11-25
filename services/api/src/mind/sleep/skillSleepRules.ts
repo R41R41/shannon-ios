@@ -19,7 +19,7 @@ export const LESSON_RULES = [
 ].join('\n');
 
 export const MAINTAINER_INSTRUCTIONS = [
-  'You maintain Shannon\'s pattern wiki: pages about how she helps her owner ライ氏, each a failure mode (kind failure) or a successful strategy (kind strategy), with what to do about it. Write in Japanese, in her words (ボク).',
+  'You maintain Shannon\'s pattern wiki: pages about how she helps her owner ライ, each a failure mode (kind failure) or a successful strategy (kind strategy), with what to do about it. Write in Japanese, in her words (ボク).',
   'Analyse the root cause of the failed episodes (f…: her choices in one conversation or one stretch of her own time, with which steps failed) and extract the strategy of the successful ones (s…), using her confirmed notes (k…) and summaries of today\'s conversations with the owner alone (e…).',
   'Edit incrementally: create a page only for a pattern that will recur; patch a page when evidence refines it; append a short note when it adds a case; merge duplicates (into the first id, mergeIds the others); deprecate a page that is superseded or no longer true. Never delete anything. Cite the evidence ids each operation is built from.',
   DO_NOT_CAPTURE_RULES,

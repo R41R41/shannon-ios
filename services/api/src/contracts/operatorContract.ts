@@ -263,11 +263,11 @@ export const OPERATOR_NOTE_MARK = '［運用者の操作のお知らせ］';
 /** The note kind of the operator's lines in the owner's Talk (a stored note's turn id is `operator-note:<id>`). */
 export const OPERATOR_NOTE_KIND = 'operator-note';
 const TALK_NOTES = {
-  request: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「${quoted}」を始めました。`,
+  request: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライの代わりに Minecraft の依頼「${quoted}」を始めました。`,
   cancel: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が、代わりに始めた Minecraft の依頼「${quoted}」を止めました。`,
   budget: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が、代わりに始めた Minecraft の依頼「${quoted}」の予算の上限を変えました。`,
   time_limit: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者が代わりに始めた Minecraft の依頼「${quoted}」は、決められた時間に達したので止めました。`,
-  lifecycle: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の操作（${quoted}）を頼みました。`,
+  lifecycle: (quoted: string) => `${OPERATOR_NOTE_MARK}運用者がライの代わりに Minecraft の操作（${quoted}）を頼みました。`,
 } as const;
 export function operatorTalkNote(kind: keyof typeof TALK_NOTES, subject: string): string {
   return TALK_NOTES[kind](subject.replace(/\s+/gu, ' ').slice(0, 80));
@@ -277,7 +277,7 @@ export function operatorTalkNote(kind: keyof typeof TALK_NOTES, subject: string)
 export const OPERATOR_TITLE_PREFIX = '（運用者経由）';
 
 export function operatorRequestContext(operator: string): string {
-  return `この依頼は運用者（${operator}）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。`;
+  return `この依頼は運用者（${operator}）がライの代わりに渡したものです。ライが直接言った言葉ではありません。`;
 }
 
 function validRequestGoal(goal: string): boolean {

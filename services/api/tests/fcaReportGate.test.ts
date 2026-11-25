@@ -137,7 +137,7 @@ describe('a voice turn\'s research', () => {
     const turn = { delegate: (spec: { goal: string }) => { goal = spec.goal; return { id: 'w' } as TaskView; } } as unknown as FcaConversationTurn;
     admitVoiceResearch(turn, { transcript: 'うん、お願い', research: true, places: undefined, at: iso(noon), timeZone: 'Asia/Tokyo',
       route: { transcript: 'うん、お願い', participantMode: 'owner', context: [{ role: 'user', content: '博多の天気は？' }, { role: 'assistant', content: '晴れです。東京の天気も見ますか？' }] } });
-    expect(goal).toBe('ライ氏「博多の天気は？」 → ボク「東京の天気も見ますか？」 → ライ氏「うん、お願い」');
+    expect(goal).toBe('ライ「博多の天気は？」 → ボク「東京の天気も見ますか？」 → ライ「うん、お願い」');
   });
 
   it('says a result that arrives within the wait in the same turn and marks it heard; nothing otherwise', async () => {

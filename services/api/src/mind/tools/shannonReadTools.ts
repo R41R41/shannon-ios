@@ -104,13 +104,13 @@ export function readToolExecutors(ports: ReadToolPorts | null): Readonly<Record<
       const range = stringInput(input, 'range') === 'week' ? 'week' as const : 'day' as const;
       if (Object.keys(input).some(key => key !== 'range')) {
         if (!ports.upcomingSearch) return { summary: '予定を検索します。', run: async () => ({ result: toolFailure('unavailable', 'この接続は詳しい予定検索に対応していない。', { retryable: false }), record: { summary: '予定検索は未対応でした。', outcome: 'failed' } }) };
-        return prepared('ライ氏の予定を条件で検索しました。', () => ports.upcomingSearch!(context.scopeKey, input));
+        return prepared('ライの予定を条件で検索しました。', () => ports.upcomingSearch!(context.scopeKey, input));
       }
-      return prepared('会話の中でライ氏のこれからの予定を見ました。', () => ports.upcoming!(context.scopeKey, range));
+      return prepared('会話の中でライのこれからの予定を見ました。', () => ports.upcoming!(context.scopeKey, range));
     },
     'schedule.free_time': (input, context) => {
       if (!ports.freeTime) return missing;
-      return prepared('ライ氏の空いている時間を探しました。', () => ports.freeTime!(context.scopeKey, input));
+      return prepared('ライの空いている時間を探しました。', () => ports.freeTime!(context.scopeKey, input));
     },
     'places.search': (input, context) => {
       if (!ports.places) return missing;

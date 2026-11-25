@@ -43,7 +43,7 @@ export function cached(value: AnthropicMessage, model: string, write = 1_800, re
 
 export const answer = (model: string, write?: number, read?: number) => cached(anthropicFixture('structured-answer'), model, write, read);
 export const toolCall = (model: string) => cached(anthropicFixture('tool-call'), model, 4_100, 0);
-export const spoken = (model: string, text = 'こんにちは、ライ氏。今日も来てくれてうれしいです。') =>
+export const spoken = (model: string, text = 'こんにちは、ライ。今日も来てくれてうれしいです。') =>
   cached(message([{ type: 'text', text }], 'end_turn', { id: 'msg_spoken' }), model, 0, 2_400);
 
 /** A structured answer that asks for the missing place instead of claiming a search. */

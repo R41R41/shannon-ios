@@ -48,7 +48,7 @@ const systemOf = (body: Record<string, unknown>) => (body as Body).system;
 /** Every line of the persona, the suite and the capability list that is long enough to mean something on its own. */
 const CONVERSATION_LINES = [shannonPersonaPrompt('owner'), shannonSuitePrompt(), shannonCapabilityPrompt('owner')]
   .flatMap(text => text.split('\n')).map(line => line.trim()).filter(line => line.length >= 12);
-const MARKERS = ['[シャノンの人格]', '[Syzygyの3つのアプリ]', '[ボクにできること', 'ボク', 'ライ氏', 'Aether', 'Voyager', 'ownerClock',
+const MARKERS = ['[シャノンの人格]', '[Syzygyの3つのアプリ]', '[ボクにできること', 'ボク', 'ライ', 'Aether', 'Voyager', 'ownerClock',
   'sharedContext', 'affect', '```chart', 'タスクの感情と記憶', '達成と復帰', 'タスクの協力'];
 function expectNoConversationRules(text: string) {
   for (const marker of MARKERS) expect(text, marker).not.toContain(marker);

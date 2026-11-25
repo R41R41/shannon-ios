@@ -332,7 +332,7 @@ describe('a session: a thought that leads to no step', () => {
     const path = join(directory, 'revise.sqlite');
     const clock = { at: '2026-10-02T11:59:47.000Z' };
     const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
-    persistent.appendTurn(scope, persistent.threadId(scope), '物語、楽しみにしています。', 'がんばります、ライ氏。', '2026-10-02T09:00:00.000Z');
+    persistent.appendTurn(scope, persistent.threadId(scope), '物語、楽しみにしています。', 'がんばります、ライ。', '2026-10-02T09:00:00.000Z');
     const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
     const { loop, model, store, entries } = sessions({ path, clock, ownerContext });
     // The state of the evening it went wrong: three notes, one story draft she has not shown.
@@ -587,7 +587,7 @@ describe('a session: the owner comes first', () => {
     showing.ownerActive = false;
     await runUntilIdle(loop);
     const told = facts(model.prompts('think')[1]!);
-    expect(told).toContain('- この時間の途中で、手を止めていた（約50分）。ライ氏が話していたか、止められていたあいだのこと。計画はそのまま残っていた。');
+    expect(told).toContain('- この時間の途中で、手を止めていた（約50分）。ライが話していたか、止められていたあいだのこと。計画はそのまま残っていた。');
     expect(told).toContain('あと約40分。');
   });
 
@@ -792,7 +792,7 @@ describe('a session: with the owner\'s context', () => {
     const path = join(directory, 'owner-context.sqlite');
     const clock = { at: '2026-10-02T01:00:00.000Z' };
     const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
-    persistent.appendTurn(scope, persistent.threadId(scope), '今日は夕方の駅で写真を撮ってきました。', 'いいですね、ライ氏。どんな光でしたか。', '2026-10-02T00:30:00.000Z');
+    persistent.appendTurn(scope, persistent.threadId(scope), '今日は夕方の駅で写真を撮ってきました。', 'いいですね、ライ。どんな光でしたか。', '2026-10-02T00:30:00.000Z');
     persistent.apply(scope, { type: 'user-fact-upserted', source: 'sleep', fact: { id: 'photo', statement: 'ユーザーは写真を撮るのが好き', confidence: 0.9, observedAt: clock.at, evidence: '写真' } });
     const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
     const { loop, model, store, reader } = sessions({ path, clock, ownerContext });
@@ -803,7 +803,7 @@ describe('a session: with the owner\'s context', () => {
     expect(reader.reads).toEqual(['https://www.aozora.gr.jp/']);
     const [first, , draft, again] = model.calls;
     for (const call of [first!, again!]) {
-      expect(call.prompt).toContain(`${OWNER_CONTEXT_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ氏: 今日は夕方の駅で写真を撮ってきました。\nボク: いいですね、ライ氏。どんな光でしたか。`);
+      expect(call.prompt).toContain(`${OWNER_CONTEXT_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ: 今日は夕方の駅で写真を撮ってきました。\nボク: いいですね、ライ。どんな光でしたか。`);
       expect(call.system).toContain(ownerPrivateRule('thinking', true)!);
       expect(call.prompt.endsWith(facts(call.prompt))).toBe(true);
     }
@@ -811,8 +811,8 @@ describe('a session: with the owner\'s context', () => {
     expect(order.every(index => index > 0)).toBe(true);
     expect(order).toEqual([...order].sort((left, right) => left - right));
     // The story step is given his context too, at the end of its materials, with the rule that she may write about him.
-    expect(draft!.prompt).toContain(`${OWNER_CONTEXT_WRITING_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ氏: 今日は夕方の駅で写真を撮ってきました。`);
-    expect(draft!.prompt.slice(draft!.prompt.indexOf(OWNER_CONTEXT_WRITING_HEADER))).toContain('ボク: いいですね、ライ氏。どんな光でしたか。');
+    expect(draft!.prompt).toContain(`${OWNER_CONTEXT_WRITING_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ: 今日は夕方の駅で写真を撮ってきました。`);
+    expect(draft!.prompt.slice(draft!.prompt.indexOf(OWNER_CONTEXT_WRITING_HEADER))).toContain('ボク: いいですね、ライ。どんな光でしたか。');
     expect(draft!.prompt.indexOf(OWNER_CONTEXT_WRITING_HEADER)).toBeGreaterThan(draft!.prompt.indexOf('[自分のメモ]'));
     expect(draft!.system).toContain(ownerPrivateRule('story', true)!);
     expect(draft!.system).not.toContain('実在の個人をモデルにしない');

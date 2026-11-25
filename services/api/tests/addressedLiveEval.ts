@@ -21,7 +21,7 @@ const rounds = Math.max(1, Math.min(5, Number(process.env.SHANNON_ADDRESSED_EVAL
 const judgeFor = () => new AddressedJudge({ chooser: configuredJevChooser(process.env, { trace: null })!, ...(Number.isFinite(timeout) && timeout >= 100 ? { timeoutMilliseconds: timeout } : {}) });
 
 const inputOf = (item: (typeof ADDRESSED_CASES)[number]): AddressedInput => ({
-  scopeKey: 'live-eval', transcript: item.transcript, speaker: { id: item.speaker ?? 'owner', name: item.speaker ?? 'ライ氏' }, humans: item.humans,
+  scopeKey: 'live-eval', transcript: item.transcript, speaker: { id: item.speaker ?? 'owner', name: item.speaker ?? 'ライ' }, humans: item.humans,
   recent: (item.recent ?? []).map(line => ({ who: line.who, text: line.text, secondsAgo: line.secondsAgo, ...(line.shannon ? { shannon: true as const } : {}) })),
   ...(item.spoke ? { shannon: { spokeAgoMs: item.spoke.secondsAgo * 1000, toSpeaker: item.spoke.toSpeaker, ...(item.spoke.line ? { line: item.spoke.line } : {}),
     ...(item.spoke.asked ? { asked: true } : {}) } } : {}),

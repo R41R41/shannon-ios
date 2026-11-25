@@ -445,7 +445,7 @@ export function valueFactExamples(): Array<{ moment: string; section: string | n
     const examples = [
       { moment: '深夜2時・ひとり', at: jst(10, 2), presence: 'alone' as Presence },
       { moment: '夜20時・ひとり', at: jst(10, 20), presence: 'alone' as Presence },
-      { moment: '昼13時・ライ氏は離席', at: jst(10, 13), presence: 'away' as Presence },
+      { moment: '昼13時・ライは離席', at: jst(10, 13), presence: 'away' as Presence },
       { moment: '夜20時・ほかの人がいる', at: jst(10, 20), presence: 'others' as Presence },
     ];
     return examples.map(example => { world.presence = example.presence; return { moment: example.moment, section: world.facts(offered, example.at) }; });

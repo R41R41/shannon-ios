@@ -46,8 +46,8 @@ describe('text chat expression', () => {
   it('comes from her reply and stored feeling, not from the owner\'s words', async () => {
     const { chat } = kernel();
     expect((await chat('次の設計を考えてみて', 'はい、こう進めるのが良いと思います。')).messageEmotion.expression).toBe('calm');
-    expect((await chat('今日は悲しい', 'そばにいますよ、ライ氏。')).messageEmotion.expression).toBe('tender');
-    expect((await chat('違うよ、間違ってる。なんで？', 'す、すみません、ライ氏！すぐ直します。')).messageEmotion)
+    expect((await chat('今日は悲しい', 'そばにいますよ、ライ。')).messageEmotion.expression).toBe('tender');
+    expect((await chat('違うよ、間違ってる。なんで？', 'す、すみません、ライ！すぐ直します。')).messageEmotion)
       .toMatchObject({ expression: 'concerned', feeling: 'apologetic' });
     expect((await chat('もう直ったの？', 'ふふん、ボクは天才ですから！')).messageEmotion)
       .toMatchObject({ expression: 'determined', feeling: 'proud' });
@@ -139,7 +139,7 @@ describe('state shown to the owner', () => {
   it('moves closeness with recorded owner days and explains it', async () => {
     let now = '2026-10-01T03:00:00.000Z';
     const { api, chat, stateStore } = kernel(() => now);
-    await chat('おはよう', 'おはようございます、ライ氏。');
+    await chat('おはよう', 'おはようございます、ライ。');
     await api.waitForBackground('owner');
     now = '2026-10-02T03:00:00.000Z';
     await chat('今日もよろしく', 'はい、よろしくお願いします。');

@@ -9,7 +9,7 @@ import { runSkillImport } from './skillImportCommand.js';
 
 /**
  * The owner's view and controls of her skills, for the app's 学び tab (Syzygy ADR-0008 stage 2, review scope gap;
- * `docs/skill-and-routing-contract.md`, 「ライ氏の学びの画面」). Core: approval and budget (the owner's controls), memory.
+ * `docs/skill-and-routing-contract.md`, 「ライの学びの画面」). Core: approval and budget (the owner's controls), memory.
  *
  * - `GET /v1/autonomy/skills`: the index's usage against its capacity, and each skill (retired ones too): status, version, whether
  *   it is pinned, on trial (the version a failed trial returns to, its uses so far of three), the owner's version, its uses and

@@ -44,9 +44,9 @@ describe('structured compaction', () => {
   });
 
   it('renders one line per section, voice with four sections only, and nothing for an empty template', () => {
-    const template = checkedTemplate({ 目的: ['しりとり'], 制約: ['「ん」で終わらない'], 次: ['ら'], 重要な文脈: ['ライ氏が先攻'] })!;
-    expect(renderedCompaction(template, 'text')).toBe('[ここまでの要約]\n目的: しりとり\n制約: 「ん」で終わらない\n次: ら\n重要な文脈: ライ氏が先攻');
-    expect(renderedCompaction(template, 'voice')).toBe('[ここまでの要約]\n目的: しりとり\n次: ら\n重要な文脈: ライ氏が先攻');
+    const template = checkedTemplate({ 目的: ['しりとり'], 制約: ['「ん」で終わらない'], 次: ['ら'], 重要な文脈: ['ライが先攻'] })!;
+    expect(renderedCompaction(template, 'text')).toBe('[ここまでの要約]\n目的: しりとり\n制約: 「ん」で終わらない\n次: ら\n重要な文脈: ライが先攻');
+    expect(renderedCompaction(template, 'voice')).toBe('[ここまでの要約]\n目的: しりとり\n次: ら\n重要な文脈: ライが先攻');
     expect(renderedCompaction(emptyTemplate(), 'text')).toBe('');
   });
 

@@ -57,7 +57,7 @@ describe('the morning brief in her words, with fresh news (owner 2026-10-19, ite
 
   it('opens to him, with a birthday first', () => {
     const brief = composeMorningBrief({ date: '2026-10-18', weather, schedule: [{ when: '（終日）', title: '安東まゆり’s 32nd Birthday' }], voice: 'shannon' });
-    expect(brief.spoken).toMatch(/^おはようございます、ライ氏。今日は安東まゆりさんの誕生日ですね。何か送りますか？/u);
+    expect(brief.spoken).toMatch(/^おはようございます、ライ。今日は安東まゆりさんの誕生日ですね。何か送りますか？/u);
     expect(brief.card).toContain('朝のまとめ');
     // The tool's brief keeps its plain sentences.
     expect(composeMorningBrief({ date: '2026-10-18', weather, schedule: [] }).spoken).toMatch(/^おはようございます、今日の/u);

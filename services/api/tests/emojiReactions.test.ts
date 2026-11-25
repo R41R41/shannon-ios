@@ -35,7 +35,7 @@ const SERVER_ROOM = 'discord:111:222'; // shared
 const START = '2026-10-26T12:00:00.000Z';
 const TOKEN = 'c'.repeat(40);
 const BRIDGE = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([
-  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' },
+  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライの部屋', audience: 'owner-private' },
   { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
 ]) };
 const directories: string[] = [];
@@ -142,7 +142,7 @@ describe('in the app\'s Talk', () => {
     reactions.set('owner', { threadId: 'talk', messageId: mine.id, emoji: '🙏', on: true });
     const block = ports.turnContext('owner', 'talk', true);
     expect(block).toContain('- ボクの「ここは大事です。」に 😂 👍 を付けた、😂 を外した');
-    expect(block).toContain('ライ氏自身の「');
+    expect(block).toContain('ライ自身の「');
     expect(block.match(/🙏/gu)).toHaveLength(1);
     expect(block).toContain('気持ちの手がかり');
     expect(ports.turnContext('owner', 'talk', true)).toBe('');
@@ -203,7 +203,7 @@ describe('on Discord', () => {
     const prompt = promptOf(request);
     expect(prompt).toContain('[この場の絵文字の反応');
     expect(prompt).toContain('- 「ユウ」がボクの「ケーキいいですね！」に 😂 を付けた');
-    expect(prompt).toContain('- ライ氏が「ユウ」の「ケーキ焼いた」に :party_parrot: を付けた');
+    expect(prompt).toContain('- ライが「ユウ」の「ケーキ焼いた」に :party_parrot: を付けた');
     await typed('もう一回');
     expect(promptOf(h.model.requests[1]!)).not.toContain('[この場の絵文字の反応');
     await h.close();
@@ -220,7 +220,7 @@ describe('on Discord', () => {
     expect((await call('/v1/platform/reactions', { ...event(), extra: 1 })).status).toBe(400);
     expect((await call('/v1/platform/reactions', event(), 'x'.repeat(40))).status).toBe(401);
     expect(() => validatedPlatformReaction(event({ platform: 'line' }))).toThrow();
-    expect(h.reactions.turnBlock('discord', ROOM)).toContain('- ライ氏がボクの「ケーキいいですね！」に 😂 を付けた');
+    expect(h.reactions.turnBlock('discord', ROOM)).toContain('- ライがボクの「ケーキいいですね！」に 😂 を付けた');
     await h.close();
   });
 });

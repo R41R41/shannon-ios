@@ -72,7 +72,7 @@ describe('her character space in a text turn', () => {
     expect(handle?.lines?.space?.selection.primary).toBe('smug');
     expect(block).toContain('いまのボク: えっへん（得意げ）');
     expect(block).toContain(AFFECTION_GUARD_LINE);
-    expect(block).toContain('[ライ氏とのこと]');
+    expect(block).toContain('[ライとのこと]');
     expect(jev.states[0]).toMatchObject({ shannon_feeling: { persona: 'smug' } });
     expect(JSON.stringify(jev.questions[0])).toContain(CHARACTER_REGIONS.smug.lean.slice(0, 40));
     const staged = feelingText.staged(handle, v2Layered());
@@ -131,7 +131,7 @@ describe('her character space in a text turn', () => {
     const others = start(port, 'こんにちは', TODAY, false);
     await feelingText.block(others);
     expect(others?.lines?.space?.selection.primary).not.toMatch(/devoted|heavy/u);
-    expect(others?.lines?.carriedLines.join('\n') ?? '').not.toContain('[ライ氏とのこと]');
+    expect(others?.lines?.carriedLines.join('\n') ?? '').not.toContain('[ライとのこと]');
   });
 
   it('keeps what happened with him alone out of anyone else\'s turn (her mood is one, his moments are his)', async () => {

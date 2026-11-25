@@ -22,7 +22,7 @@ import { emotionTiming, feelingBeforeTurn, innerNoteVoice } from '../../mind/emo
 import { feelingVoice } from '../../mind/emotion/feelingPorts.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from '../../mind/attention/voiceSilence.js';
 import { companionIdentityPrompt, identityOnly } from '../../mind/memory/identityPrompt.js';
-import { shannonIdentityPrompt } from '@shannon/cognition';
+import { SHANNON_OWNER_NAME, shannonIdentityPrompt } from '@shannon/cognition';
 import { weatherToolAvailable } from '../../mind/tools/shannonToolSession.js';
 import { turnStages, type TurnTiming } from '../../infra/observer/turnTiming.js';
 import { transcriptNeedsInterpretation, transcriptTrust } from './voiceTranscriptContext.js';
@@ -369,7 +369,7 @@ export class VoiceConversation implements ConversationModality<ApiResponse> {
   emotionWith(reply?: string): ShannonExpressiveEmotion {
     return resolveShannonEmotionState({ previous: this.previousExpressiveEmotion, provisionalPrimary: this.decision.affect,
       provisionalIntensity: this.decision.affectIntensity, transcript: this.transcript, ...(reply === undefined ? {} : { reply }), now: this.occurredAt,
-      target: this.guestVoice ? '現在の話者' : 'ライ氏' });
+      target: this.guestVoice ? '現在の話者' : SHANNON_OWNER_NAME });
   }
 
   /** Her face's plan (its timing line notes `silence`, `chars`), sent before anything else. */

@@ -92,12 +92,12 @@ export interface LifecyclePhrase { text: string; positions: readonly PhrasePosit
 export const LIFECYCLE_PHRASES_V1: Readonly<Record<PhraseFamily, readonly LifecyclePhrase[]>> = Object.freeze({
   done: Object.freeze<LifecyclePhrase[]>([
     { text: 'ふふ、', positions: ['before'] }, { text: 'お待たせ！', positions: ['before', 'after'] }, { text: 'やったね！', positions: ['after', 'before'] },
-    { text: 'ライ氏、', positions: ['before'] }, { text: 'はい、', positions: ['before'] }, { text: 'えっへん、', positions: ['before'] },
+    { text: 'ライ、', positions: ['before'] }, { text: 'はい、', positions: ['before'] }, { text: 'えっへん、', positions: ['before'] },
     { text: 'えへへ、', positions: ['before'] }, { text: 'じゃーん、', positions: ['before'] }, { text: 'よし、', positions: ['before'] },
-    { text: 'ライ氏、お待たせ。', positions: ['before'] },
+    { text: 'ライ、お待たせ。', positions: ['before'] },
   ]),
   not_done: Object.freeze<LifecyclePhrase[]>([
-    { text: 'ライ氏、', positions: ['before'] }, { text: 'お待たせ。', positions: ['before'] }, { text: '…ごめんね', positions: ['after'] },
+    { text: 'ライ、', positions: ['before'] }, { text: 'お待たせ。', positions: ['before'] }, { text: '…ごめんね', positions: ['after'] },
     { text: 'はい、', positions: ['before'] }, { text: 'えっと、', positions: ['before'] }, { text: 'ごめんね、', positions: ['before'] },
   ]),
 });

@@ -134,10 +134,10 @@ function when(at: string, now: string, timeZone?: string): string {
 }
 
 /** The person as the line names them: the owner by name, anyone else only as the scene. */
-const whoseLabel = (ledger: EpisodeLedger) => (ledger.personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この場');
+const whoseLabel = (ledger: EpisodeLedger) => (ledger.personKey === OWNER_PERSON_KEY ? 'ライ' : 'この場');
 
 /**
- * The ledger as one line of facts (D4): 「今日の胸の件（ライ氏）: 触れられた27回、「いや」のあと3回、謝罪0、最後は13:21」. The same
+ * The ledger as one line of facts (D4): 「今日の胸の件（ライ）: 触れられた27回、「いや」のあと3回、謝罪0、最後は13:21」. The same
  * line goes to the reply, the voice and the touch line. '' when nothing happened. `partWord` names a part in her words.
  */
 export function episodeLine(ledger: EpisodeLedger, at: string, partWord: (subject: string) => string, timeZone?: string): string {

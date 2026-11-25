@@ -33,13 +33,13 @@ describe('expression beside the name is her feeling for that reply', () => {
   it('ignores words in the owner message', () => {
     // PE-04: 「考えてみて」 made her 考え中, 「悲しい」 made her かなしい, 「？」 made her 興味津々.
     expect(face('次の設計を少し考えてみて', 'はい、こう進めるのが良いと思います。').expression).toBe('calm');
-    expect(face('今日は悲しい', 'そばにいますよ、ライ氏。').expression).toBe('tender');
+    expect(face('今日は悲しい', 'そばにいますよ、ライ。').expression).toBe('tender');
     expect(face('これ難しい？', '手順は三つです。').expression).toBe('calm');
     expect(face('ありえない、むかつく', '話を聞かせてください。').expression).not.toBe('annoyed');
   });
 
   it('shows the core of her character from her own reply', () => {
-    expect(face('違うよ、間違ってる。なんで？', 'す、すみません、ライ氏！すぐ直します。'))
+    expect(face('違うよ、間違ってる。なんで？', 'す、すみません、ライ！すぐ直します。'))
       .toMatchObject({ expression: 'concerned', feeling: 'apologetic' });
     expect(face('それ違わない？', 'わわっ、ち、違うんです！今のは練習です！'))
       .toMatchObject({ expression: 'embarrassed', feeling: 'flustered' });

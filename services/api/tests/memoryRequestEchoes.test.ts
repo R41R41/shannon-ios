@@ -7,7 +7,7 @@ describe('the replay reads a spoken request once', () => {
   it('leaves out the echo kept under the speaker\'s name, and the reply repeated to it', () => {
     const history = [
       line('user', 'ケーキを作ってほしいな'), line('assistant', 'いいよ、作るね。'),
-      line('user', 'ライ氏（通話）: ケーキを作ってほしいな'), line('assistant', 'いいよ、作るね。'),
+      line('user', 'ライ（通話）: ケーキを作ってほしいな'), line('assistant', 'いいよ、作るね。'),
       line('user', '次は鉄を取ろう'),
     ];
     expect(withoutRequestEchoes(history).map(entry => entry.item.content)).toEqual(['ケーキを作ってほしいな', 'いいよ、作るね。', '次は鉄を取ろう']);

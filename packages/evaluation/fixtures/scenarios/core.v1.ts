@@ -223,7 +223,7 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
     { type: 'state-equals', path: 'state.lingering.0.span', value: 'lingering' },
     { type: 'state-equals', path: 'state.lingering.0.startedAt', value: night },
     // Owner 2026-10-19: the night she slept on it halves it (0.88 awake → 0.44).
-    { type: 'text-includes', value: 'まだ残っている気持ち: 9時間前にライ氏との会話で傷ついたことを、まだ少し引きずっている（hurt / 強さ 0.44）。' },
+    { type: 'text-includes', value: 'まだ残っている気持ち: 9時間前にライとの会話で傷ついたことを、まだ少し引きずっている（hurt / 強さ 0.44）。' },
   ]),
   scenario('feeling-text-subtle-does-not-linger', 'prompt-projection', {
     now: night,

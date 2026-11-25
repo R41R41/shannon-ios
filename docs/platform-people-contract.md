@@ -34,7 +34,7 @@ Owner turn, as sent today (`owner-turn.request.json`):
   "conversationId": "discord:111:222",
   "sourceUserId": "900000000000000001",
   "userMessage": "今日はここまでにするね",
-  "shannonReply": "お疲れさまでした、ライ氏。",
+  "shannonReply": "お疲れさまでした、ライ。",
   "observedAt": "2026-10-02T03:00:00.000Z"
 }
 ```
@@ -106,7 +106,7 @@ Response, unchanged in shape: `{ "schemaVersion": 1, "stateVersion": number, "up
 - In a conversation other people can read, `projection` starts with the speak-time self-check, then `[この会話にいる人についての記憶]` with what Shannon remembers of the participants, then what she may know of the owner. A line that starts with `【機微:…】` is something the people present do not all know yet; the runtime passes it through untouched and must not strip the marker.
 - What was said in a conversation is known to everyone in it, so it arrives unmarked there. In any other conversation with others (another channel, a DM, the owner's turn elsewhere) it is not given at all, unless the owner made it ordinary (ふつう) himself (final review, 2026-10-06; before, it arrived marked). With the owner alone everything is used.
 - A DM with someone else (`conversationKind: "dm"`, `sourceUserId` not the owner) is that person alone: only what they said in that DM and the owner's unprotected content. The same rule holds for what she remembers of people in every conversation with others, here (`contextLines`, also with that friend as a participant) and in the reply route and her Minecraft body's game chat (`heardByEveryoneHere`): a person memory is given only when everyone in that conversation already heard it (`audienceCovers`), or the owner made it ordinary (ふつう) himself. So a friend's DM never reaches anyone else's turn or the owner's own turn in a shared conversation (final review, 2026-10-06; for an owner turn this is narrower than before, on purpose).
-- **A message anyone other than the owner wrote** (owner decision 2026-10-06, S6), in a DM or in a shared conversation, gets only what may be shown to anyone: no line marked `【機微:…】` of the owner's (nor his recent interests), none of his intentions or current goal, no summary of the conversation (it has no label of its own), and no replayed message that was marked, and a header without the sentence that ライ氏 may release a protected line by asking (only he can). The owner's own message in a shared conversation is unchanged: marked lines and that sentence.
+- **A message anyone other than the owner wrote** (owner decision 2026-10-06, S6), in a DM or in a shared conversation, gets only what may be shown to anyone: no line marked `【機微:…】` of the owner's (nor his recent interests), none of his intentions or current goal, no summary of the conversation (it has no label of its own), and no replayed message that was marked, and a header without the sentence that ライ may release a protected line by asking (only he can). The owner's own message in a shared conversation is unchanged: marked lines and that sentence.
 - A conversation bound `owner-private` answers only the owner.
 
 ## Replies: `POST /v1/platform/reply`

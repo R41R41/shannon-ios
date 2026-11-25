@@ -39,8 +39,8 @@ export function authorizeToolCall(tool: ShannonToolDefinition | null, context: T
     return toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'この場面では出していない道具', wouldWork: '使える場面で呼ぶ' } });
   }
   if (!tool.audiences.includes(context.audience)) {
-    return toolFailure('not_offered', `${tool.name} は、ライ氏と二人だけの時にしか使わない。`, {
-      retryable: false, refusal: { why: 'ライ氏以外の人がこの返事を見聞きできる', wouldWork: 'ライ氏と二人だけになった時に使う（中身はこの場では話さない）' },
+    return toolFailure('not_offered', `${tool.name} は、ライと二人だけの時にしか使わない。`, {
+      retryable: false, refusal: { why: 'ライ以外の人がこの返事を見聞きできる', wouldWork: 'ライと二人だけになった時に使う（中身はこの場では話さない）' },
     });
   }
   return null;
@@ -54,8 +54,8 @@ export function aetherReach(context: Pick<ToolCallContext, 'surface' | 'audience
 /** The input of a call, after its schema: with anyone else present, or in her own time, a search names her folder or her study. */
 export function authorizeToolInput(tool: ShannonToolDefinition, input: ToolInput, context: ToolCallContext): ToolResult | null {
   if (tool.name !== 'aether.search' || aetherReach(context) === 'everything' || input.scope === 'shannonFolder' || input.scope === 'study') return null;
-  const why = context.surface === 'autonomy' ? '自分の時間には、ライ氏の文書は探さない' : 'ライ氏以外の人がこの返事を見聞きできるので、ライ氏の文書は探さない';
-  return toolFailure('refused', 'ここでは、シャノン用フォルダの外は探さない。', { retryable: false, refusal: { why, wouldWork: 'scope を shannonFolder か study にして呼び直す（ライ氏の文書は二人だけの会話で）' } });
+  const why = context.surface === 'autonomy' ? '自分の時間には、ライの文書は探さない' : 'ライ以外の人がこの返事を見聞きできるので、ライの文書は探さない';
+  return toolFailure('refused', 'ここでは、シャノン用フォルダの外は探さない。', { retryable: false, refusal: { why, wouldWork: 'scope を shannonFolder か study にして呼び直す（ライの文書は二人だけの会話で）' } });
 }
 
 /**
@@ -121,12 +121,12 @@ export function toolRefusal(decision: Pick<AutonomyDecision, 'reason' | 'explana
   const refused = (why: string, wouldWork: string, retryable = false) =>
     toolFailure('refused', decision.explanation, { retryable, refusal: { why, wouldWork } });
   switch (decision.reason) {
-    case 'paused': return refused('ライ氏が自分の時間の活動を一時停止している', 'ライ氏が再開したあと');
-    case 'disabled': return refused('自分から動く仕組みがサーバーで切られている', 'ライ氏が仕組みを入れたあと');
-    case 'budget_exhausted': return toolFailure('limit', decision.explanation, { retryable: false, refusal: { why: '今日の予算が残っていない', wouldWork: '明日か、ライ氏が予算を足したあと' } });
+    case 'paused': return refused('ライが自分の時間の活動を一時停止している', 'ライが再開したあと');
+    case 'disabled': return refused('自分から動く仕組みがサーバーで切られている', 'ライが仕組みを入れたあと');
+    case 'budget_exhausted': return toolFailure('limit', decision.explanation, { retryable: false, refusal: { why: '今日の予算が残っていない', wouldWork: '明日か、ライが予算を足したあと' } });
     case 'access_limit': return toolFailure('limit', decision.explanation, { retryable: false, refusal: { why: '今日の回数の上限に達した', wouldWork: '明日' } });
-    case 'unknown_host': return toolFailure('unavailable', decision.explanation, { retryable: false, refusal: { why: 'PCやMacのフォルダを受け持つ端末が登録されていない', wouldWork: 'ライ氏がPCやMacを登録したあと' } });
+    case 'unknown_host': return toolFailure('unavailable', decision.explanation, { retryable: false, refusal: { why: 'PCやMacのフォルダを受け持つ端末が登録されていない', wouldWork: 'ライがPCやMacを登録したあと' } });
     case 'malformed_request': return toolFailure('invalid_input', decision.explanation, { retryable: false, refusal: { why: '依頼の形かパスが決まりに合わない', wouldWork: '決まりに合うパスや入力で呼び直す' } });
-    default: return refused('決められた範囲の外', 'ライ氏に提案して承認をもらう');
+    default: return refused('決められた範囲の外', 'ライに提案して承認をもらう');
   }
 }

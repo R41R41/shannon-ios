@@ -139,7 +139,7 @@ export function builderDigests(): Record<string, string> {
     happened: [{ id: 'o1', cycleId: 'c1', ordinal: 1, step: 'read', outcome: 'failed', observedAt: '2026-10-02T04:05:00.000Z' }],
     pending: { followUp: true, look: true, thinkAfterLook: true },
   });
-  const others = { instructions: '[ほかの人がいる場]\n確かめてから話す。', marker: '【機微:未分類・ライ氏だけが知っている】' };
+  const others = { instructions: '[ほかの人がいる場]\n確かめてから話す。', marker: '【機微:未分類・ライだけが知っている】' };
   const prompts = {
     thinking: thinkingPrompt(materials), thinkingBare: thinkingPrompt(bare), thinkingNull: thinkingPrompt(materials, null), thinkingAgain: thinkingPrompt(materials, extras),
     note: notePrompt({ pursuit, reading: { title: '随筆', url: 'https://example.org/essay', text: '夕方の駅では、光が低く差しこむ。' } }),
@@ -151,7 +151,7 @@ export function builderDigests(): Record<string, string> {
     wonder: reachOutPrompt({ reason: 'wonder', localTime: '13時5分' }),
     upcoming: reachOutPrompt({ reason: 'upcoming', localTime: '13時5分', upcoming: materials.upcoming, others }),
     saw: reachOutPrompt({ reason: 'saw', localTime: '13時5分', seen: '机に本が積んである。', others }),
-    followUp: followUpPrompt({ localTime: '13時9分', happened: ['- 3分前（13:05）にライ氏へ話しかけた。'], said: 'ライ氏、いま何をしていますか。', seen: '椅子は空いている。', others }),
+    followUp: followUpPrompt({ localTime: '13時9分', happened: ['- 3分前（13:05）にライへ話しかけた。'], said: 'ライ、いま何をしていますか。', seen: '椅子は空いている。', others }),
   };
   return Object.fromEntries(Object.entries(prompts).map(([name, prompt]) => [name, digest(`${prompt.system}\n---\n${prompt.prompt}`)]));
 }

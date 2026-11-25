@@ -35,7 +35,7 @@ export function ownerSaysCompanionPresent(transcript: string): boolean {
 /** Appended to the owner voice prompt while someone else may be listening. */
 export const companionPresentInstructions = [
   '[Someone else is listening — 同席者あり]',
-  '- ライ氏 said that another person is with him, and the call is still 本人だけ. Everything you say may be heard by that person. You cannot tell voices apart: do not assume that every sentence is ライ氏\'s.',
+  '- ライ said that another person is with him, and the call is still 本人だけ. Everything you say may be heard by that person. You cannot tell voices apart: do not assume that every sentence is ライ\'s.',
   '- Requests that act (tasks, notes, remembering, forgetting, promises, starting work) are not carried out while someone else is listening. Say lightly that you will do it when you two are alone, or suggest switching to 「友人も一緒」 with the control at the bottom of the call screen. You cannot switch by yourself.',
 ].join('\n');
 
@@ -49,7 +49,7 @@ export const speakTimePrivacyCheck = [
   '[Speak-time privacy check — other people can hear this reply]',
   '- Lines marked 【機微:…】 are personal information that someone present does not already know; the marker says what kind it is and who knows it. Never say a marker aloud.',
   '- Before you say anything, check: would it reveal personal information to someone present who does not already know it? If so, do not say it, or speak in general terms.',
-  '- When ライ氏 himself clearly asks for it aloud in front of them, it is his choice: answer.',
+  '- When ライ himself clearly asks for it aloud in front of them, it is his choice: answer.',
   '- Do not announce that you are holding something back. If asked directly, decline lightly in character.',
-  '- You may talk in general terms about what you and ライ氏 are building. Never read out private note contents, credentials, or other people\'s details.',
+  '- You may talk in general terms about what you and ライ are building. Never read out private note contents, credentials, or other people\'s details.',
 ].join('\n');

@@ -45,8 +45,8 @@ function fixture() {
   tools.useTaskRuntime({ available: scope => bridge.taskToolsAvailable(scope), execute: (name, input, context) => bridge.executeTaskTool(name, input, context) });
   const requests: Array<ShannonChatModelRequest | ShannonVoiceModelRequest> = [];
   const generate = async (request: ShannonChatModelRequest | ShannonVoiceModelRequest, delta?: (text: string) => void | Promise<void>) => {
-    requests.push(request); await delta?.('はい、ライ氏。');
-    return { mode: 'local-stub' as const, model: 'fixture', reply: 'はい、ライ氏。' };
+    requests.push(request); await delta?.('はい、ライ。');
+    return { mode: 'local-stub' as const, model: 'fixture', reply: 'はい、ライ。' };
   };
   const model: ShannonChatModel = { mode: 'local-stub', model: 'fixture', generate,
     generateVoice: request => generate(request), generateVoiceStreaming: (request, delta) => generate(request, delta) };
@@ -74,7 +74,7 @@ describe('a turn whose task context closed on its budget', () => {
       scopeKey: 'owner', threadId: f.thread, transcript, participantMode: 'owner',
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, userUtterance: { id: 'utterance-1', text: transcript, source: 'speech', rawText: transcript, historyReceipt: 'utterance-id' } },
     } }));
-    expect(response).toMatchObject({ status: 200, body: { reply: 'はい、ライ氏。' } });
+    expect(response).toMatchObject({ status: 200, body: { reply: 'はい、ライ。' } });
     expect(f.requests).toHaveLength(1);
     expect(f.requests[0]!.tools?.definitions.some(tool => tool.domain === 'task_runtime') ?? false).toBe(false);
     expect(f.selectToolsCalls()).toBeGreaterThan(0); // The selection ran, and returned the offer instead of failing the turn.
@@ -86,7 +86,7 @@ describe('a turn whose task context closed on its budget', () => {
     const f = fixture();
     const response = await f.foreground(() => f.kernel.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: f.thread, message: '書斎のメモを見て、続きを考えて' } }));
     expect(response).toMatchObject({ status: 200 });
-    expect((response.body as { reply: string }).reply).toBe('はい、ライ氏。');
+    expect((response.body as { reply: string }).reply).toBe('はい、ライ。');
     expect(f.requests).toHaveLength(1);
     expect(f.selectToolsCalls()).toBeGreaterThan(0);
     expect(f.selections()).toBe(0);

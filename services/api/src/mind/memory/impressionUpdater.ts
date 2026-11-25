@@ -26,7 +26,7 @@ import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /** What the background model is shown for one person and one turn. */
 export interface ImpressionAnalysisInput {
-  /** 「ライ氏（持ち主）」 or 「ミキさん」. */
+  /** 「ライ（持ち主）」 or 「ミキさん」. */
   person: string;
   localDate: string;
   /** What the person said, and Shannon's replies, in this turn or period. */
@@ -99,8 +99,8 @@ export class ImpressionUpdater {
       ?? this.conversations.experienceCandidates(scopeKey).find(item => item.id === experienceId);
     if (!turn || !this.usableTurn(scopeKey, turn.id)) return 'skipped';
     return this.observe(scopeKey, {
-      lane: 'owner', personKey: OWNER_PERSON_KEY, person: 'ライ氏（持ち主）', sourceId: turn.id, at: turn.observedAt, said: turn.userMessage, audience: OWNER_AUDIENCE,
-      lines: [`ライ氏: ${clip(turn.userMessage, SAID_CHARACTERS)}`, `シャノン: ${clip(turn.shannonReply, REPLY_CHARACTERS)}`],
+      lane: 'owner', personKey: OWNER_PERSON_KEY, person: 'ライ（持ち主）', sourceId: turn.id, at: turn.observedAt, said: turn.userMessage, audience: OWNER_AUDIENCE,
+      lines: [`ライ: ${clip(turn.userMessage, SAID_CHARACTERS)}`, `シャノン: ${clip(turn.shannonReply, REPLY_CHARACTERS)}`],
       // The owner's own impressions are his alone and protected, whatever their wording.
       label: ownerImpressionLabel,
       stillUsable: () => this.usableTurn(scopeKey, turn.id),
@@ -308,7 +308,7 @@ export class ImpressionUpdater {
 function ownerImpressionLabel(pattern: string, feeling: string): MemoryDisclosure {
   const decision = classifySensitivity(`${pattern}\n${feeling}`);
   return { audience: OWNER_AUDIENCE, sensitivity: 'sensitive', ...(decision.category ? { category: decision.category } : {}),
-    reason: 'ライ氏についてのシャノンの印象', decidedBy: 'rule' };
+    reason: 'ライについてのシャノンの印象', decidedBy: 'rule' };
 }
 
 /** The label of an impression of someone met on a platform: the period's audience, a third party's matter. */

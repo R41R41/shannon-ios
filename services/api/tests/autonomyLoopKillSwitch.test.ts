@@ -30,11 +30,11 @@ const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 const AGENTIC_DAY_AT_78C3493 = [
-  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '8a2e2fdfbfcb2498'],
-  ['think', '2b3be94aa6101952'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '19bfd5c40ee0cad0'], ['think', '6dfe837ac4a0a529'],
-  ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', 'b14ee2ccae29aacf'], ['think', 'c573f62e246587cd'], ['revise', '550384af7d8f856d'],
-  ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '765457454c05b3f8'], ['reach_out', 'f675aa9fb5535f58'], ['think', '7fdb457bfea50eed'],
-  ['think', 'f57db961db246070'], ['reach_out', '78bc54ed4d10c8da'], ['think', '86ea8a16f3d80719'], ['think', '69a19c6639403507'],
+  ['think', '17a5d954e98dd9c9'], ['reach_out', '1c87243c6aba54df'], ['think', '34cd616812767d9e'], ['think', '76fae0861a02d652'], ['follow_up', '501aa3319eae503d'],
+  ['think', 'ae17c5c428e9ad1b'], ['note', 'fbd274483bd9b6dd'], ['reach_out', 'e5212a2110d1e7f6'], ['think', 'e4e3c1320177ad54'], ['think', '40ad973f93088af5'],
+  ['note', 'dd3bbddbe4bb5f8c'], ['draft', '5d9e5d7b03038ecb'], ['think', '58dd976e2cbc9c40'], ['think', '91c6adc4108f3e38'], ['revise', 'ef0ad5b36938f63e'],
+  ['reach_out', 'e33b77195e7bd5ce'], ['think', '1b27f6739a09a432'], ['think', '25226497b6d91a68'], ['reach_out', '30d2839c31fbb911'], ['think', 'a90a042a0c462fc5'],
+  ['think', '21e998fe1954817a'], ['reach_out', '5f0b07475b384b65'], ['think', '710fe8b20a041e10'], ['think', '0fd0a6c1ff41ea3b'],
 ];
 /**
  * The same scenario on 78c3493 with four strings changed and nothing else (owner decisions 2026-10-02): the default of the
@@ -44,15 +44,15 @@ const AGENTIC_DAY_AT_78C3493 = [
  * the forbidden item are not part of any prompt of the loop.
  */
 const AGENTIC_DAY_AT_78C3493_WITH_2000_YEN = [
-  ['think', '0816a524af4da9aa'], ['reach_out', '0ee3d0600b349738'], ['think', 'e67e41543c170db5'], ['think', '13131a69ad57996f'], ['follow_up', '8a2e2fdfbfcb2498'],
-  ['think', 'c649dcaa8616c3ff'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '4533092569973f86'], ['think', '6c4d45e8156c21e6'],
-  ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', '6216c1acbc13f9f6'], ['think', '16392261e20ce824'], ['revise', '550384af7d8f856d'],
-  ['reach_out', 'dc7ea65dbc2f2977'], ['think', 'e24c687f096fe8cb'], ['think', 'be27eb2d8bdcea40'], ['reach_out', 'f675aa9fb5535f58'], ['think', 'f966e2d0e0d1717a'],
-  ['think', '90dd6ffdefcb7232'], ['reach_out', '78bc54ed4d10c8da'], ['think', '582fd809da318164'], ['think', '88e1ac8b511fcfd1'],
+  ['think', 'b031021e0f83bf01'], ['reach_out', '1c87243c6aba54df'], ['think', '491449f7e383c575'], ['think', 'db869ff7e16d703f'], ['follow_up', '501aa3319eae503d'],
+  ['think', '71f8a05a43e5fc20'], ['note', 'fbd274483bd9b6dd'], ['reach_out', 'e5212a2110d1e7f6'], ['think', 'ce9b6bb6c98cbe27'], ['think', '5e51f1a937262f58'],
+  ['note', 'dd3bbddbe4bb5f8c'], ['draft', '5d9e5d7b03038ecb'], ['think', '895a723df5252cf3'], ['think', 'f35e27407ad6a3cc'], ['revise', 'ef0ad5b36938f63e'],
+  ['reach_out', 'e33b77195e7bd5ce'], ['think', 'c847fe393e4c0f01'], ['think', '36239397a68c504e'], ['reach_out', '30d2839c31fbb911'], ['think', '6b54ac122bc93588'],
+  ['think', '9fab8602809e7615'], ['reach_out', '5f0b07475b384b65'], ['think', 'c8e6f7e58609aed8'], ['think', '0b952656a8473fb8'],
 ];
 const PLAIN_DAY_AT_78C3493_WITH_2000_YEN = [
-  ['think', 'f6d2e644587c294d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '820127755247f5a8'],
-  ['reach_out', '2ca5da4023801847'],
+  ['think', '929596a12e051c55'], ['note', 'fbd274483bd9b6dd'], ['draft', 'cc98c2a15b228cc0'], ['reach_out', '36796dee3fbc987d'], ['think', '8c4be40c9c13fc1e'],
+  ['reach_out', 'af9416d65c0b4078'],
 ];
 /**
  * On 78c3493 a day held three messages of hers by default, and its thinking prompt said how many were left. Since the owner's
@@ -64,13 +64,13 @@ const CAP_OF_78C3493 = { environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '1000
 /** The plain day ran with the default count; the agentic day sets its own (six). */
 const PLAIN_OF_78C3493 = { environment: { ...CAP_OF_78C3493.environment, ...COUNT_OF_78C3493 } };
 const PLAIN_DAY_AT_78C3493 = [
-  ['think', '60cf87edbe87f21d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '95c8b348a7144662'],
-  ['reach_out', '2ca5da4023801847'],
+  ['think', 'cc341b47df47322f'], ['note', 'fbd274483bd9b6dd'], ['draft', 'cc98c2a15b228cc0'], ['reach_out', '36796dee3fbc987d'], ['think', '733f559f35419cb3'],
+  ['reach_out', 'af9416d65c0b4078'],
 ];
 const BUILDERS_AT_78C3493 = {
-  thinking: 'b2ca037238a693b6', thinkingBare: '9dc6b337f74dace9', thinkingNull: 'b2ca037238a693b6', thinkingAgain: '50799eeab2250749', note: 'b85e222e8406f5f2',
-  draft: '92f52353f37aa157', draftBare: '91fe7ec8b8db78a2', revise: '7763f685ff1f0d26', look: '89979d30f67610b2', share: '6c457fd449ab31f6', wonder: '2c5172666ac8442e',
-  upcoming: '927e3a29ab3fc461', saw: '35587157e98838f5', followUp: '980721aceb3adfed',
+  thinking: '8f8c01eef27d7df8', thinkingBare: 'b6340a8bee3fe8d3', thinkingNull: '8f8c01eef27d7df8', thinkingAgain: 'cfa2c4b517848ec8', note: '1701d7da4ea22d25',
+  draft: '1138d28c470bd771', draftBare: '41e5b62e8bdaa0a1', revise: '9b9f3fd19a7e9945', look: '22ea775c0f90d551', share: 'd942316e52747983', wonder: 'e67a0cd2f4e3ce70',
+  upcoming: '2283e7e17a459b43', saw: '13e040d0394fb224', followUp: 'ce4464b89ecc5d89',
 };
 
 /**
@@ -81,11 +81,11 @@ const BUILDERS_AT_78C3493 = {
  * differs only in the prompts after cycle 3 that gave that note or story.
  */
 const AGENTIC_DAY_WITH_THE_NOTION_MARK = [
-  ['think', '1ac1d5d9cdd5e9d7'], ['reach_out', '0ee3d0600b349738'], ['think', 'cf9ff59a90d2de12'], ['think', 'd0a2e4417e1c13f2'], ['follow_up', '8a2e2fdfbfcb2498'],
-  ['think', '2b3be94aa6101952'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '19bfd5c40ee0cad0'], ['think', '6dfe837ac4a0a529'],
-  ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', 'f3fc1a6f560856c6'], ['think', 'f3fc1a6f560856c6'], ['revise', '842015897394f7d8'],
-  ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '7177e9609a8a1ac2'], ['reach_out', 'f675aa9fb5535f58'], ['think', '51262c09dc3eb5af'],
-  ['think', '2cdc354eb105e6a8'], ['reach_out', '78bc54ed4d10c8da'], ['think', '42102454cfd9173d'], ['think', '8efe23ab4202ff51'],
+  ['think', '17a5d954e98dd9c9'], ['reach_out', '1c87243c6aba54df'], ['think', '34cd616812767d9e'], ['think', '76fae0861a02d652'], ['follow_up', '501aa3319eae503d'],
+  ['think', 'ae17c5c428e9ad1b'], ['note', 'fbd274483bd9b6dd'], ['reach_out', 'e5212a2110d1e7f6'], ['think', 'e4e3c1320177ad54'], ['think', '40ad973f93088af5'],
+  ['note', 'dd3bbddbe4bb5f8c'], ['draft', '5d9e5d7b03038ecb'], ['think', '82ffdf88b4fd2437'], ['think', '82ffdf88b4fd2437'], ['revise', '558880b46e87162d'],
+  ['reach_out', 'e33b77195e7bd5ce'], ['think', '1b27f6739a09a432'], ['think', '30fab16738fc9927'], ['reach_out', '30d2839c31fbb911'], ['think', '0b2618bee02693ff'],
+  ['think', 'dc4bd707f3dd5ace'], ['reach_out', '5f0b07475b384b65'], ['think', '6a1c9a369c1f856b'], ['think', '82fa61b056abec58'],
 ];
 
 describe('with the Notion mark of the day, the prompts after it leave out what it marked, and nothing else changes', () => {
@@ -126,9 +126,9 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
 
   it('sends the same prompts when the owner\'s context is wired but switched off, and other prompts when it is on', async () => {
     const wired: AutonomyOwnerContext = {
-      forThinking: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
-      forMessage: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
-      forWriting: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
+      forThinking: () => ({ section: '[ライのこと・最近のふたりのこと]\n- 例', secrets: [] }),
+      forMessage: () => ({ section: '[ライのこと・最近のふたりのこと]\n- 例', secrets: [] }),
+      forWriting: () => ({ section: '[ライのこと・最近のふたりのこと]\n- 例', secrets: [] }),
     };
     const off = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-off-'));
     const on = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-on-'));
@@ -191,7 +191,7 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     const none = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-facts-none-'));
     const some = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-facts-'));
     const offered: string[][] = [];
-    const block = '[これまでの手応え]（サーバーが数えた事実）\n- 公開ページを読む（昼・ひとり）: +0.30 ±0.20（4回。世界0.10／ライ氏0.00／成長0.80／費用0円）';
+    const block = '[これまでの手応え]（サーバーが数えた事実）\n- 公開ページを読む（昼・ひとり）: +0.30 ±0.20（4回。世界0.10／ライ0.00／成長0.80／費用0円）';
     try {
       expect((await agenticDay(none, { ...CAP_OF_78C3493, valueFacts: (_scopeKey, list) => { offered.push([...list]); return null; } })).map(call => [call.kind, call.digest]))
         .toEqual(AGENTIC_DAY_AT_78C3493);
@@ -229,9 +229,9 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
   });
 
   it('places the withheld facts last in a thought, after her value facts', async () => {
-    const { loop, model } = loopHarness({ valueFacts: () => '[これまでの手応え]（サーバーが数えた事実）', withheldFacts: () => '[止められたこと]\n- 止められた：〈thinking〉〈ライ氏が一時停止している〉' });
+    const { loop, model } = loopHarness({ valueFacts: () => '[これまでの手応え]（サーバーが数えた事実）', withheldFacts: () => '[止められたこと]\n- 止められた：〈thinking〉〈ライが一時停止している〉' });
     await runUntilIdle(loop);
-    expect(model.prompts('think')[0]!.endsWith('[これまでの手応え]（サーバーが数えた事実）\n\n[止められたこと]\n- 止められた：〈thinking〉〈ライ氏が一時停止している〉')).toBe(true);
+    expect(model.prompts('think')[0]!.endsWith('[これまでの手応え]（サーバーが数えた事実）\n\n[止められたこと]\n- 止められた：〈thinking〉〈ライが一時停止している〉')).toBe(true);
   });
 
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {
@@ -255,15 +255,15 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
   it('adds the output rule of owner-private material only where such material is, and nothing where it is not', () => {
     const bare = { localTime: 'x', remainingYen: 0, remainingReads: 0, maximumSteps: 1, pursuits: [], stories: [], notes: [], unnotedReadings: [], feedback: [], places: [], notionAvailable: false };
     for (const kind of ['thinking', 'story', 'note', 'message'] as const) expect(ownerPrivateRule(kind, false)).toBeNull();
-    const block = '[ライ氏のこと・最近のふたりのこと]\n- 例';
+    const block = '[ライのこと・最近のふたりのこと]\n- 例';
     const extras = { actions: '', examples: '', rules: [], sections: [], ownerContext: block };
     // Thinking: the block, the line that names it among her materials, and its output rule.
     const thinking = thinkingPrompt(bare, extras);
     expect(thinking.system).toContain(ownerPrivateRule('thinking', true)!);
-    expect(thinking.system).toContain('そして「ライ氏のこと・最近のふたりのこと」。そこにないことを、思い出したふりをして書かない。');
+    expect(thinking.system).toContain('そして「ライのこと・最近のふたりのこと」。そこにないことを、思い出したふりをして書かない。');
     expect(thinking.system).not.toContain('ここには渡されていない');
     expect(thinking.prompt).toContain(block);
-    expect(thinkingPrompt(bare).system).not.toContain('ライ氏のこと・最近のふたりのこと');
+    expect(thinkingPrompt(bare).system).not.toContain('ライのこと・最近のふたりのこと');
     expect(thinkingPrompt(bare).system).toContain('ここには渡されていない');
     // A story: the block when there is one, and the rule that she may write about him whenever the owner's context is switched on.
     const seen = [{ title: '見たこと（10月2日 10時）', excerpt: '机に本が積んである。', seen: true as const }];
@@ -275,7 +275,7 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
       expect(prompt.system).not.toMatch(/実在の個人の事情|実在の個人をモデルにしない|見たままを物語に書かない|持ち主やその部屋だと分かる描写を入れない/u);
       expect(prompt.system).toContain('見たとおりに物語に書いてよい。写っていたほかの人のことと、画面や書類の文字は書かない。');
     }
-    expect(draftPrompt({ idea: '傘', pursuit: null, notes: [], ownerInformed: true }).prompt).not.toContain('ライ氏のこと・最近のふたりのこと');
+    expect(draftPrompt({ idea: '傘', pursuit: null, notes: [], ownerInformed: true }).prompt).not.toContain('ライのこと・最近のふたりのこと');
     // With the switch off the story rules are the old ones, the look rule included, and a block handed in by mistake is not used.
     const old = draftPrompt({ idea: '傘', pursuit: null, notes: seen, ownerContext: block });
     expect(old.system).toContain('実在の個人をモデルにしない。');
@@ -289,6 +289,6 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     expect(message.system).toContain(ownerPrivateRule('message', true)!);
     expect(message.system).not.toContain('会話は渡されていない');
     expect(message.prompt.endsWith(block)).toBe(true);
-    expect(reachOutPrompt({ reason: 'wonder', localTime: 'x' }).system).toContain('ライ氏との会話は渡されていないので、思い出したふりをしない。');
+    expect(reachOutPrompt({ reason: 'wonder', localTime: 'x' }).system).toContain('ライとの会話は渡されていないので、思い出したふりをしない。');
   });
 });

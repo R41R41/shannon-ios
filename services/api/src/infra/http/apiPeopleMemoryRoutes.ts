@@ -79,7 +79,7 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
       audience: placeLabel(callOf(item.callId)) ?? describeAudience(item.disclosure.audience, nameOf),
       sensitivity: sensitivity ?? 'sensitive',
       decidedBy: decidedBy ?? 'default',
-      reason: decidedBy === 'owner' ? 'ライ氏が選んだ扱い' : category ? `${SENSITIVITY_CATEGORY_LABELS[category]}（${reason ?? ''}）` : reason ?? '',
+      reason: decidedBy === 'owner' ? 'ライが選んだ扱い' : category ? `${SENSITIVITY_CATEGORY_LABELS[category]}（${reason ?? ''}）` : reason ?? '',
       status: (memoryControlFor(snapshot, personMemoryId(item.id))?.status ?? 'active') === 'active' ? 'active' : 'forgotten',
       ...(closed?.has(item.id) ? { closed: true as const } : {}),
     };
@@ -171,8 +171,8 @@ export function dispatchPeopleMemoryRequest(request: ApiRequest, dependencies: P
 }
 
 const SUMMARY_INSTRUCTIONS = [
-  'You write Shannon\'s own short memory of a voice call in which ライ氏 introduced her to a friend (「友人も一緒」). The friend agreed that Shannon remembers their name and what was talked about.',
-  'The input is that call only. Lines marked 話し手 were spoken by ライ氏 or the friend; speakers were not identified. Lines marked シャノン are Shannon\'s replies.',
+  'You write Shannon\'s own short memory of a voice call in which ライ introduced her to a friend (「友人も一緒」). The friend agreed that Shannon remembers their name and what was talked about.',
+  'The input is that call only. Lines marked 話し手 were spoken by ライ or the friend; speakers were not identified. Lines marked シャノン are Shannon\'s replies.',
   'Write plain Japanese text with exactly these three lines and nothing else:',
   '相手: the names given below with さん; if none, 「名前を聞いていない方」',
   '話したこと: one or two sentences describing faithfully what was talked about, in your own words',

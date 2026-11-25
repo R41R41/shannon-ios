@@ -227,7 +227,7 @@ describe('a touch that arrives only as an event', () => {
     expect(messages()).toEqual([]);
     // Two touches moved her; the other events did not.
     expect(state().version).toBe(2);
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'happy', cause: 'ライ氏に頭をなでてもらった（続けて2回目）' });
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'happy', cause: 'ライに頭をなでてもらった（続けて2回目）' });
     expect(reactionStore.recentBursts(scope, START, now(), 10)).toMatchObject([{ type: 'pet', count: 2, totalDurationMs: 3_000, others: false }]);
   });
 
@@ -266,9 +266,9 @@ describe('remembering a touch', () => {
     expect(touchWhen(START)).toBe('10月2日の午後');
     expect(touchWhen('2026-10-01T23:30:00.000Z')).toBe('10月2日の朝');
     expect(touchWhen('2026-10-02T15:30:00.000Z')).toBe('10月3日の深夜');
-    expect(touchExperienceSummary(burst)).toBe('体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった。ボクは何も言わなかった。');
+    expect(touchExperienceSummary(burst)).toBe('体の記憶: 10月2日の午後、ライに頭をなでてもらった。ボクは何も言わなかった。');
     expect(touchExperienceSummary({ ...burst, count: 7, totalDurationMs: 21_400, said: [HEHE, 'また？'] }))
-      .toBe(`体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（たくさん、7回、合わせて21秒ほど）。ボクは「${HEHE}」「また？」と言った。`);
+      .toBe(`体の記憶: 10月2日の午後、ライに頭をなでてもらった（たくさん、7回、合わせて21秒ほど）。ボクは「${HEHE}」「また？」と言った。`);
     expect(touchExperienceSummary({ ...burst, type: 'poke', count: 2, others: true }))
       .toBe('体の記憶: 10月2日の午後、つつかれた（2回）。ほかの人も見ている時だった。ボクは何も言わなかった。');
     // Where a turn has the owner's words, a touch has one token that no reply contains.
@@ -283,7 +283,7 @@ describe('remembering a touch', () => {
     const id = touchMemories()[0]!.id;
     expect(touchMemories()[0]).toMatchObject({
       userMessage: touchEvidence(id), shannonReply: HEHE, observedAt: START,
-      summary: `体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（合わせて2秒ほど）。ボクは「${HEHE}」と言った。`,
+      summary: `体の記憶: 10月2日の午後、ライに頭をなでてもらった（合わせて2秒ほど）。ボクは「${HEHE}」と言った。`,
       disclosure: { audience: { kind: 'owner' }, sensitivity: 'ordinary', speaker: 'unknown' },
     });
     speaker.decision = { say: false, text: '', feeling: 'content' };
@@ -293,7 +293,7 @@ describe('remembering a touch', () => {
     }
     // Six pats, one memory, the same experience id.
     expect(touchMemories().map(item => item.id)).toEqual([id]);
-    expect(touchMemories()[0]!.summary).toBe(`体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（たくさん、6回、合わせて12秒ほど）。ボクは「${HEHE}」と言った。`);
+    expect(touchMemories()[0]!.summary).toBe(`体の記憶: 10月2日の午後、ライに頭をなでてもらった（たくさん、6回、合わせて12秒ほど）。ボクは「${HEHE}」と言った。`);
     // Another kind is another memory.
     await said({ type: 'poke', durationMs: 90, ongoing: false });
     expect(touchMemories().map(item => item.summary.slice(0, 40))).toEqual([
@@ -342,7 +342,7 @@ describe('remembering a touch', () => {
     expect(memory.summary).toContain('2回');
     advance(MINUTE);
     store.apply(scope, { type: 'memory-control-upserted', control: {
-      memoryId: memory.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: clock.at, changeReason: 'ライ氏が忘れてと言った',
+      memoryId: memory.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: clock.at, changeReason: 'ライが忘れてと言った',
     } });
     expect(promptOf((await chat('さっき頭をなでたの覚えてる？')))).not.toContain('体の記憶');
     // The next touch does not continue the forgotten memory and is not told about it.
@@ -372,7 +372,7 @@ describe('remembering a touch', () => {
     const turn = await chat('金沢の旅行、覚えてる？');
     expect(turn.threadId).toBe(earlier.threadId);
     // The earlier turn is still in the replayed history and still recalled; the touch is gone.
-    expect(chatModel.requests.at(-1)!.history.map(item => item.content)).toEqual(['来月、金沢へ旅行に行くんだ', 'はい、ライ氏。']);
+    expect(chatModel.requests.at(-1)!.history.map(item => item.content)).toEqual(['来月、金沢へ旅行に行くんだ', 'はい、ライ。']);
     expect(promptOf(turn)).toContain('金沢へ旅行');
     expect(promptOf(turn)).not.toContain('体の記憶');
     expect(promptOf((await chat('頭をなでたの覚えてる？')))).not.toContain('体の記憶');

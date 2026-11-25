@@ -20,15 +20,15 @@ describe('the relationship ledger', () => {
   it('starts where the owner starts, and nothing is off', () => {
     const state = foldRelationship([], 'owner', '2026-10-14');
     expect(state.scales).toEqual(RELATIONSHIP_PARAMETERS.start.owner);
-    expect(relationshipLine(state, 'ライ氏')).toBe('');
+    expect(relationshipLine(state, 'ライ')).toBe('');
   });
 
   it('remembers the day before the next morning: trust lower, irritation left (scene 3)', () => {
     const state = foldRelationship([badDay('2026-10-13')], 'owner', '2026-10-14');
     expect(state.scales.trust).toBeLessThan(RELATIONSHIP_PARAMETERS.start.owner.trust);
     expect(state.scales.irritation).toBeGreaterThan(0.2);
-    expect(relationshipLine(state, 'ライ氏')).toMatch(/いらだち: (?:少し)?残っている|強く残っている/u);
-    expect(relationshipLine(state, 'ライ氏')).not.toMatch(/\d/u);
+    expect(relationshipLine(state, 'ライ')).toMatch(/いらだち: (?:少し)?残っている|強く残っている/u);
+    expect(relationshipLine(state, 'ライ')).not.toMatch(/\d/u);
   });
 
   it('moves once a day: today\'s events wait for the night', () => {

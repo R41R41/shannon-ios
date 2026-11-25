@@ -32,7 +32,7 @@ afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 const MINUTE = 60_000;
 const START = '2026-10-02T01:00:00.000Z'; // 10:00 in Tokyo
-const WONDER = { thought: 'ライ氏はいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
+const WONDER = { thought: 'ライはいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
 const FOLLOW_UP = { thought: '返事がありません。もう一度だけ声をかけます。', steps: [{ action: 'follow_up' }] };
 const LOOK = { thought: 'いるのかどうか、見てみます。', steps: [{ action: 'look' }] };
 const REST = { thought: 'そのままにします。', steps: [{ action: 'rest' }] };
@@ -113,7 +113,7 @@ describe('after a message of hers: observe, then think again', () => {
   it('waits three minutes, tells her the facts, and lets her call once more in her own words', async () => {
     const w = world();
     w.bodyReports('shown_spoken');
-    w.model.replies.follow_up = { message: 'あれ、ライ氏、返事がないですね。席を外していますか。' };
+    w.model.replies.follow_up = { message: 'あれ、ライ、返事がないですね。席を外していますか。' };
     const ticks = await w.cycle([WONDER, FOLLOW_UP]);
     expect(ticks.at(-1)).toBe('cycle-ended');
     // Think, speak, think again with what happened, call once more: four steps, four model calls.
@@ -126,12 +126,12 @@ describe('after a message of hers: observe, then think again', () => {
     const second = w.model.prompts('think')[1]!;
     for (const expected of [
       '[さっき起きたこと]（この時間にボクがしたことと、その結果。事実だけ）',
-      '- 3分前（10:02）にライ氏へ話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが、返事はまだない。',
+      '- 3分前（10:02）にライへ話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが、返事はまだない。',
       '- 体からの知らせ: 画面に出して、声でも読み上げた。',
       '- 体のまわり: ボクのウィンドウは表示されている。',
       '[このあとにするつもりだったこと]\n（なし）',
-      'follow_up（さっきの話しかけに返事がないので、ライ氏にもう一度だけ声をかける。何を言うかは、その時にボクの言葉で決める。一度きり）、',
-      'jot（いま思ったことや気づいたことを、書斎に短いメモとして書く。text に1〜3文、200字以内。ライ氏に送るものではない）、',
+      'follow_up（さっきの話しかけに返事がないので、ライにもう一度だけ声をかける。何を言うかは、その時にボクの言葉で決める。一度きり）、',
+      'jot（いま思ったことや気づいたことを、書斎に短いメモとして書く。text に1〜3文、200字以内。ライに送るものではない）、',
       '{"action":"follow_up"},{"action":"jot","text":"…"},{"action":"rest"}]}',
       '- 「さっき起きたこと」は、この時間にボクがした一歩の結果。それを見て、このあと何をするかを決め直す。',
       '- 返事がないことは、悪いことではない。席を外している、手が離せない、気づいていない、どれもありうる。どうするかはボクが決める。follow_up でもう一度だけ声をかけても、jot で思ったことを書き留めても、何もせずそのままにしてもよい。責めたり、返事を急がせたりしない。',
@@ -145,15 +145,15 @@ describe('after a message of hers: observe, then think again', () => {
     // The second call is worded by the model from the same facts, not a fixed line, and it knows nothing she or he said.
     const prompt = w.model.prompts('follow_up')[0]!;
     expect(prompt).toContain('[返事がないので、もう一度だけ声をかける]');
-    expect(prompt).toContain('- 3分前（10:02）にライ氏へ話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが、返事はまだない。');
+    expect(prompt).toContain('- 3分前（10:02）にライへ話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが、返事はまだない。');
     expect(prompt).toContain('- 体からの知らせ: 画面に出して、声でも読み上げた。');
     expect(prompt).toContain('決まった言い回しではなく、いまのボクの言葉で。');
     // Her own first message is in front of her, in her words (ADR-0003); nothing the owner said is.
-    expect(prompt).toContain('[さっきボクが言ったこと]\n- 「ライ氏、いま何をしていますか。ボクは少し気になりました。」');
+    expect(prompt).toContain('[さっきボクが言ったこと]\n- 「ライ、いま何をしていますか。ボクは少し気になりました。」');
     expect(prompt).not.toContain('さっき自分が何と言ったか');
     expect(w.speaker.text(scope, 'no-such-message')).toBeNull();
     // Owner 2026-10-19: what tallies his silence (「返事がないですね」) is left out of what she sends (`ownWordsTally.ts`).
-    expect(w.messages().map(message => message.content)).toEqual(['ライ氏、いま何をしていますか。ボクは少し気になりました。', '席を外していますか。']);
+    expect(w.messages().map(message => message.content)).toEqual(['ライ、いま何をしていますか。ボクは少し気になりました。', '席を外していますか。']);
     expect(JSON.parse(w.messages()[1]!.metadata_json)).toMatchObject({ reachOut: { reason: 'follow_up' } });
     // It reaches the body and the phone the way the first one did.
     const unread = w.initiatives.unreadMessages(scope);
@@ -168,7 +168,7 @@ describe('after a message of hers: observe, then think again', () => {
       ['study.think', 'done', null], ['owner.reach_out', 'done', 'no_reply'], ['study.think', 'done', null], ['owner.reach_out_follow_up', 'done', null],
     ]);
     expect(w.actions().map(entry => entry.summary)).toEqual([
-      '次に何をするか考えました。「ライ氏はいま何をしているのでしょう。」',
+      '次に何をするか考えました。「ライはいま何をしているのでしょう。」',
       '持ち主に話しかけました（理由: いま何をしているか気になった）。3分待ちましたが、返事はまだありません。',
       'さっき起きたことを見て、考え直しました。「返事がありません。もう一度だけ声をかけます。」',
       '返事がなかったので、持ち主にもう一度だけ声をかけました。',
@@ -210,7 +210,7 @@ describe('after a message of hers: observe, then think again', () => {
   it('says so when the body reports that he is away, hidden, switched off, or reports nothing', async () => {
     const lines: Record<string, string> = {
       shown: '- 体からの知らせ: 画面に出した。声は出していない。',
-      away: '- 体からの知らせ: ライ氏がPCの前にいないようなので、出していない。',
+      away: '- 体からの知らせ: ライがPCの前にいないようなので、出していない。',
       hidden: '- 体からの知らせ: ボクのウィンドウが隠れていたので、出していない。',
       muted: '- 体からの知らせ: 体の「話しかける」が切ってあったので、出していない。',
     };
@@ -221,7 +221,7 @@ describe('after a message of hers: observe, then think again', () => {
       await w.cycle([WONDER, REST]);
       const second = w.model.prompts('think')[1]!;
       expect(second, outcome).toContain(line);
-      if (outcome === 'away') expect(second).toContain('- 体のまわり: ボクのウィンドウは表示されている。体の最後の知らせでは、ライ氏は席を離れている。');
+      if (outcome === 'away') expect(second).toContain('- 体のまわり: ボクのウィンドウは表示されている。体の最後の知らせでは、ライは席を離れている。');
       expect(w.observations().find(item => item.reachOut)!.reachOut).toMatchObject({ delivery: outcome, replied: false, waitedSeconds: 180 });
       // She let it go: nothing more was sent.
       expect(w.messages()).toHaveLength(1);
@@ -230,7 +230,7 @@ describe('after a message of hers: observe, then think again', () => {
     const silent = world();
     await silent.cycle([WONDER, REST]);
     const second = silent.model.prompts('think')[1]!;
-    expect(second).toContain('- 体からの知らせ: なかった。体が動いていないか、つながっていないか、ボクのウィンドウを出していないのかもしれない。ライ氏が見たかどうかは分からない。');
+    expect(second).toContain('- 体からの知らせ: なかった。体が動いていないか、つながっていないか、ボクのウィンドウを出していないのかもしれない。ライが見たかどうかは分からない。');
     expect(second).not.toContain('iPhone');
     expect(second).toContain('- 体のまわり: ボクのウィンドウが表示されているかは分からない。');
     expect(silent.observations().find(item => item.reachOut)!.reachOut).toMatchObject({ delivery: 'unknown', windowVisible: false, owner: 'unknown', others: false });
@@ -278,7 +278,7 @@ describe('after a message of hers: observe, then think again', () => {
   it('lets her look to find out, think once more with what she saw, and then call or let it go: six steps at most', async () => {
     const w = world({ looking: true });
     w.bodyReports('shown_spoken');
-    w.model.replies.follow_up = { message: 'ライ氏、席にいないみたいですね。戻ったら声をかけてください。' };
+    w.model.replies.follow_up = { message: 'ライ、席にいないみたいですね。戻ったら声をかけてください。' };
     await w.cycle([WONDER, LOOK, FOLLOW_UP]);
     expect(w.model.kinds()).toEqual(['think', 'reach_out', 'think', 'think', 'follow_up']);
     expect(w.actions().map(entry => entry.tool)).toEqual(['study.think', 'owner.reach_out', 'study.think', 'study.look', 'study.think', 'owner.reach_out_follow_up']);
@@ -296,7 +296,7 @@ describe('after a message of hers: observe, then think again', () => {
     const prompt = w.model.prompts('follow_up')[0]!;
     expect(prompt).toContain(`[さっき体のカメラで見たこと]\n- ${SEEN}`);
     for (const rule of SHANNON_ROOM_LOOK_RULES) expect(prompt, rule).toContain(rule);
-    expect(w.push.pending().map(item => item.content)).toEqual(['ライ氏、いま何をしていますか。ボクは少し気になりました。', 'ライ氏、部屋のことでひとことあります。']);
+    expect(w.push.pending().map(item => item.content)).toEqual(['ライ、いま何をしていますか。ボクは少し気になりました。', 'ライ、部屋のことでひとことあります。']);
     expect(reachOutOfSource(w.raw<{ source_item_id: string }>('SELECT source_item_id FROM initiative_messages ORDER BY rowid DESC LIMIT 1')[0]!.source_item_id)).toEqual({ kind: 'reach_out', reason: 'follow_up' });
     // Six steps: the step budget of a cycle is what bounds the chain.
     expect(w.raw<{ steps_taken: number; end_reason: string }>('SELECT steps_taken, end_reason FROM autonomy_loop_cycles')).toEqual([{ steps_taken: 6, end_reason: 'step-limit' }]);
@@ -482,7 +482,7 @@ describe('the gate, the switches and the budget', () => {
     await runUntilIdle(w.loop);
     // Resumed: she thinks again with the time that has passed, and may still call once.
     expect(w.model.kinds()).toEqual(['think', 'reach_out', 'think', 'follow_up']);
-    expect(w.model.prompts('think')[1]).toContain('- 10分前（10:02）にライ氏へ話しかけた');
+    expect(w.model.prompts('think')[1]).toContain('- 10分前（10:02）にライへ話しかけた');
 
     // Paused after she decided to call again: the call is not made.
     const held = world();
@@ -623,7 +623,7 @@ describe('the gate, the switches and the budget', () => {
     const w = world({ loop: { reachOutWaitMilliseconds: 0 } });
     await w.cycle([WONDER, REST]);
     expect(w.waits).toEqual([]);
-    expect(w.model.prompts('think')[1]).toContain('にライ氏へ話しかけた（きっかけ: いま何をしているか気になった）。返事はまだない。');
+    expect(w.model.prompts('think')[1]).toContain('にライへ話しかけた（きっかけ: いま何をしているか気になった）。返事はまだない。');
   });
 });
 
@@ -741,8 +741,8 @@ describe('what she later knows', () => {
     w.showing.ownerActiveSince = (_scopeKey, since) => since <= w.showing.repliedAt! && Date.parse(w.clock.at) - Date.parse(since) > 30 * MINUTE;
     await w.cycle([REST], 61);
     const next = w.model.prompts('think')[0]!;
-    expect(next).toContain(`[今日、話しかけたあとのこと]（ボクが話しかけた時の結果の記録。事実だけ）\n- ${line}そのあと、ライ氏は書くか話すかしている。`);
-    expect(next).toContain('- 「今日、話しかけたあとのこと」は、ボクがライ氏に話しかけた時の結果。次に話しかけるかどうかを考える材料にしてよい。メモや物語には書かない。');
+    expect(next).toContain(`[今日、話しかけたあとのこと]（ボクが話しかけた時の結果の記録。事実だけ）\n- ${line}そのあと、ライは書くか話すかしている。`);
+    expect(next).toContain('- 「今日、話しかけたあとのこと」は、ボクがライに話しかけた時の結果。次に話しかけるかどうかを考える材料にしてよい。メモや物語には書かない。');
     expect(next).not.toContain('さっき起きたこと');
     // Tomorrow it is no longer today's.
     w.clock.at = '2026-10-03T01:00:00.000Z';
@@ -767,7 +767,7 @@ describe('what she later knows', () => {
     expect(service.pursuitPrompt(scope)).not.toContain('書くか話すかしている');
     // He wrote twenty minutes ago, after her wait had ended.
     first = new Date(Date.parse(w.clock.at) - 20 * MINUTE).toISOString();
-    expect(service.pursuitPrompt(scope)).toContain(`${line}そのあと、ライ氏は書くか話すかしている。`);
+    expect(service.pursuitPrompt(scope)).toContain(`${line}そのあと、ライは書くか話すかしている。`);
   });
 
   it('remembers an answer as an answer', async () => {

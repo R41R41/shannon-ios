@@ -28,7 +28,7 @@ describe('chat sentence splitter', () => {
   });
 
   it('does not cut inside 「」『』（） and takes a closing mark that follows a terminator', () => {
-    expect(split('ライ氏は「行くよ。待ってて！」と言いました。次です。')).toEqual(['ライ氏は「行くよ。待ってて！」と言いました。', '次です。']);
+    expect(split('ライは「行くよ。待ってて！」と言いました。次です。')).toEqual(['ライは「行くよ。待ってて！」と言いました。', '次です。']);
     expect(split('『銀河鉄道の夜。』を読みました（途中まで。まだ半分！）。面白いです。'))
       .toEqual(['『銀河鉄道の夜。』を読みました（途中まで。まだ半分！）。', '面白いです。']);
     expect(split('そうです。」次の文。')).toEqual(['そうです。」', '次の文。']);

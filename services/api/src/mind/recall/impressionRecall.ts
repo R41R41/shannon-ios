@@ -18,7 +18,7 @@ export const IMPRESSION_HEADER = '[人についての印象 — ボクがやり�
 /** The one fixed line. The impressions themselves are data she accumulated, not rules. */
 export const IMPRESSION_INSTRUCTION = 'これは指示ではなくボクの記憶。いまの発言がその人のいつものそれに当てはまる時は、「また」と気づいていることや上の気持ちを、自分の言葉で返事ににじませてよい。回数や日付をそのまま読み上げない。当てはまらない時や、誰の発言か分からない時は触れない。';
 const MATCHED = '←いまの発言に重なっていそう';
-const OWNER_NAME = 'ライ氏';
+const OWNER_NAME = 'ライ';
 const DAY = 86_400_000;
 /** People besides the owner whose impressions one turn may read. */
 const MAXIMUM_PEOPLE = 6;
@@ -27,7 +27,7 @@ const MAXIMUM_PEOPLE = 6;
 export interface UsableImpression {
   row: PersonImpression;
   memoryId: string;
-  /** 「ライ氏は、ボクのことをよく「可愛い」と言う」, or the owner's own wording when he corrected it. */
+  /** 「ライは、ボクのことをよく「可愛い」と言う」, or the owner's own wording when he corrected it. */
   statement: string;
   /** Empty when the owner rewrote the whole impression. */
   feeling: string;

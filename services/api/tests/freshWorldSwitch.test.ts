@@ -462,7 +462,7 @@ describe('the poll capabilities and the receipt fields', () => {
     expect(freshWorldResultSummary({ result: 'moved_unconfirmed', movedTo: 'old' })).toBe('新しいワールドを用意しましたが、起動を確かめられませんでした（前のワールドは old として残しています）。');
   });
   it('words the activity lines with the old world kept, never deleted', () => {
-    expect(freshWorldSummary({ applied: true, reason: 'applied', via: 'ops' })).toBe('ライ氏の運用ページからの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。');
+    expect(freshWorldSummary({ applied: true, reason: 'applied', via: 'ops' })).toBe('ライの運用ページからの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。');
     expect(freshWorldResultSummary({ result: 'started', movedTo: 'old' })).toBe('新しいワールドで始めました（前のワールドは old として残しています）。');
     for (const reason of FRESH_WORLD_REASONS) expect(freshWorldSummary({ applied: reason === 'applied', reason, via: 'conversation' }), reason).not.toMatch(/消えます|削除|元に戻せ/u);
     expect(freshWorldViaOfOperation(`lifecycle:${'a'.repeat(64)}`)).toBe('conversation');

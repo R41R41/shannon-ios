@@ -232,7 +232,7 @@ describe('友人も一緒: answering only when addressed', () => {
     const model = new RecordingModel();
     const store = new InMemoryConversationStore();
     const api = createLocalApiKernel(() => at, { chatModel: model, conversationStore: store });
-    const cue = '（ライ氏が「友人も一緒」に切り替えました。そばにいるお友達に、はじめましての挨拶をしてください。）';
+    const cue = '（ライが「友人も一緒」に切り替えました。そばにいるお友達に、はじめましての挨拶をしてください。）';
     const response = await api.dispatch({ method: 'POST', path: delegations, body: {
       scopeKey: 'owner', threadId: 'thread', transcript: cue, participantMode: 'guest',
       deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,

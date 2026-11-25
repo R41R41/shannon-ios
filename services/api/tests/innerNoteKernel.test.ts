@@ -36,7 +36,7 @@ async function harness(withNote: boolean) {
       reason: '安く見られたくない。', plan: '三十分くらい。', bottom: '好きなまま。' }, shown: 'sulky', tell: 'blush', intent: 'keep', scale: 'ordinary',
       dayReason: null, untilMinutes: 30, changeReason: null, routeSummary: 'Shannon is a little sulky.', summary: null } }) } });
   if (withNote) {
-    service.touched({ scopeKey: scope, audience: 'owner', at: NIGHT, touchId: 't1', phrase: 'ライ氏に胸をつつかれた', stance: 'dislike' });
+    service.touched({ scopeKey: scope, audience: 'owner', at: NIGHT, touchId: 't1', phrase: 'ライに胸をつつかれた', stance: 'dislike' });
     await service.flush(scope);
   }
   const api = createLocalApiKernel(now, { chatModel: model, stateStore, conversationStore: new InMemoryConversationStore(),

@@ -82,7 +82,7 @@ async function seatedTurn(events: string[] = [], options: SeatedTurnOptions = {}
     environment: () => ENV, log: () => undefined,
   });
   const lines: VoiceTurnLine[] = [];
-  await voice.turn({ platform: 'discord', requestId: 'v-1', conversationId: options.room ?? SERVER_ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+  await voice.turn({ platform: 'discord', requestId: 'v-1', conversationId: options.room ?? SERVER_ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
     userMessage: options.message ?? 'シャノン、聞こえる？', observedAt: START, participants: options.participants ?? [OWNER], ...options.fields }, line => lines.push(line));
   return { model, lines, close: async () => { await background.waitForIdle('owner'); await new Promise(resolve => setImmediate(resolve)); turns.close(); peopleStore.close(); store.close(); } };
 }

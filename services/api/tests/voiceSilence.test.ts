@@ -158,17 +158,17 @@ describe('the facts of the moment', () => {
     expect(facts).toMatchObject({ sheAsked: true, followsShannon: true, shannonLastLine: 'わっ、くすぐったいです。' });
     expect(ownerTurnVerdict('うん', facts)).toEqual({ respond: true, reason: 'answers_her_question' });
     // The microphone opened for his answer may hear her own line: that is still an echo, not an answer.
-    const long = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。もう、ライ氏ったら。' });
-    expect(ownerTurnVerdict('くすぐったいです。もう、ライ氏ったら', long)).toEqual({ respond: false, category: 'echo' });
+    const long = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。もう、ライったら。' });
+    expect(ownerTurnVerdict('くすぐったいです。もう、ライったら', long)).toEqual({ respond: false, category: 'echo' });
     expect(ownerTurnVerdict('ごめんごめん', long)).toEqual({ respond: true, reason: 'answers_her_question' });
     // Her whole line, or a part of four characters or more, is an echo...
     expect(ownerTurnVerdict('わっ、くすぐったいです', facts)).toEqual({ respond: false, category: 'echo' });
     expect(ownerTurnVerdict('くすぐったい', facts)).toEqual({ respond: false, category: 'echo' });
     // ...but a short reply or a backchannel that happens to be in her line is his answer.
-    const yes = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？なんでしょう、ライ氏。' });
-    for (const reply of ['はい', 'うん', 'ライ氏', 'なんでしょう?']) expect(ownerTurnVerdict(reply, yes)?.respond, reply).toBe(true);
+    const yes = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？なんでしょう、ライ。' });
+    for (const reply of ['はい', 'うん', 'ライ', 'なんでしょう?']) expect(ownerTurnVerdict(reply, yes)?.respond, reply).toBe(true);
     // A greeting or thanks that is half of her line is his own, not her echo.
-    for (const [hers, his] of [['おはよう、ライ氏。', 'おはよう'], ['お疲れさまです。', 'お疲れさま'], ['ありがとう、ライ氏。', 'ありがとう']] as const) {
+    for (const [hers, his] of [['おはよう、ライ。', 'おはよう'], ['お疲れさまです。', 'お疲れさま'], ['ありがとう、ライ。', 'ありがとう']] as const) {
       const touched = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: hers });
       expect(ownerTurnVerdict(his, touched)?.respond, his).toBe(true);
     }
@@ -178,7 +178,7 @@ describe('the facts of the moment', () => {
     const hai = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？' });
     expect(ownerTurnVerdict('はい', hai)).toEqual({ respond: true, reason: 'answers_her_question' });
     // A small part of her line is his own short reply.
-    expect(ownerTurnVerdict('ライ氏ったら', long)?.respond).toBe(true);
+    expect(ownerTurnVerdict('ライったら', long)?.respond).toBe(true);
   });
 
   it('finds her question anywhere in her line', () => {
@@ -377,7 +377,7 @@ describe('an owner call, end to end', () => {
     readonly model = 'test-model';
     readonly voiceRequests: ShannonVoiceModelRequest[] = [];
     async generate(request: ShannonChatModelRequest) { return { mode: this.mode, model: this.model, reply: `返答:${request.message}` }; }
-    async generateVoice(request: ShannonVoiceModelRequest) { this.voiceRequests.push(request); return { mode: this.mode, model: this.model, reply: 'はい、ライ氏。' }; }
+    async generateVoice(request: ShannonVoiceModelRequest) { this.voiceRequests.push(request); return { mode: this.mode, model: this.model, reply: 'はい、ライ。' }; }
   }
 
   /**
@@ -445,7 +445,7 @@ describe('an owner call, end to end', () => {
 
   it('leaves unanswered what she answered on 2026-10-02, without a model call and without storing anything', async () => {
     const h = harness();
-    await h.stored('今日はウェブコミの話をしたい', 'いいですね、ライ氏。聞かせてください。');
+    await h.stored('今日はウェブコミの話をしたい', 'いいですね、ライ。聞かせてください。');
     h.advance(20);
     const cases: [string, string][] = [
       ['言われた。', 'unfinished'], ['え?', 'backchannel'], ['あれ?', 'backchannel'], ['あれ、ウェブコミに乗っ', 'unfinished'], ['出るの。', 'unfinished'],
@@ -466,7 +466,7 @@ describe('an owner call, end to end', () => {
     const h = harness();
     for (const transcript of ['シャノン', '今何時?', 'これ読んで。', 'ただいま。', '疲れた。', '昨日さ、会社で部長にめちゃくちゃ言われたんだよね、もう参った。']) {
       const body = await h.say(transcript);
-      expect(body, transcript).toMatchObject({ reply: 'はい、ライ氏。', voicePlan: { shouldRespond: true } });
+      expect(body, transcript).toMatchObject({ reply: 'はい、ライ。', voicePlan: { shouldRespond: true } });
       expect(body.voicePlan.silenceCategory, transcript).toBeUndefined();
     }
     // Her name with words the router could not trust: she was addressed, so the interpretation block (which may ask once) is used.
@@ -489,16 +489,16 @@ describe('an owner call, end to end', () => {
     const h = harness();
     const quiet = await h.say('それ昨日買ったやつだよ。', { companionPresent: true });
     expect(quiet).toMatchObject({ reply: '', companionPresent: true, voicePlan: { shouldRespond: false, silenceCategory: 'not_addressed' } });
-    expect(await h.say('シャノン、どう思う?', { companionPresent: true })).toMatchObject({ reply: 'はい、ライ氏。', companionPresent: true });
+    expect(await h.say('シャノン、どう思う?', { companionPresent: true })).toMatchObject({ reply: 'はい、ライ。', companionPresent: true });
     // The turn in which he says that a friend is there is said to her.
-    expect(await h.say('いま友達が隣にいるんだ、紹介するね。')).toMatchObject({ reply: 'はい、ライ氏。', companionPresent: true });
+    expect(await h.say('いま友達が隣にいるんだ、紹介するね。')).toMatchObject({ reply: 'はい、ライ。', companionPresent: true });
   });
 
   it('with the switch off answers them all again, as before', async () => {
     vi.stubEnv('SHANNON_VOICE_SILENCE_RULES', 'off');
     const h = harness();
     for (const transcript of ['言われた。', 'え?', 'あれ?', 'そっか、ちょっと待ってね。']) {
-      expect(await h.say(transcript), transcript).toMatchObject({ reply: 'はい、ライ氏。', voicePlan: { shouldRespond: true } });
+      expect(await h.say(transcript), transcript).toMatchObject({ reply: 'はい、ライ。', voicePlan: { shouldRespond: true } });
     }
   });
 });

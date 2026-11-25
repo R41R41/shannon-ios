@@ -360,7 +360,7 @@ export class PeopleMemory {
     const item = this.store.items(scopeKey).find(candidate => candidate.id === itemId);
     if (!item) return false;
     const { category: _category, ...kept } = item.disclosure;
-    return this.store.setItemDisclosure(scopeKey, itemId, { ...kept, sensitivity, decidedBy: 'owner', reason: 'ライ氏が選んだ扱い' });
+    return this.store.setItemDisclosure(scopeKey, itemId, { ...kept, sensitivity, decidedBy: 'owner', reason: 'ライが選んだ扱い' });
   }
 
   allItems(scopeKey: string): readonly PersonMemoryItem[] { return this.store.items(scopeKey); }

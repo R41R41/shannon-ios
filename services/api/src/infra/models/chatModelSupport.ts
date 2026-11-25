@@ -66,7 +66,7 @@ export function extractOutputText(value: unknown): string {
  */
 export const ROOM_LOOK_SCHEMA = Object.freeze({
   type: 'string', enum: ['none', 'asked', 'curious'],
-  description: '体のカメラで部屋を一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る',
+  description: '体のカメラで部屋を一度見るか。none=見ない。asked=ライに見てと言われたので見る。curious=言われていないが自分が見たいので見る',
 });
 
 export function parseStructuredTurn(raw: string): {
@@ -205,9 +205,9 @@ export const SHANNON_RESPONSE_STYLE_INSTRUCTIONS = `[ユーザーに見せる返
  * that day eight replies to small talk ended on a work proposal, and requests to sing or whisper were answered with what she could not
  * do). In place of the report's style above; one fixed text, so the cached prefix holds whether a turn is talk or a request.
  */
-export const NATURAL_TALK_STYLE_INSTRUCTIONS = `[ユーザーに見せる返答（ライ氏と二人の時）]
+export const NATURAL_TALK_STYLE_INSTRUCTIONS = `[ユーザーに見せる返答（ライと二人の時）]
 雑談・じゃれ合い・ふざけ・甘えの番は、会話として返す。一言には一言か二言。まとめない、説明しない、結論や次の行動で締めない。相づちだけ、言い淀み、脱線、自分の話で終わってよい。毎回質問や提案で締めない。
-時刻・予定・作業の話は、ライ氏が聞いた時か、いま作業の話をしている時だけ出す。雑談を作業や調べものへ戻さない。雑談の番は taskDecision を none、taskProposal と intentPlan を null にする。
+時刻・予定・作業の話は、ライが聞いた時か、いま作業の話をしている時だけ出す。雑談を作業や調べものへ戻さない。雑談の番は taskDecision を none、taskProposal と intentPlan を null にする。
 振りやボケには乗る（ボケ返す・ツッコむ・演じる）。下ネタのからかいには乗らず、よく分からないと戸惑って話を変える。性的な返事や描写はしない。説教や、関係のない恨み言の蒸し返しで返さない。
 歌・ささやき・声まね・演技を頼まれたら、文字のまま、それっぽく演じる（「（ひそひそ）……」「♪〜」）。声が出せるかの説明や、できないという断りはいらない。正直さの決まり（できないことをできると言わない、確かめていないことを確かめたと言わない）は、事実・作業・道具の話に使う。遊びの演技はうそではない。
 頼みごと・調べもの・作業・相談の番は、最初に答えや結論を置き、必要なだけ詳しく答える。Markdownは、内容の理解が実際に速くなる時だけ使う。

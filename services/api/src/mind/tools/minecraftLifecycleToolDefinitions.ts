@@ -17,7 +17,7 @@ export const MINECRAFT_LIFECYCLE_TOOLS: readonly ShannonToolDefinition[] = Objec
   define('minecraft.logout', 'ボクのマイクラの体を退出させる。サーバーや他のプレイヤーは停止しない。実行中の体の操作は停止確認してから退出する。', 'write'),
   // Owner request 2026-10-14: the conversation only (not her own time); the fixed `time set day`, no free time argument.
   define('minecraft.set_day',
-    '起動中の登録されたマイクラサーバーのワールドの時刻を昼にする。ライ氏に頼まれた時だけ使う。他の参加者がいる時や人数が不明な時は変えない。任意の時刻やコマンドは指定できない。',
+    '起動中の登録されたマイクラサーバーのワールドの時刻を昼にする。ライに頼まれた時だけ使う。他の参加者がいる時や人数が不明な時は変えない。任意の時刻やコマンドは指定できない。',
     'write', ['text', 'voice']),
 ]);
 export const MINECRAFT_LIFECYCLE_SUMMARIES = Object.freeze(Object.fromEntries(MINECRAFT_LIFECYCLE_TOOLS.map(tool => [tool.name, tool.description.split('。')[0]!]))) as Readonly<Record<string, string>>;

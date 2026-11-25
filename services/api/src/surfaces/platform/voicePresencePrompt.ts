@@ -19,9 +19,14 @@ export interface VoicePresenceFacts {
   server: { running: 'running' | 'stopped' | 'unknown'; bodyIn: boolean | null; people: PresenceGroup | null } | null;
   /** 「収録中」 and the scene note the owner wrote (null: not on air). */
   onAir: { note: string } | null;
+  /** The one speaking, by the name a greeting list would carry for them (the owner's name; a person her records place by that name; else the name the platform showed, cleaned). */
+  speakerName: string;
 }
 
 const MOST_NAMES = 6;
+
+/** A name the platform showed, made safe to put inside a sentence: no brackets, quotes or line breaks, at most 40 characters. */
+const plainName = (name: string): string => name.replace(/[\s「」『』【】\[\]<>"'`\\]+/gu, ' ').trim().slice(0, 40);
 
 /** A name as it is said: the owner's own name as it is, anyone else's with さん. */
 const called = (name: string): string => (name === SHANNON_OWNER_NAME ? name : `${name}さん`);
@@ -39,6 +44,9 @@ function serverLine(server: NonNullable<VoicePresenceFacts['server']>): string[]
   return [`- 同じマイクラのサーバーにいる人（ボクのほか）: ${listOf(server.people)}。${body}`];
 }
 
+/** The owner is one of the people written in the block. */
+const listed = (facts: VoicePresenceFacts): boolean => [facts.call, facts.server?.people ?? null].some(group => group?.names.includes(SHANNON_OWNER_NAME));
+
 export function presenceBlock(facts: VoicePresenceFacts): string {
   const lines: string[] = [];
   if (facts.call) lines.push(`- Discordの通話にいる人（ボクのほか）: ${listOf(facts.call)}。`);
@@ -48,9 +56,11 @@ export function presenceBlock(facts: VoicePresenceFacts): string {
     '[いま誰がどこにいるか]',
     ...lines,
     '- 名前が書いてある人だけ、名前で呼ぶ。名前の書いていない人の名前は、聞くまで推測しない。理由: 名前を間違えて呼ぶと、その人に失礼で、場もしらける。',
+    ...(listed(facts) ? [`- ${SHANNON_OWNER_NAME}は「${SHANNON_OWNER_NAME}」と呼ぶ。「${SHANNON_OWNER_NAME}さん」「${SHANNON_OWNER_NAME}氏」とは呼ばない（ほかの人には「さん」を付ける）。理由: ボクがふだんそう呼んでいる名前で、ほかの呼び方だとよそよそしく聞こえるから。`] : []),
     '- 「挨拶して」「紹介するよ」のように、そこにいる人へ向けて挨拶や紹介をされた時は、ボクへの言葉として受けて、挨拶する。ほかの人どうしの話ではない。'
       + 'ここに書かれた人（通話にいる人も、同じサーバーにいる人も）に、名前で呼びかけてよい。通話にもサーバーにもいる人は、1度だけ呼ぶ。'
-      + '理由: 誰がそこにいるかを分かって話すと、挨拶が相手に届くから。',
+      + '理由: 誰がそこにいるかを分かって話すと、挨拶が相手に届くから。'
+      + '「挨拶して」は、頼んだ人ひとりへの合図ではなく、そこにいる全員への合図。頼んだ人ひとりに返して終わらず、そこにいる人たちへ呼びかける。理由: 呼ばれなかった人は、自分たちは挨拶されていないと感じるから。',
     ...(facts.onAir ? [] : ['- 「視聴者」「見ている人」がいる、とは言わない。理由: いまは、見ている人がいるとは書かれていないから。']),
   ].join('\n');
 }
@@ -64,9 +74,11 @@ export function onAirBlock(onAir: { note: string } | null): string {
     'いまの会話は、録画か配信になっていて、あとで多くの視聴者が見て聞く。視聴者はその場にいないので、コメントでは返事できない。',
     ...(note ? [`場面のメモ（持ち主が書いたもの）: ${note}`] : []),
     '- 最初に口を開く時（挨拶・「挨拶して」・紹介への返事）は、「いま誰がどこにいるか」に書かれた人の名前（持ち主のほかの人は全員）と、視聴者に、まとめて呼びかけて挨拶する。紹介されて「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない（名前を呼ばれない人は、自分たちに挨拶されたと感じないから）。'
-      + '形の例は「〈名前〉さん、〈名前〉さん、そして視聴者の皆さん！こんにちは、シャノンです！」。この通りには言わず、その時の様子で言い方をかえる（毎回同じ文だと、台詞を再生しているように聞こえるから）。'
-      + '理由: 見て聞く人は、その場に誰がいるかを、最初の呼びかけで分かるから。',
-    '- この呼びかけの挨拶だけは、全体で50字までにしてよい（ほかは40字まで）。理由: 呼びかけが3つ入ると、40字では挨拶まで言えないから。',
+      + `形の例は「${SHANNON_OWNER_NAME}、〈名前〉さん、〈名前〉さん、そして視聴者の皆さん！こんにちは、シャノンです！」（${SHANNON_OWNER_NAME}だけは「さん」を付けない）。`
+      + 'この通りには言わず、その時の様子で言い方をかえる（毎回同じ文だと、台詞を再生しているように聞こえるから）。'
+      + '理由: 見て聞く人は、その場に誰がいるかを、最初の呼びかけで分かるから。'
+      + `「挨拶して」は、頼んだ${SHANNON_OWNER_NAME}ひとりへの返事ではなく、そこにいる全員と見ている人への合図。${SHANNON_OWNER_NAME}だけを呼んだり、名乗りだけで返したりしない（ほかの人と視聴者は、自分たちに挨拶されたと感じないから）。`,
+    '- この呼びかけの挨拶は、全体で50字まで（ほかは40字まで）。呼びかけ・名乗り・一言の3つだけで終え、冗談・説明・前置きは足さない。理由: 呼びかけが3つ入ると40字では挨拶まで言えないが、声で読み上げるので、長いと挨拶のあいだ皆が待つことになり、足した一言がいちばん長くなりやすいから。',
     '- 視聴者に向けて、場面のメモで「話さない」とされた事は、聞かれても話さない。メモに無くても、これからの予定や、まだ知らせていない事は、自分から話さず、聞かれたら「それはまだ内緒だよ」と軽く流す。'
       + '理由: 見ている人が、まだ公開されていない事を、最初に知ることになるから。',
     `- ${SHANNON_OWNER_NAME}の私的な記憶（個人的な出来事・家族・体調など）は、収録中も話さない。理由: 録画や配信は、誰でも見られるから。`,
@@ -101,7 +113,7 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
     let unnamed = placed.unnamed;
     // The one speaking whom her records do not place is still known by the name the platform showed for them.
     if (!speaker.owner && speaker.account !== input.ownerAccount && unnamed > 0 && !input.names(input.platform, [speaker.account]).names.length) {
-      const shown = speaker.displayName.replace(/\s+/gu, ' ').trim().slice(0, 40);
+      const shown = plainName(speaker.displayName);
       if (shown && !names.includes(shown)) { names.push(shown); unnamed -= 1; }
     }
     call = { names, unnamed };
@@ -119,12 +131,14 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
     }
     server = { running: input.server.running, bodyIn: input.server.bot === 'joined' ? true : input.server.bot === 'absent' ? false : null, people };
   }
-  return { call, server, onAir: input.onAir };
+  const placedSelf = speaker.owner || speaker.account === input.ownerAccount ? [] : input.names(input.platform, [speaker.account]).names;
+  const speakerName = speaker.owner || speaker.account === input.ownerAccount ? SHANNON_OWNER_NAME : placedSelf[0] ?? plainName(speaker.displayName);
+  return { call, server, onAir: input.onAir, speakerName };
 }
 
 /** The names she calls in a greeting: everyone the facts place, in the call and in the server (once each), except the one who is speaking. */
 export function greetNamesOf(facts: VoicePresenceFacts, speakerName: string): string[] {
-  const speaker = speakerName.replace(/\s+/gu, ' ').trim();
+  const speaker = plainName(speakerName);
   const seen = new Set<string>();
   const names: string[] = [];
   for (const group of [facts.call, facts.server?.people ?? null]) {
@@ -142,10 +156,10 @@ export function greetNamesOf(facts: VoicePresenceFacts, speakerName: string): st
  * sees only the words, which name her in the third person; this says what they are, so that what it writes is the greeting and not a thank-you.
  * Facts and reasons; the words are hers.
  */
-export function introducedBlock(facts: VoicePresenceFacts, speakerName: string, utterance: string): string {
-  const speaker = speakerName.replace(/\s+/gu, ' ').trim().slice(0, 40) || '話している人';
+export function introducedBlock(facts: VoicePresenceFacts, utterance: string): string {
+  const speaker = facts.speakerName || '話している人';
   const names = greetNamesOf(facts, speaker);
-  const said = Array.from(utterance.replace(/s+/gu, ' ').trim()).slice(0, 60).join('');
+  const said = Array.from(utterance.replace(/\s+/gu, ' ').trim()).slice(0, 60).join('');
   const viewers = facts.onAir !== null;
   const callList = names.length ? names.join('、') : '';
   return [
@@ -155,5 +169,22 @@ export function introducedBlock(facts: VoicePresenceFacts, speakerName: string, 
       ? [`- 挨拶は、${callList}を名前で呼ぶところから始める${viewers ? '。続けて「視聴者の皆さん」にも呼びかけてから' : '。そのあとで'}、名乗って、明るい一言を添える。`]
       : [`- 挨拶は、そこにいる人たちへの呼びかけ${viewers ? '（視聴者の皆さんにも）' : ''}から始めて、名乗って、明るい一言を添える（名前の書かれた人がいないので、名前は呼ばない）。`]),
     '- 「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない。理由: 名前を呼ばれない人は、自分たちが挨拶されたとは感じず、紹介した人も、場も、そこで止まってしまうから。',
+  ].join('\n');
+}
+
+/**
+ * Words said with the push-to-talk key held never go through the addressed judge, so nothing says whether they present her. This is the same facts as `introducedBlock`, given
+ * as a condition for the reply to read against the words it hears. Only where there is someone to greet (a name, or viewers on air).
+ */
+export function greetingHintBlock(facts: VoicePresenceFacts): string {
+  const names = greetNamesOf(facts, facts.speakerName);
+  const viewers = facts.onAir !== null;
+  if (!names.length && !viewers) return '';
+  const who = [...names, ...(viewers ? ['視聴者の皆さん'] : [])].join('、');
+  return [
+    '[ボクを紹介する言葉や、挨拶の頼みだった時]',
+    `- いま聞こえた言葉が、ボクをそこにいる人たちに紹介する言葉（「こちらがシャノンです」「この子が新しいシャノン」）や、挨拶の頼み（「挨拶して」）なら、いまのボクの返事は、その挨拶。${who}を呼ぶところから始めて、名乗って、明るい一言を添える。`
+      + '理由: 名前を呼ばれない人は、自分たちが挨拶されたとは感じず、紹介した人も、場も、そこで止まってしまうから。',
+    '- そうでない言葉（質問・頼みごと・雑談）には、この欄を使わない。',
   ].join('\n');
 }

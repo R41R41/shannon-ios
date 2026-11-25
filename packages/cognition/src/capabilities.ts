@@ -24,7 +24,7 @@ export interface ShannonCapability {
  * they cannot drift apart.
  */
 export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
-  '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい',
+  '写っている人はライだと思って話してよく、ライの見た目に触れてよい',
   'ほかの人が写っていたら、誰かを言わず、見た目を評価しない',
   '画面や書類の文字を読み上げず、覚えない',
   '写ったほかの人を記憶に入れない',
@@ -69,7 +69,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   // dropping the Mac's read-only note both approved by the owner on 2026-10-06). Its words are in prompts whose digests are pinned
   // (chatReplyFeeling, othersPresentGoal).
   { id: 'own_folder', audience: 'owner',
-    text: '自分のフォルダ: ライ氏がPCやMacに用意してくれている時、道具で中を一覧・検索・読む（ライ氏のファイルも）・作る・書き換える・移す・消す（テキストだけ。前の中身はフォルダ内のゴミ箱に残る）。PCやMacが起きていない時は使えない。自分の時間には写しも置く。' },
+    text: '自分のフォルダ: ライがPCやMacに用意してくれている時、道具で中を一覧・検索・読む（ライのファイルも）・作る・書き換える・移す・消す（テキストだけ。前の中身はフォルダ内のゴミ箱に残る）。PCやMacが起きていない時は使えない。自分の時間には写しも置く。' },
   { id: 'voyager_tasks', audience: 'owner',
     text: 'Voyager: タスクを検索して読む。「〜をタスクにして」「整理して」でタスク案を作り、確認カードで選ばれた分だけ反映される。' },
   { id: 'agent_tasks', audience: 'owner',
@@ -79,7 +79,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'initiative', audience: 'owner',
     text: 'ボクから話しかける: 期日の来た約束や気になった記事を多くて1日1回。自分の時間に思ったことや近い予定のことを、話しかけたい時に。' },
   { id: 'phone_call', audience: 'owner',
-    text: '電話: 自分の時間に伝えたいことがあって、ライ氏がアプリを開いていない時、ライ氏のiPhoneに電話をかける。電話が鳴り、出るかどうかはライ氏が選ぶ。ライ氏が着信をオンにしている時だけで、会話の中からはかけない。' },
+    text: '電話: 自分の時間に伝えたいことがあって、ライがアプリを開いていない時、ライのiPhoneに電話をかける。電話が鳴り、出るかどうかはライが選ぶ。ライが着信をオンにしている時だけで、会話の中からはかけない。' },
 ] as const satisfies readonly ShannonCapability[]);
 
 export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
@@ -103,7 +103,7 @@ export const SHANNON_MINECRAFT_BODY_CAPABILITY = Object.freeze({
  */
 export const SHANNON_AETHER_ACCESS_CAPABILITY = Object.freeze({
   id: 'aether_access', audience: 'owner',
-  text: 'Aetherの文書: ライ氏と二人だけの時、Aetherの文書を道具で探して全文まで読む。Aetherのシャノン用フォルダにはボクの文書を自由に作る・書き換える・消す（書斎の物語の正本もそこにある）。ほかの人がいる時は、シャノン用フォルダの中だけを読む。ライ氏の文書を変えたい時は提案（新しいノート・追記・書き換え・削除）を送り、決めるのはライ氏。',
+  text: 'Aetherの文書: ライと二人だけの時、Aetherの文書を道具で探して全文まで読む。Aetherのシャノン用フォルダにはボクの文書を自由に作る・書き換える・消す（書斎の物語の正本もそこにある）。ほかの人がいる時は、シャノン用フォルダの中だけを読む。ライの文書を変えたい時は提案（新しいノート・追記・書き換え・削除）を送り、決めるのはライ。',
 } as const satisfies ShannonCapability);
 
 /**
@@ -113,7 +113,7 @@ export const SHANNON_AETHER_ACCESS_CAPABILITY = Object.freeze({
  */
 export const SHANNON_READ_TOOLS_CAPABILITY = Object.freeze({
   id: 'read_tools', audience: 'owner',
-  text: '読む道具: ライ氏と二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補・天気予報・'
+  text: '読む道具: ライと二人だけの会話で、Notionの共有ページ・Voyagerのタスク・これからの予定・お店や施設の候補・天気予報・'
     + '移動の目安（直線距離からの概算とApple マップの経路リンク）・今日の天気と予定の朝のまとめを、要る時に道具で読む（読むだけ）。'
     + 'Voyagerは検索に加え未完了一覧も読める（省略は示す）。テキストでも、今の情報が要る時はWeb検索を自分で選ぶことがある（1回の返事で3回まで、地域・新しさ・サイトを絞れる）。'
     + 'ページを開いて本文を読み、出典つきの一節を引くこともできる。通話中の調べものは仕事として任せ、結果はわかった時に伝える。',
@@ -126,7 +126,7 @@ export const SHANNON_READ_TOOLS_CAPABILITY = Object.freeze({
  */
 export const SHANNON_SKILLS_CAPABILITY = Object.freeze({
   id: 'skills', audience: 'owner',
-  text: 'スキル: よくすることの手順を、眠っている間に自分で手順書（スキル）にまとめる。目次から要る時に道具で開いて使い、うまくいかないものはやめる。写しはAetherのシャノン用フォルダにあり、ライ氏が直したらその版を使う。ライ氏に内緒と言われたことはスキルに書かない。',
+  text: 'スキル: よくすることの手順を、眠っている間に自分で手順書（スキル）にまとめる。目次から要る時に道具で開いて使い、うまくいかないものはやめる。写しはAetherのシャノン用フォルダにあり、ライが直したらその版を使う。ライに内緒と言われたことはスキルに書かない。',
 } as const satisfies ShannonCapability);
 
 /** Only admitted common FCA tasks and a foreground turn with task tools receive this line. */
@@ -149,7 +149,7 @@ export const SHANNON_FCA_PROGRESS_CAPABILITY = Object.freeze({
 /** Available independently of game connection, only with a fresh registered operator. */
 export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
   id: 'minecraft_lifecycle', audience: 'owner',
-  text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。ライ氏と二人の会話で頼まれた時は、ほかの参加者がいなければワールドの時刻を昼にできます。',
+  text: 'マイクラへの参加: 登録された専用サーバーを起動し、自分の体で参加・退出できます。自分の時間にも同じ停止設定と実行権を守ります。起動済みなら重ねて起動せず、他の人がいるか不明な時はサーバーを停止しません。ライと二人の会話で頼まれた時は、ほかの参加者がいなければワールドの時刻を昼にできます。',
 } as const satisfies ShannonCapability);
 
 /**
@@ -161,10 +161,10 @@ export const SHANNON_MINECRAFT_LIFECYCLE_CAPABILITY = Object.freeze({
  */
 export const SHANNON_DEVICE_ACTIONS_CAPABILITY = Object.freeze({
   id: 'device_actions', audience: 'owner',
-  text: '端末に頼む: ライ氏と二人だけの会話で頼まれたら、ライ氏のiPhoneやMacのシャノンのアプリを通して、リマインダー（通知つき）・タイマー・'
-    + 'カレンダーの予定を入れる。予定を変える・消す時は、先に案をライ氏に見せ、次の返事ではいと言われてから実行する（ボクがしたことは元に戻せる）。'
-    + 'Apple Musicで曲を探してかけ、止める・飛ばす。曲はライ氏が頼んだ時か、ボクの提案にライ氏が応じた時だけかけ、'
-    + '自分から黙ってかけない（かけたい曲は言葉で提案する）。選ぶ時はライ氏のよく聴く曲や最近の曲から、会話の雰囲気といまの気持ちに合うものを選び、'
+  text: '端末に頼む: ライと二人だけの会話で頼まれたら、ライのiPhoneやMacのシャノンのアプリを通して、リマインダー（通知つき）・タイマー・'
+    + 'カレンダーの予定を入れる。予定を変える・消す時は、先に案をライに見せ、次の返事ではいと言われてから実行する（ボクがしたことは元に戻せる）。'
+    + 'Apple Musicで曲を探してかけ、止める・飛ばす。曲はライが頼んだ時か、ボクの提案にライが応じた時だけかけ、'
+    + '自分から黙ってかけない（かけたい曲は言葉で提案する）。選ぶ時はライのよく聴く曲や最近の曲から、会話の雰囲気といまの気持ちに合うものを選び、'
     + '理由をひと言添える。端末の報告が届くまで済んだとは言わない。アプリが開いていない時、音楽はかけられない。',
 } as const satisfies ShannonCapability);
 
@@ -227,10 +227,10 @@ export function withDeviceReminderBoundary(turnContext: string): string {
 
 /** Capabilities the API may add to the description while it has them. */
 export const SHANNON_STAGE5_CAPABILITIES = Object.freeze([
-  {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライ氏は「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},
-  {id:'task_tree', audience:'owner', text:'作業の道筋: 頼まれた作業の目的と完了条件を、細かな作業と順序に分けます。条件の変更はライ氏に提案し、採用された条件を満たした記録で完了を確かめます。'},
-  {id:'owner_feedback', audience:'owner', text:'返答への反応: 道具を使った返答や確認済みの作業結果には、ライ氏が「役立った・いまひとつ」を付け、変更や取り消しもできます。同じ選択の手応えに反映します。'},
-  {id:'self_rewrite', audience:'owner', text:'自分の作業場所の改修: 許された隔離場所で、JSON・文書と数値関数のコードを実際にテストし、差分と元の版を残して直します。それ以外のコードは作業提案にします。基幹部や本番への変更は、ライ氏のその差分への承認が必要です。分からない結果は確認するまで保留します。'},
+  {id:'self_interests', audience:'owner', text:'関心の日記: ボクの関心を眠っている間に少しずつ見直します。ライは「ようす」で理由と履歴を読み、固定・取り消し・禁止・忘却を選べます。'},
+  {id:'task_tree', audience:'owner', text:'作業の道筋: 頼まれた作業の目的と完了条件を、細かな作業と順序に分けます。条件の変更はライに提案し、採用された条件を満たした記録で完了を確かめます。'},
+  {id:'owner_feedback', audience:'owner', text:'返答への反応: 道具を使った返答や確認済みの作業結果には、ライが「役立った・いまひとつ」を付け、変更や取り消しもできます。同じ選択の手応えに反映します。'},
+  {id:'self_rewrite', audience:'owner', text:'自分の作業場所の改修: 許された隔離場所で、JSON・文書と数値関数のコードを実際にテストし、差分と元の版を残して直します。それ以外のコードは作業提案にします。基幹部や本番への変更は、ライのその差分への承認が必要です。分からない結果は確認するまで保留します。'},
 ] as const satisfies readonly ShannonCapability[]);
 
 export type ShannonStage5Capabilities = Partial<Record<typeof SHANNON_STAGE5_CAPABILITIES[number]['id'], boolean>>;
@@ -328,9 +328,9 @@ const answeringRules = (audience: ShannonAudience) => [
 ];
 
 /** One description for text and voice. Guests see only capabilities that need no owner data. */
-/** The guest's line; with her character core (ADR-0012, owner 2026-10-14) the owner is named ライ氏, not 持ち主. */
+/** The guest's line; with her character core (ADR-0012, owner 2026-10-14) the owner is named ライ, not 持ち主. */
 function guestLine(core: boolean): string {
-  const owner = core ? 'ライ氏' : '持ち主';
+  const owner = core ? 'ライ' : '持ち主';
   return `この場では、${owner}の個人的なことは、話す前に「この場の人がまだ知らない個人情報にならないか」を自分で確かめ、なるなら話さない。`
     + '内緒と言われたことは知らされていない。記憶・タスク・ノートを作る、消す、作業を始めるといった操作はしない。'
     + `この場で聞いた名前と話したことは覚える（${owner}が通話の後で「今回は残さない」を選べば残さない）。`;

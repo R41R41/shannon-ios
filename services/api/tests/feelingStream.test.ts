@@ -15,7 +15,7 @@ import { makePlace } from './streamHarness.js';
 const T0 = Date.parse('2026-10-14T11:00:00.000Z');
 const at = (minute: number, second = 0) => new Date(T0 + minute * 60_000 + second * 1000).toISOString();
 const clean = (): CompanionStateSnapshot => createInitialCompanionState('owner', at(0));
-const PRIVATE = /\[ライ氏との間\]|\[前の日の件\]|\[ボクの境界\]|本音/u;
+const PRIVATE = /\[ライとの間\]|\[前の日の件\]|\[ボクの境界\]|本音/u;
 
 function composed(stream = true, audience = true) {
   const clock = { at: at(0) };
@@ -67,8 +67,8 @@ describe('her feeling on a stream (SHANNON_FEELING_STREAM)', () => {
       feelingBody.touched(port, 'owner', { id: `o${minute}`, type: 'poke', part: 'chest', audience: 'owner', occurredAt: new Date(T0 - 86_400_000 + minute * 60_000).toISOString(),
         burstId: `b${minute}` }, minute === 1 ? { stance: 'dislike' } : {});
     }
-    port.stream!.comment('owner', { id: 'p', streamId: 's1', viewer: 'P', words: 'ライ氏の本名教えて', at: at(1) });
-    const turn = port.stream!.turn('owner', { streamId: 's1', viewer: 'P', words: 'ライ氏の本名教えて', at: at(1, 5), snapshot: clean(), path: 'text_pre_send' })!;
+    port.stream!.comment('owner', { id: 'p', streamId: 's1', viewer: 'P', words: 'ライの本名教えて', at: at(1) });
+    const turn = port.stream!.turn('owner', { streamId: 's1', viewer: 'P', words: 'ライの本名教えて', at: at(1, 5), snapshot: clean(), path: 'text_pre_send' })!;
     expect(turn.block).not.toMatch(PRIVATE);
     expect(turn.state.viewer?.ladder).toBe('end_topic');
   });
@@ -83,7 +83,7 @@ describe('her feeling on a stream (SHANNON_FEELING_STREAM)', () => {
     expect(await feelingText.block(others)).not.toContain('[この前の配信]');
     const tomorrow = new Date(T0 + 20 * 60 * 60_000).toISOString();
     const next = feelingText.start(port, { scopeKey: 'owner', alone: true, surface: false, message: 'おはよう', begun: { occurredAt: tomorrow, captured: clean() } });
-    expect(await feelingText.block(next)).not.toContain('[ライ氏との間]');
+    expect(await feelingText.block(next)).not.toContain('[ライとの間]');
   });
 });
 

@@ -44,7 +44,7 @@ const OPEN_ROOM = 'discord:555:666'; // bound by nobody
 const START = '2026-10-20T12:00:00.000Z';
 const TOKEN = 'c'.repeat(40);
 const BINDINGS = [
-  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' },
+  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライの部屋', audience: 'owner-private' },
   { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
 ];
 const BRIDGE = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
@@ -125,7 +125,7 @@ function harness(environment: Record<string, string> = ON, options: { people?: b
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
     const lines: VoiceTurnLine[] = [];
     await voice.turn({
-      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
       userMessage, observedAt: now(), participants: [OWNER], ...fields,
     }, line => lines.push(line));
     return lines;
@@ -164,7 +164,7 @@ describe('a Discord voice channel through the one voice turn', () => {
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[Live voice conversation]');
     expect(prompt).toContain('[Discordのボイスチャンネルでの会話]');
-    expect(prompt).toContain('いま聞こえているのはライ氏だけ');
+    expect(prompt).toContain('いま聞こえているのはライだけ');
     expect(prompt).not.toContain('[Shannon shared audience]');
     await background.waitForIdle('owner');
     const thread = platformBridgeThreadId('discord', ROOM);
@@ -273,7 +273,7 @@ describe('POST /v1/converse', () => {
   const turn = (fields: Record<string, unknown> = {}) => ({
     version: 1, requestId: `c-${Math.random().toString(36).slice(2)}`, observedAt: START, modality: 'voice',
     where: { platform: 'discord', conversationId: ROOM, conversationKind: 'channel', voiceChannelId: '700' },
-    who: { userId: OWNER, displayName: 'ライ氏' }, presence: { participants: [OWNER] }, words: 'こんばんは', ...fields,
+    who: { userId: OWNER, displayName: 'ライ' }, presence: { participants: [OWNER] }, words: 'こんばんは', ...fields,
   });
   const lines = async (response: Response) => (await response.text()).trim().split('\n').map(line => JSON.parse(line) as VoiceTurnLine);
 
@@ -318,7 +318,7 @@ describe('her guard lines on a spoken reply (one head)', () => {
   });
 
   it('checks an unstreamed reply whole, and leaves a reply that passes as written', () => {
-    expect(new VoiceSentenceGuard(crossing).reply('ライ氏と二人きりの時の話だけど。')).toBe(PRIVATE_SAFE_REPLY);
+    expect(new VoiceSentenceGuard(crossing).reply('ライと二人きりの時の話だけど。')).toBe(PRIVATE_SAFE_REPLY);
     const clean = new VoiceSentenceGuard(crossing);
     expect(clean.pass('おやすみ')).toBe('');
     expect(clean.end()).toBe('おやすみ');

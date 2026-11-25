@@ -122,7 +122,7 @@ describe('the stable prefix', () => {
     expect(JSON.stringify(feeling.messages.at(-1))).toContain('[この返答での気持ち]');
     expect(JSON.stringify(sent(variants.web!).messages.at(-1))).toContain('[Web検索の回答]');
     expect(JSON.stringify(sent(variants.plain!).messages.at(-1))).toContain('tool_open と tool_call は呼ばずに');
-    expect(JSON.stringify(sent(variants.withheld!).messages.at(-1))).toContain('いまはライ氏以外の人もいるかもしれない');
+    expect(JSON.stringify(sent(variants.withheld!).messages.at(-1))).toContain('いまはライ以外の人もいるかもしれない');
   });
 
   it('takes back out every line withToolCapabilityLines adds for any registered tool (a new line cannot silently move BP1)', () => {

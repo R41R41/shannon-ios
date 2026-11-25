@@ -305,7 +305,7 @@ describe('P9: how a spoken reply is said, after the cached prefix', () => {
     expect(spokenReplyLines('明日の予定は？', '', undefined, { ...social, solutionWantedProbability: 0.8 })).not.toContain(SOCIAL_LENGTH_LINE);
     expect(spokenReplyLines('天気は？', '', undefined, { ...social, selectedSkills: ['weather'] })).not.toContain(SOCIAL_LENGTH_LINE);
     const lines = spokenReplyLines('ごめんね', '', undefined, social).join('\n');
-    expect(lines).toContain('「ライ氏、」で始めない');
+    expect(lines).toContain('「ライ、」で始めない');
     expect(lines).toContain(PERCEPTION_HONESTY_LINE);
     // A photo he shared is in the context: the line is not given then (review L7).
     expect(spokenReplyLines('これ見て', '', undefined, social, true)).not.toContain(PERCEPTION_HONESTY_LINE);

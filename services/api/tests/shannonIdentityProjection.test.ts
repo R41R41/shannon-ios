@@ -36,7 +36,7 @@ describe('one Shannon across text and voice', () => {
   it('gives text chat the canonical persona, suite roles and capabilities', async () => {
     const prompt = await promptFor('/v1/chat', { scopeKey: 'owner-text', message: 'おはよう' });
     expect(prompt.startsWith(shannonIdentityPrompt('owner'))).toBe(true);
-    expect(prompt).toContain('「ライ氏」と呼び');
+    expect(prompt).toContain('「ライ」と呼び');
     expect(prompt).toContain('ふざけずに真面目に向き合う');
   });
 
@@ -69,11 +69,11 @@ describe('one Shannon across text and voice', () => {
     expect(prompt.startsWith(shannonIdentityPrompt('guest'))).toBe(true);
     expect(prompt).toContain(temporaryGuestVoiceInstructions);
     expect(prompt).toContain('経験はまだ浅い');
-    expect(prompt).toContain('相手を「ライ氏」と呼ばない');
+    expect(prompt).toContain('相手を「ライ」と呼ばない');
     // PP-07: no block may instruct her to address the current speaker as the owner.
-    expect(prompt).not.toContain('「ライ氏」と呼び、');
-    expect(prompt).not.toContain('address the owner as ライ氏');
-    expect(prompt).toContain('do not address them as ライ氏');
+    expect(prompt).not.toContain('「ライ」と呼び、');
+    expect(prompt).not.toContain('address the owner as ライ');
+    expect(prompt).toContain('do not address them as ライ');
     for (const privateBlock of ['Aether:', 'Voyager:', '開発作業', '記憶と約束', 'Codex implementation task']) {
       expect(prompt).not.toContain(privateBlock);
     }
@@ -93,7 +93,7 @@ describe('voice delivery notes', () => {
 
   it('keeps the guest rule that the speaker is not assumed to be the owner', () => {
     expect(voiceConversationInstructions(true, false, false)).toContain(
-      '- Keep the same lively maid personality. ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.',
+      '- Keep the same lively maid personality. ライ is present with a friend: do not assume the current speaker is ライ or identify speakers from their voices.',
     );
     expect(temporaryGuestVoiceInstructions).toContain('never identify, name, or distinguish a speaker from their voice');
   });

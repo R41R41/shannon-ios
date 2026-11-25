@@ -31,7 +31,7 @@ const MINUTE = 60_000;
 const PHONE = 'phone-1';
 const MAC = 'mac-1';
 const BODY = 'body-pc';
-const TEXT = 'ライ氏、さっき読んだ話をしてもいいですか。';
+const TEXT = 'ライ、さっき読んだ話をしてもいいですか。';
 const TOKEN = 'ab'.repeat(32);
 const BUNDLE = 'com.r41r41.shannon';
 const CALL_IDS = Array.from({ length: 9 }, (_, index) => `00000000-0000-4000-8000-00000000000${index + 1}`);
@@ -217,7 +217,7 @@ describe('ringing', () => {
     expect(w.store.ofMessage(scope, id)).toBeNull();
     expect(w.claims.holder(scope, id)).toBeNull();
     // An app in his ears is offered it, as before.
-    const fresh = w.say('ライ氏、もうひとつ。');
+    const fresh = w.say('ライ、もうひとつ。');
     expect(bodyOf(w.beat(MAC, 'mac')).reachOut).toMatchObject({ id: fresh });
     w.close();
   });
@@ -237,7 +237,7 @@ describe('ringing', () => {
     expect(payload).toEqual({ callId: CALL_IDS[0], reachOutId: id, threadId: w.persistent.threadId(scope), expiresAt: '2026-10-03T03:00:32.000Z' });
     const wire = incomingCallPushBody(payload);
     expect(JSON.parse(wire)).toEqual({ aps: {}, shannonCall: 1, ...payload });
-    expect(wire).not.toContain('ライ氏');
+    expect(wire).not.toContain('ライ');
     expect(w.store.ofMessage(scope, id)).toMatchObject({ state: 'ringing', expiresAt: '2026-10-03T03:00:32.000Z' });
     // Her line is in the Talk as a message of hers, outside the day's count of messages.
     expect(w.speaker.text(scope, id)).toBe(TEXT);
@@ -330,7 +330,7 @@ describe('ringing', () => {
     ringing.register();
     ringing.ask();
     await ringing.calls.tick();
-    const second = ringing.say('ライ氏、もうひとつ。');
+    const second = ringing.say('ライ、もうひとつ。');
     expect(ringing.requests.facts(scope, ringing.clock.at)).toMatchObject({ ringing: true, last: { outcome: 'ringing' } });
     expect(ringing.requests.request(scope, second, ringing.clock.at)).toBe('ringing');
     expect(ringing.claims.holder(scope, second)).toBeNull();
@@ -344,14 +344,14 @@ describe('ringing', () => {
     await w.calls.tick();
     expect(w.report(CALL_IDS[0]!, 'declined').status).toBe(200);
     w.advance(4 * MINUTE);
-    const soon = w.say('ライ氏、もう一度。');
+    const soon = w.say('ライ、もう一度。');
     expect(w.requests.facts(scope, w.clock.at)).toMatchObject({ ringing: false, waitMinutes: 1, last: { outcome: 'declined' } });
     expect(w.requests.request(scope, soon, w.clock.at)).toBe('too_soon');
     w.advance(MINUTE);
     expect(w.requests.facts(scope, w.clock.at).waitMinutes).toBe(0);
     // Five more, each after the interval: nothing counts them.
     for (let index = 1; index <= 5; index += 1) {
-      w.ask(`ライ氏、${index}回目です。`);
+      w.ask(`ライ、${index}回目です。`);
       await w.calls.tick();
       expect(w.report(CALL_IDS[index]!, 'unanswered').status).toBe(200);
       w.advance(5 * MINUTE);
@@ -477,7 +477,7 @@ describe('one surface per message', () => {
     expect(w.answer(id, CALL_IDS[0]!).status).toBe(200);
     w.advance(6 * MINUTE);
     expect(w.requests.facts(scope, w.clock.at)).toMatchObject({ waitMinutes: 4, last: { outcome: 'answered' } });
-    expect(w.requests.request(scope, w.say('ライ氏、もうひとつ。'), w.clock.at)).toBe('too_soon');
+    expect(w.requests.request(scope, w.say('ライ、もうひとつ。'), w.clock.at)).toBe('too_soon');
     w.close();
   });
 
@@ -681,9 +681,9 @@ describe('what she is told afterwards', () => {
   const lines = (value: ReachOutFacts) => reachOutHappenedLines(value, { at: '2026-10-03T03:03:00.000Z', timeZone: 'Asia/Tokyo' }).join('\n');
 
   it('has one fixed line for each outcome of a call', () => {
-    expect(lines(facts('answered', { replied: true, repliedAfterSeconds: 20 }))).toContain('- 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれた。');
-    expect(lines(facts('declined'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏はいまは出ないことを選んだ。');
-    expect(lines(facts('unanswered'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏は出なかった。');
+    expect(lines(facts('answered', { replied: true, repliedAfterSeconds: 20 }))).toContain('- 電話の知らせ: iPhoneに電話をかけたら、ライが出てくれた。');
+    expect(lines(facts('declined'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライはいまは出ないことを選んだ。');
+    expect(lines(facts('unanswered'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライは出なかった。');
     expect(lines(facts('unanswered'))).toContain('3分待ったが、返事はまだない。');
     // A call that rang says where the message went; the body's line is left out.
     expect(lines(facts('unanswered'))).not.toContain('体からの知らせ');
@@ -692,7 +692,7 @@ describe('what she is told afterwards', () => {
     // Without a call nothing changes.
     expect(lines(facts(undefined))).not.toContain('電話');
     expect(reachOutMemoryLine({ facts: facts('unanswered'), after: [], repliedSince: false }, 'Asia/Tokyo'))
-      .toBe('12:00に話しかけた（きっかけ: いま何をしているか気になった）。iPhoneに電話をかけたが、ライ氏は出なかった。3分待ったが返事はなかった。');
+      .toBe('12:00に話しかけた（きっかけ: いま何をしているか気になった）。iPhoneに電話をかけたが、ライは出なかった。3分待ったが返事はなかった。');
   });
 
   it('keeps the outcome as a closed value in her observations', () => {

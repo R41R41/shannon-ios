@@ -235,16 +235,16 @@ export class ShannonToolRunner {
       return { tool, result: minecraftTaskUnavailable(tool.name) };
     }
     if ((tool.name.startsWith('aether') || tool.domain === 'aether_proposal') && !this.aetherFor(context.scopeKey)) {
-      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライ氏のscopeだけ', wouldWork: 'ライ氏との会話か、ボクの時間で使う' } }), 'not_offered');
+      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'Aetherの道具はライのscopeだけ', wouldWork: 'ライとの会話か、ボクの時間で使う' } }), 'not_offered');
     }
     if (tool.domain === 'owner_documents_read' && !this.ownerDocumentsFor(context.scopeKey)) {
-      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライ氏の文書は、ライ氏のscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライ氏と二人だけの会話で aether の道具を使う' } }), 'not_offered');
+      return this.withhold(context, tool, toolFailure('not_offered', `${tool.name} はここでは使えない。`, { retryable: false, refusal: { why: 'ライの文書は、ライのscopeの自分の時間に、許された時だけ読む', wouldWork: 'ライと二人だけの会話で aether の道具を使う' } }), 'not_offered');
     }
     // Only for one of her pursuits she is working on now (ADR-0007), checked here as well as by the loop.
     const pursuitId = rawInput && typeof rawInput === 'object' ? (rawInput as { pursuitId?: unknown }).pursuitId : undefined;
     const pursuit = tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' ? this.store.pursuits.get(context.scopeKey, pursuitId.trim()) : null;
     if (tool.domain === 'owner_documents_read' && typeof pursuitId === 'string' && pursuit?.status !== 'active') {
-      return this.withhold(context, tool, toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む。`, {
+      return this.withhold(context, tool, toolFailure('refused', `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライの文書は、いま進めている気になっていることのためにだけ読む。`, {
         retryable: false, refusal: { why: 'pursuitId が台帳のいま進めているものではない', wouldWork: 'pursuitId に台帳のいま進めているものの id を書く' } }), 'not_pursuing');
     }
     if (!executor) return { tool, result: toolFailure('not_offered', `${tool.name} はまだ使えない。`, { retryable: false }) };
@@ -487,7 +487,7 @@ function secretRefusal(name: string, input: Readonly<Record<string, unknown>>, s
   }
   const words = Object.values(input).filter((value): value is string => typeof value === 'string');
   if (!words.some(word => secrets.carries(word))) return null;
-  return toolFailure('refused', 'ライ氏に内緒と言われたこと、または忘れてと頼まれたことと同じ言い回しが入っているので、書かなかった。', {
+  return toolFailure('refused', 'ライに内緒と言われたこと、または忘れてと頼まれたことと同じ言い回しが入っているので、書かなかった。', {
     retryable: false, refusal: { why: '内緒のこと・忘れたことを書くことになる', wouldWork: 'そこを除いて書き直す' },
   });
 }

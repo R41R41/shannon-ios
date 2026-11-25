@@ -54,6 +54,6 @@ export function carriedOffer(input: Pick<VoiceDecisionInput, 'transcript' | 'con
 
 /** What the research started by such a yes is asked to find: his request, her offer, and his yes. */
 export function carriedRequest(carried: CarriedOffer, transcript: string): string {
-  return [carried.before ? `ライ氏「${carried.before.slice(0, 300)}」` : '', `ボク「${carried.offer}」`, `ライ氏「${transcript.trim()}」`]
+  return [carried.before ? `ライ「${carried.before.slice(0, 300)}」` : '', `ボク「${carried.offer}」`, `ライ「${transcript.trim()}」`]
     .filter(Boolean).join(' → ');
 }

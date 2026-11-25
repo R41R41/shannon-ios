@@ -5,7 +5,7 @@ import { formatYen } from '../../../inhibition/inhibitionPorts.js';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 
-/** Sentence presented as Shannon speaking (です・ます, ボク, ライ氏). */
+/** Sentence presented as Shannon speaking (です・ます, ボク, ライ). */
 export function budgetRequestMessage(announcement: AutonomyBudgetAnnouncement): string {
   const reason = announcement.reason.replace(/\s+/gu, ' ').trim().replace(/[。.!！]+$/u, '');
   return `${SHANNON_OWNER_NAME}、お願いがあります。今日の予算の${formatYen(announcement.capYen)}では足りなくなりそうです。`

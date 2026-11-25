@@ -145,7 +145,7 @@ export function disclosureView(state: CompanionStateSnapshot, memoryId: string, 
     audience: describeAudience(resolved.audience),
     sensitivity: resolved.sensitivity ?? 'sensitive',
     decidedBy: resolved.decidedBy === 'owner' ? 'owner' : known ? 'rule' : 'default',
-    reason: resolved.decidedBy === 'owner' ? 'ライ氏が選んだ扱い'
+    reason: resolved.decidedBy === 'owner' ? 'ライが選んだ扱い'
       : !known ? '区別を記録する前の記憶のため、守る側にしています'
         : resolved.category ? `${SENSITIVITY_CATEGORY_LABELS[resolved.category]}（${resolved.reason ?? ''}）` : resolved.reason ?? '',
   };

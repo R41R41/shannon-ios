@@ -52,7 +52,7 @@ describe('the relationship ledger across days', () => {
     badDay(port);
     clock.at = MORNING;
     const block = await morningBlock(port, clean());
-    expect(block).toContain('[ライ氏との間]');
+    expect(block).toContain('[ライとの間]');
     expect(block).toMatch(/いらだち: (?:少し残っている|残っている|強く残っている)/u);
     expect(block).not.toMatch(/\d/u);
     const rows = database.prepare('SELECT day_key, person_key FROM shannon_feeling_days').all();
@@ -66,14 +66,14 @@ describe('the relationship ledger across days', () => {
     badDay(port);
     clock.at = MORNING;
     const forgotten = forgetting([0, 1, 2, 3, 4, 5].map(minute => `experience:t${minute}`));
-    expect(await morningBlock(port, forgotten)).not.toContain('[ライ氏との間]');
+    expect(await morningBlock(port, forgotten)).not.toContain('[ライとの間]');
   });
 
   it('carries nothing for anyone unknown, and nothing within the same day', async () => {
     const { port } = composed(all);
     badDay(port);
     const handle = feelingText.start(port, { scopeKey: 'owner', alone: true, surface: false, message: 'ねえ', begun: { occurredAt: YESTERDAY, captured: clean() } });
-    expect(await feelingText.block(handle)).not.toContain('[ライ氏との間]');
+    expect(await feelingText.block(handle)).not.toContain('[ライとの間]');
     const lines = port.events.linesFor('owner', feelingActor({ ownerAlone: false }), MORNING, clean());
     expect(lines?.carriedLines).toEqual([]);
   });
@@ -82,7 +82,7 @@ describe('the relationship ledger across days', () => {
     const { port, clock } = composed(all);
     badDay(port);
     clock.at = MORNING;
-    expect(feelingBody.noteReader(() => port, clean).relationship('owner', MORNING)).toMatch(/^\[ライ氏との間\]/u);
+    expect(feelingBody.noteReader(() => port, clean).relationship('owner', MORNING)).toMatch(/^\[ライとの間\]/u);
     const off = composed();
     expect(feelingBody.noteReader(() => off.port, clean).relationship('owner', MORNING)).toBeNull();
   });
@@ -102,8 +102,8 @@ describe('the relationship ledger across days', () => {
     episodes.clock.at = MORNING;
     const block = await morningBlock(episodes.port, clean());
     expect(block).toContain('[前の日の件]');
-    expect(block).toContain('昨日の胸の件（ライ氏）');
-    expect(block).not.toContain('[ライ氏との間]');
+    expect(block).toContain('昨日の胸の件（ライ）');
+    expect(block).not.toContain('[ライとの間]');
     expect(await morningBlock(episodes.port, forgetting([0, 1, 2, 3, 4, 5].map(minute => `experience:t${minute}`)))).not.toContain('[前の日の件]');
   });
 });

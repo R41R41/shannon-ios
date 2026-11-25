@@ -18,19 +18,19 @@ export type WithheldSurface = typeof WITHHELD_SURFACES[number];
 /** Why, in fixed words of hers (the closed codes are the keys). */
 export const WITHHELD_REASON_LABELS = Object.freeze({
   // Her own time's gate (`AutonomyReasonCode`, all but `free_domain`).
-  approval_domain: 'ライ氏の承認が要る',
+  approval_domain: 'ライの承認が要る',
   core_path: '自分の中心の仕組みには触れない',
   production_area: '本番の場所には触れない',
   outside_own_area: '自分の場所の外',
   reaches_others: 'ほかの人に届く',
-  owner_informed: 'ライ氏の文書を読んだあとの時間',
+  owner_informed: 'ライの文書を読んだあとの時間',
   forbidden_domain: '決まりでしないこと',
   spending: 'お金がかかる',
   self_replication: '自分を複製しない',
   impersonation: '誰かのふりはしない',
   private_content: '人に見せないことが入る',
   disabled: '自分の時間が切られている',
-  paused: 'ライ氏が一時停止している',
+  paused: 'ライが一時停止している',
   budget_exhausted: '今日の予算に収まらない',
   access_limit: '回数の上限に届いた',
   unknown_domain: '知らない種類の行動',
@@ -41,7 +41,7 @@ export const WITHHELD_REASON_LABELS = Object.freeze({
   malformed_request: '頼み方の形が正しくない',
   // Her tools' gate, in a conversation or in her own time.
   not_offered: 'その場面では出していない道具',
-  audience: 'ライ氏以外の人が見聞きできる',
+  audience: 'ライ以外の人が見聞きできる',
   unreliable_words: '聞き取りが確かでない',
   secret: '内緒と言われたことが入る',
   not_pursuing: 'いま進めていないことのため',
@@ -49,7 +49,7 @@ export const WITHHELD_REASON_LABELS = Object.freeze({
   // A session's bound.
   session_budget: '一度に使える金額の上限',
   // Syzygy ADR-0008 stage 3, the proactive gate at the delivery points of her own messages (owner answer 2).
-  owner_active: 'ライ氏がいま話している',
+  owner_active: 'ライがいま話している',
   intent_repeat: '同じ用件を30分以内に繰り返さない',
   intent_expired: '用件が古くなった',
   topic_reused: '近い話題を使い回さない',

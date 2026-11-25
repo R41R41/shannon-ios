@@ -80,7 +80,7 @@ export const GAME_DISCLOSURE: MemoryDisclosure = Object.freeze({
  * shared chat) and left out of any turn someone else wrote (`openOnly`).
  */
 export const GAME_REQUEST_DISCLOSURE: MemoryDisclosure = Object.freeze({
-  audience: OWNER_AUDIENCE, sensitivity: 'sensitive' as const, reason: 'ライ氏がマイクラの体に頼んだこと', decidedBy: 'rule' as const, speaker: 'unknown' as const,
+  audience: OWNER_AUDIENCE, sensitivity: 'sensitive' as const, reason: 'ライがマイクラの体に頼んだこと', decidedBy: 'rule' as const, speaker: 'unknown' as const,
 });
 
 export function gameDeathExperience(scopeKey: string, deviceId: string, event: BodyEvent & { cause: string }): GameExperience {

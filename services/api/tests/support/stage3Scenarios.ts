@@ -121,7 +121,7 @@ function world(name: string) {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } }));
     }
     const format = parsed.text?.format;
-    const text = format?.name === 'shannon_body_reaction' ? JSON.stringify({ say: true, text: 'えへへ、なんですかライ氏？', feeling: 'bashful', stance: null })
+    const text = format?.name === 'shannon_body_reaction' ? JSON.stringify({ say: true, text: 'えへへ、なんですかライ？', feeling: 'bashful', stance: null })
       : format === undefined ? 'はい、聞こえています。' : structured('はい、聞こえています。');
     return new Response(JSON.stringify({ output_text: text, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } }));
   }) as typeof fetch;
@@ -259,7 +259,7 @@ const FRIEND_DISCORD = '900000000000000002';
 const PLATFORM_ENVIRONMENT = {
   SHANNON_PLATFORM_BRIDGE_TOKEN: 'b'.repeat(40), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
   SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([
-    { platform: 'discord', conversationId: 'discord::555', ownerUserId: OWNER_DISCORD, title: 'ライ氏とのDM', audience: 'owner-private' },
+    { platform: 'discord', conversationId: 'discord::555', ownerUserId: OWNER_DISCORD, title: 'ライとのDM', audience: 'owner-private' },
     { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER_DISCORD, title: 'テストサーバー' },
   ]),
 };
@@ -344,7 +344,7 @@ async function minecraftScenario(hooks: Stage3Hooks): Promise<Stage3Capture> {
   return w.finish();
 }
 
-const WONDER = { thought: 'ライ氏はいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
+const WONDER = { thought: 'ライはいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
 const UPCOMING = { thought: '歯医者の時間が近いです。', steps: [{ action: 'reach_out', reason: 'upcoming' }] };
 
 /**

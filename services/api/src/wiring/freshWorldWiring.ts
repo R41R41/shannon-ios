@@ -184,7 +184,7 @@ const REFUSED_LABEL: Partial<Record<FreshWorldReason, string>> = {
 
 /** The activity record's sentence for one decision. */
 export function freshWorldSummary(record: Pick<FreshWorldRecord, 'applied' | 'reason' | 'via'>): string {
-  if (record.applied) return `ライ氏の${VIA_LABEL[record.via]}からの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。`;
+  if (record.applied) return `ライの${VIA_LABEL[record.via]}からの開始の頼みで、「新しいワールドで始める」を体に伝えました（今のワールドは別の名前で残り、消えません）。`;
   const why = REFUSED_LABEL[record.reason] ?? '条件を確かめられなかった';
   return `「新しいワールドで始める」はオンですが、${why}ので、今のワールドのまま始めます。`;
 }

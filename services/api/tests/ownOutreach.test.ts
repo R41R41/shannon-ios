@@ -21,7 +21,7 @@ const AT = '2026-10-05T10:36:00.000Z';
 const ASKED = 'いや、そっちからかけてきたじゃん。どうしたの？';
 const HEADER = '[ボクが自分からしたこと]（記録された事実';
 const NO_CALL = '- 電話: 直近24時間、ボクから電話をかけた記録はない。';
-const LAST_TEXT = 'ライ氏、お昼はもう食べましたか。';
+const LAST_TEXT = 'ライ、お昼はもう食べましたか。';
 const delegations = '/v1/voice/gemini/cascade/delegations';
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -105,7 +105,7 @@ describe('what the owner says she did on her own', () => {
   it('tells a call she did place, with what became of it', async () => {
     const { chat, model } = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'unanswered' }] }));
     await chat(ASKED);
-    expect(promptOf(model.last)).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた（出てもらえなかった）。');
+    expect(promptOf(model.last)).toContain('- 電話: 6分前にボクからライのiPhoneへ電話をかけた（出てもらえなかった）。');
     expect(promptOf(model.last)).toContain('- メッセージ: 直近24時間、ボクから送ったメッセージの記録はない。');
   });
 
@@ -135,7 +135,7 @@ describe('what the owner says she did on her own', () => {
   it('with other people able to see or hear, keeps the times and leaves the words of her messages and what became of a call out', async () => {
     const placed = harness(new FakeReader({ messages: [], calls: [{ createdAt: '2026-10-05T10:30:00.000Z', state: 'declined' }] }));
     await placed.chat(ASKED, { audience: 'others' });
-    expect(promptOf(placed.model.last)).toContain('- 電話: 6分前にボクからライ氏のiPhoneへ電話をかけた。');
+    expect(promptOf(placed.model.last)).toContain('- 電話: 6分前にボクからライのiPhoneへ電話をかけた。');
     expect(promptOf(placed.model.last)).not.toContain('断られた');
     const { chat, voice, model } = harness();
     await chat(ASKED, { audience: 'others' });

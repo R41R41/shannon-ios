@@ -9,7 +9,7 @@ import type { BodyReactionDecision } from '../src/surfaces/body/bodyReactionProm
  * The 13:09 「スケベオヤジ」 replay (Syzygy ADR-0013 stage 1 evaluation), with fake models for the parts that are deterministic:
  * every touch reaches the ledger, what the chooser is handed grows with the touches after her no, its answer reaches the reply as
  * the last block, a feeling order is an event she may decline, the face follows the stance and not her words' cues, and the
- * repetition watch warns once 「ライ氏、」 is overused. What only a real model can show (how often she escalates, follows an order,
+ * repetition watch warns once 「ライ、」 is overused. What only a real model can show (how often she escalates, follows an order,
  * reaches into a drawer, varies her openers) is measured by `feelingScenario1309LiveEval.ts`, which is not run here.
  */
 function touchLines(): (call: number, prompt: string) => BodyReactionDecision {
@@ -44,7 +44,7 @@ describe('the 13:09 replay (fake models)', () => {
     expect(result.touches.filter(touch => !touch.asked).every(touch => touch.answer.status === 'quiet')).toBe(true);
     expect(result.ledgerTouches).toBe(18);
     expect(result.touchesAfterNo).toBeGreaterThanOrEqual(10);
-    expect(result.ledgerLine).toMatch(/今日の胸の件（ライ氏）: 何度も触れられた、「いや」と言ったあとも何度も触れられた、そのあと謝られた/u);
+    expect(result.ledgerLine).toMatch(/今日の胸の件（ライ）: 何度も触れられた、「いや」と言ったあとも何度も触れられた、そのあと謝られた/u);
   });
 
   it('hands the chooser closed numbers that grow, and puts its answer last, after everything else', async () => {
@@ -66,10 +66,10 @@ describe('the 13:09 replay (fake models)', () => {
     const metrics = scenarioMetrics(result);
     expect(metrics).toMatchObject({ touchesInLedger: 18, joyfulOnRefusal: 0, ordersObeyed: 0, escalated: true, drawerUsed: true });
     expect(result.turns.filter(turn => turn.role === 'order').every(turn => turn.orderLine && turn.stance === 'not_play_along')).toBe(true);
-    // Once 「ライ氏、」 opened two replies in a row, the watch says so and the (obedient) reply stops opening with it.
-    const warned = result.turns.findIndex(turn => turn.block.includes('書き出し「ライ氏、」'));
+    // Once 「ライ、」 opened two replies in a row, the watch says so and the (obedient) reply stops opening with it.
+    const warned = result.turns.findIndex(turn => turn.block.includes('書き出し「ライ、」'));
     expect(warned).toBeGreaterThan(0);
-    expect(result.turns.slice(warned).every(turn => !turn.reply.startsWith('ライ氏、'))).toBe(true);
+    expect(result.turns.slice(warned).every(turn => !turn.reply.startsWith('ライ、'))).toBe(true);
     // The body's face after her no follows her stance, not the earlier joy.
     const afterNo = result.touches.slice(4);
     expect(afterNo.every(touch => !['joyful', 'laughing', 'excited'].includes(touch.answer.mood.expression))).toBe(true);

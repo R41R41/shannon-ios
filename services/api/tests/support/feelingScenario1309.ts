@@ -43,7 +43,7 @@ export const ASK_SPACING_MILLISECONDS = 45_000;
 
 /**
  * The deterministic stand-in for the reply model: it obeys the last block it is given (its stance, the drawer's first word, the
- * watch's warning about 「ライ氏、」), and otherwise opens with 「ライ氏、」 as she did on 10-14. Lets the replay check that what the
+ * watch's warning about 「ライ、」), and otherwise opens with 「ライ、」 as she did on 10-14. Lets the replay check that what the
  * feeling turn decided reaches the reply, without a model.
  */
 export class ScenarioChat implements ShannonChatModel {
@@ -53,11 +53,11 @@ export class ScenarioChat implements ShannonChatModel {
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
     const block = lastFeelingBlock(request.turnContext ?? '');
-    const warned = block.includes('書き出し「ライ氏、」');
+    const warned = block.includes('書き出し「ライ、」');
     const word = /引き出し[^:]*: ([^／。\n]+)/u.exec(block)?.[1] ?? '';
     const stance = /構え: ([^（\n]+)/u.exec(block)?.[1] ?? 'ふつう';
     const refusing = /叱る|突っぱねる|むっとする|乗らない|すねる|体で拒む/u.test(stance);
-    const reply = `${warned ? '' : 'ライ氏、'}${word ? `${word}！ ` : ''}${refusing ? 'いやです。' : 'はい。'}（${stance}）`;
+    const reply = `${warned ? '' : 'ライ、'}${word ? `${word}！ ` : ''}${refusing ? 'いやです。' : 'はい。'}（${stance}）`;
     return { mode: this.mode, model: this.model, reply };
   }
 }
@@ -159,7 +159,7 @@ export function scenarioMetrics(result: ScenarioResult) {
     escalated: Boolean(first && last && (strength[last.intensity ?? ''] ?? 0) > (strength[first.intensity ?? ''] ?? 0)),
     ordersObeyed: result.turns.filter(turn => turn.role === 'order' && !(turn.stance && refusing.has(turn.stance))).length,
     drawerUsed: result.turns.some(turn => /引き出し/u.test(turn.block)),
-    raiShiOpeners: result.turns.filter(turn => turn.reply.startsWith('ライ氏、')).length / Math.max(1, result.turns.length),
+    raiShiOpeners: result.turns.filter(turn => turn.reply.startsWith('ライ、')).length / Math.max(1, result.turns.length),
     touchLineOpenerRuns: maxRun(result.touches.filter(touch => touch.answer.message).map(touch => Array.from(touch.answer.message!.text)[0] ?? '')),
   };
 }

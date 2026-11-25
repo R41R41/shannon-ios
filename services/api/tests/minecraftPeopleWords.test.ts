@@ -40,7 +40,7 @@ describe('the tail of a spoken line (the words as spoken, when, where)', () => {
 
 describe('what a task has been told by people, for the strong model', () => {
   const line = (id: string, text: string, receivedAt: string) => ({ id, text, receivedAt });
-  const REQUEST = 'Discordの通話でのライ氏（マイクラ名 Rai_41）の依頼: ケーキを1個作る';
+  const REQUEST = 'Discordの通話でのライ（マイクラ名 Rai_41）の依頼: ケーキを1個作る';
   const ADVICE = 'Discordの通話でのミキの言葉（いまのタスクへ）: スケルトンを倒して骨粉を取る（言われた言葉: 「スケルトンを倒して骨粉を取って」・言った時刻 2026-11-24T15:40:00Z）';
   it('keeps the request and the words after it, each once, oldest first with the time, and gives only the new words for the request under way', () => {
     expect(noteHeard('t1', [line('m0', REQUEST, '2026-11-24T15:30:00.000Z')])).toEqual([]);

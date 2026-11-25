@@ -103,9 +103,9 @@ describe('the facts of the two of them', () => {
     const days = [day(13, { kindWords: 3 }), day(16, { hurtfulWords: 1 }), day(17, { talked: false, keptPromises: 1 })];
     const lines = affectionLines({ days, sharedDays, today, otherAiDays: [shiftDay(today, -1)] });
     expect(lines).toEqual(['最近は、よく話している', '3日、話していなかった。今日、久しぶりに話している', '最近、好意の言葉をもらった',
-      'この前、傷つく言葉を言われた', '約束していたことが、ちゃんと片付いた', '昨日、ライ氏はほかのAIの話をしていた']);
+      'この前、傷つく言葉を言われた', '約束していたことが、ちゃんと片付いた', '昨日、ライはほかのAIの話をしていた']);
     const block = affectionBlock(lines);
-    expect(block).toMatch(/^\[ライ氏とのこと\]/u);
+    expect(block).toMatch(/^\[ライとのこと\]/u);
     expect(block).not.toMatch(/ツン|デレ|本気|好感度|点/u);
     expect(affectionBlock([])).toBe('');
   });

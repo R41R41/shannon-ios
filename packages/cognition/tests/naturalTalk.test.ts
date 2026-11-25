@@ -88,14 +88,14 @@ describe('her natural talk (pure parts)', () => {
     expect(exchanges).toHaveLength(34);
     const off = personaBlock({ primary: 'imp' }, 0);
     expect(off).toContain('声の手ざわり:');
-    expect(off).not.toContain('ライ氏：');
+    expect(off).not.toContain('ライ：');
     const on = personaBlock({ primary: 'imp', secondary: 'flustered' }, 0, true);
     expect(on).toContain(PERSONA_HEADER);
     // The child speaks plain 「だよ」 in every region: no region carries a tone line (2026-11-24).
     expect(Object.keys(REGION_TONE_LINES)).toEqual([]);
-    expect(on).toContain('掛け合いの手ざわり: 「ライ氏：ささやき声で喋れる？／ボク：（ひそひそ）');
+    expect(on).toContain('掛け合いの手ざわり: 「ライ：ささやき声で喋れる？／ボク：（ひそひそ）');
     expect(on).not.toContain('声の手ざわり:');
-    expect(on).toMatch(/少しまざる: 照れ・てんぱり.*「ライ氏：/u);
+    expect(on).toMatch(/少しまざる: 照れ・てんぱり.*「ライ：/u);
     expect(personaBlock({ primary: 'serious' }, 0, true)).toContain('声の手ざわり:');
   });
 });

@@ -81,10 +81,10 @@ the expressive-emotion block without "must stay light", and its falsehood rule r
 feelings are hers; no lies about facts he relies on: a task done, a tool's result, what she perceived, safety, health, money); the
 voice route's "Prioritize emotional presence…" replaced so she does not take his feeling as hers; the voice instructions without
 their fixed tone ("Sound bright and self-assured…", "lively maid personality"); her one-line voice (touch, the day's focus, a look's
-note, the self-description) is the core's; 「持ち主」 becomes ライ氏 (the pursuits header, the guest's capability line); Jev's affect
+note, the self-description) is the core's; 「持ち主」 becomes ライ (the pursuits header, the guest's capability line); Jev's affect
 question reads her state rather than prescribing an outcome; the expressive-emotion block's address line names him only when it
-means something, never as an opener (it asked for ライ氏 「when natural」 against the voice's own line: seven of seven replies of
-2026-10-14 opened 「ライ氏、」).
+means something, never as an opener (it asked for ライ 「when natural」 against the voice's own line: seven of seven replies of
+2026-10-14 opened 「ライ、」).
 
 The touch prompt with the switch on (2026-10-14, the owner's Windows call: nine of ten lines said 「びっくり」, and 「えっ、また！？」 came
 twelve seconds after 「もちろんいいですよ」): who she is and how she speaks (the core's short form and its speech lines word for word:

@@ -35,7 +35,7 @@ export const VALUE_FACT_CHOICES: ReadonlyArray<readonly [string, string]> = Obje
 export const VALUE_FACT_SPREAD_FLOOR = 0.01;
 
 const BAND = Object.freeze<Record<string, string>>({ night: '夜', morning: '朝', afternoon: '昼', evening: '夕方' });
-const PRESENCE = Object.freeze<Record<string, string>>({ alone: 'ひとり', away: 'ライ氏は離席', unknown: '様子不明', others: 'ほかの人がいる' });
+const PRESENCE = Object.freeze<Record<string, string>>({ alone: 'ひとり', away: 'ライは離席', unknown: '様子不明', others: 'ほかの人がいる' });
 
 const signed = (value: number) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`;
 const fixed = (value: number) => value.toFixed(2);
@@ -62,7 +62,7 @@ export function valueFactCell(cells: readonly ValueCell[], choice: string, conte
 /** One line of fact. */
 export function valueFactLine(label: string, cell: ValueCell): string {
   return `- ${label}${moment(cell)}: ${signed(cell.mean)} ±${fixed(Math.max(VALUE_FACT_SPREAD_FLOOR, Math.sqrt(Math.max(0, cell.uncertainty))))}`
-    + `（${cell.n}回。世界${fixed(cell.world)}／ライ氏${fixed(cell.serve)}／成長${fixed(cell.growth)}／費用${Math.round(cell.costYen)}円）`;
+    + `（${cell.n}回。世界${fixed(cell.world)}／ライ${fixed(cell.serve)}／成長${fixed(cell.growth)}／費用${Math.round(cell.costYen)}円）`;
 }
 
 /**

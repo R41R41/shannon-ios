@@ -12,12 +12,12 @@ import { quiet, requestDigest, scenario, WIDE_POLICY, SUMMARY_POLICY } from './f
  * the others are as they were.
  */
 const GOLDEN = {
-  transient_one_epoch: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'fa4ac8eded3016a9', 'dd4909e551b44607', '780dccb5b19409eb', '2fa713925af4e8d2', '57dda367f4b17273', '666d9681b367f2d7', '29b1ab440138c561', '50ca3bbe18198484', 'e2bdeafda9e3c095', 'a67559707ff6ec9e', '35c022c4d30251c3', '0b8cc31513d10fb8', 'c86039d6e693a8f7', '454fd1d5d3d7dd60', '6f09d3998fcbb058', '40ef69ad99b80863', '65794c1d1c86ac42', '7e206fa060a3c5f4', '46f9975157ae370d', 'c09164cf6e4e49f6'],
-  transient_summaries: ['ff33a6f160d06a8a', '41a6b63de1858b9d', 'fd1cc22e4fde9eaf', '57b1790563b465cd', '56071f8faf322718', 'e5559d0bac45b8a2', '728c9857da850d8b', 'e5f6f559be79c883', '151028729e706a27', '182bd80cae803bbf', 'c140aa19fde60ce9', '1880da65c8aa039e', '32fabbe3f9519663', '18a711e99962b3ab', '35527622b8fcd17f', '3884a7be1ace3814', '5095f531c8c346e5', '972d6a4140ee201f', 'aa98aa1171a2c5f5', '32daf21aa358b61e', 'a6c748a0b6582d8b', '0d3977bc4f4056bc', 'c2b669212b027760', '774133ba92d2bca9', 'ccc692f07a8ff659', '3af4d4715b2303c4', 'a5a99f421b96e0ec', '2afb7c0808b79909', '69e0b3903999ac45', '521246ad8660176e'],
+  transient_one_epoch: ['cefd022ea195c63b', 'a18be46624e2719f', '3b333f5a78d51a3e', '9d5f17a5ad455dad', '9c94b7baa2696ed5', 'b1d496550a37b67e', 'da0f3794f0e640a6', '599e7912fdc9cbfb', 'abe0da50ea78e553', 'e648b0c5cf6424ff', '0302a3a0b820de19', '7ac01ea695233f45', '87d079442c96fb36', '11acd513737b7cd9', 'b1768c2bfccdbfab', 'a6ed4c29decd5e8a', '9885fd3f9d5c50ea', '6c40e204a7304c71', 'ddd6b30af4d5e2f0', 'e41b08ccb69024ba', 'c764fbbc4f247eb4', '41036845879dc5a3', '08c285ef76d4e15c', 'ff67796eee2bb8fa', '1b31fc51de29bad6', '15b86ccd49d5f8ee', '9ceb71a9e63a4dbf', 'b98ee006637de617', '5f248fd4c245f2b3', '4351237951d76e31'],
+  transient_summaries: ['cefd022ea195c63b', 'a18be46624e2719f', '3b333f5a78d51a3e', '9d5f17a5ad455dad', '9c94b7baa2696ed5', 'b1d496550a37b67e', 'da0f3794f0e640a6', '599e7912fdc9cbfb', 'abe0da50ea78e553', 'e648b0c5cf6424ff', '8b428776da55eec7', 'e240f8dafd26a74d', '04007d5b4c2638b0', 'dec1d414901a7466', 'ae790211cd5e2a5d', '3762a605f44c0c17', '3769e2798c0e3cc8', 'c734cbeed7d5bae2', 'fd9837f5974d7864', '17c1d3bdd6876355', '3029327bcc6258fd', 'c38e7fd6c6f56e87', '12876f36955c8edb', 'b69d2987792f76db', '496c6a0a27760f99', 'd44fe2763007fd71', '2a9ec0fd3476b8ea', '985a737b14e74acc', '93c11cff5e712840', '7c7e4965b0efdc5b'],
   // Flow 1113 (e8665813): the body summary's instruction says its size (within 4,000 tokens), so its digest is new.
-  body_summary: ['7b60659dbbc760e6'],
+  body_summary: ['3c26e85291bd8deb'],
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
-  first_plan: ['1d03a04bc6c71595'],
+  first_plan: ['259ec259c36d009b'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });

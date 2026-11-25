@@ -14,7 +14,7 @@ import { speakTimePrivacyCheck } from '../perception/perceptionPorts.js';
 import { sharedAudienceHeader } from './platformBridgeBindings.js';
 
 /** The speak-time check of a turn someone other than the owner wrote: nobody there may release a protected line of his. */
-const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line => !line.startsWith('- When ライ氏 himself')).join('\n');
+const OTHERS_SPEAK_TIME_CHECK = speakTimePrivacyCheck.split('\n').filter(line => !line.startsWith('- When ライ himself')).join('\n');
 
 /**
  * One platform surface of the conversation kernel (`ShannonApiKernel.textTurn`), shared by every place where a bound

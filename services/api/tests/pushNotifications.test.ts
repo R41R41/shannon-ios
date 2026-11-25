@@ -60,7 +60,7 @@ describe('push notification delivery', () => {
     const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
     push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ab'.repeat(32), 'sandbox');
     const [notification] = push.pending();
-    expect(notification?.content).toBe('ライ氏、部屋のことでひとことあります。');
+    expect(notification?.content).toBe('ライ、部屋のことでひとことあります。');
     expect(notification?.content).not.toBe(before);
   });
 
@@ -79,7 +79,7 @@ describe('push notification delivery', () => {
       expect(message?.roomLook).toBe(roomLook);
       const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
       push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ab'.repeat(32), 'sandbox');
-      expect(push.pending()[0]?.content === 'ライ氏、部屋のことでひとことあります。').toBe(roomLook);
+      expect(push.pending()[0]?.content === 'ライ、部屋のことでひとことあります。').toBe(roomLook);
       push.close();
     }
   });
@@ -291,8 +291,8 @@ describe('push notification delivery', () => {
 
     expect(push.pending().map(item => [item.initiativeId, item.title, item.content])).toEqual([
       ['agent:approval', 'シャノン · 許可待ち', '「リンク表示を直す」を続けるには、コマンド実行の許可が必要です。'],
-      ['agent:needs-owner', 'シャノン · 続きが必要', 'ライ氏、「リンク表示を直す」は続きが必要です。次：実機で起動を確認'],
-      ['agent:legacy-needs-owner', 'シャノン · 続きが必要', 'ライ氏、「リンク表示を直す」は続きが必要です。次：全体検証を修正して再実行'],
+      ['agent:needs-owner', 'シャノン · 続きが必要', 'ライ、「リンク表示を直す」は続きが必要です。次：実機で起動を確認'],
+      ['agent:legacy-needs-owner', 'シャノン · 続きが必要', 'ライ、「リンク表示を直す」は続きが必要です。次：全体検証を修正して再実行'],
     ]);
     push.close();
   });

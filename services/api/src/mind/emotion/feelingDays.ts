@@ -45,7 +45,7 @@ export const carriesAnything = (features: FeelingDayFeatures | undefined): boole
 const OTHER_AI_DAYS = 3;
 
 /** The owner's matters with anyone else present (§4.4 `people`): marked, for her own check before she speaks. */
-export const OWNER_PRIVATE_MARK = '【機微:ライ氏との間・ライ氏だけが知っている】';
+export const OWNER_PRIVATE_MARK = '【機微:ライとの間・ライだけが知っている】';
 
 export const FEELING_DAY_LIMITS = Object.freeze({ backfillDays: 30, retentionDays: 400,
   /** A stranger's or a viewer's light ledger (and anyone unknown or a scene): kept this long (§4.2: 保存期間に上限). */
@@ -228,7 +228,7 @@ export class FeelingDays {
   private relationship(days: ReturnType<FeelingDays['history']>, personKey: string, today: string): CarriedLines {
     const state = observeSync('emotion', { phase: 'feeling.relationship', owner: personKey === OWNER_PERSON_KEY, days: days.length },
       () => foldRelationship(days, personKey, today), value => ({ ...value.scales, peakTrust: value.peak.trust, peakLiking: value.peak.liking }));
-    const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ氏' : 'この人', relationshipParametersFor(personKey).scales);
+    const line = relationshipLine(state, personKey === OWNER_PERSON_KEY ? 'ライ' : 'この人', relationshipParametersFor(personKey).scales);
     return { lines: line ? [line] : [], facts: relationshipFacts(state, relationshipParametersFor(personKey).scales) };
   }
 

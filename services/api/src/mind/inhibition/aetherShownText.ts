@@ -36,7 +36,7 @@ const UNREADABLE = toolFailure('unavailable', '読んだ中身を、ここにい
   retryable: true, refusal: { why: '内緒のことの記憶をいま読めなかった', wouldWork: '少しあとでもう一度' },
 });
 const CARRIES = toolFailure('refused', '読んだ中身に、ここにいる人には渡さないことが入っていたので、渡さない。', {
-  retryable: false, refusal: { why: 'ライ氏以外の人がこの返事を見聞きできる', wouldWork: 'ライ氏と二人だけの時に読む' },
+  retryable: false, refusal: { why: 'ライ以外の人がこの返事を見聞きできる', wouldWork: 'ライと二人だけの時に読む' },
 });
 
 /** A tool result as the model may see it with others present. Failures carry no read text and pass as they are. */

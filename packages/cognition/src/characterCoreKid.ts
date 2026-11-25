@@ -94,7 +94,7 @@ export const KID_CORE_SPEECH = `話し方: ${KID_SPEECH_USUAL}${KID_SPEECH_SURPR
 export const CHARACTER_CORE_KID: CharacterCore = Object.freeze({
   version: 'v4-kid',
   status: 'draft',
-  hash: 'eddc110edef397ee112897d322a14c041fc9edc63786eae9ff27fd96567e123f',
+  hash: '8e02eec12db592810a3f062d87424b86222ac1588c36d5b42069126acf5ff6e1',
   text: KID_TEXT,
   summary: KID_SUMMARY,
 });

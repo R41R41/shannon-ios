@@ -28,7 +28,7 @@ describe('a short yes to her own offer to look something up (owner decision 2026
 
   it('gives the research his request, her offer and his yes', () => {
     const carried = carriedOffer(turn('お願いします', '調べてみましょうか？'))!;
-    expect(carriedRequest(carried, 'お願いします')).toBe('ライ氏「有明海でエビは取れる？」 → ボク「調べてみましょうか？」 → ライ氏「お願いします」');
+    expect(carriedRequest(carried, 'お願いします')).toBe('ライ「有明海でエビは取れる？」 → ボク「調べてみましょうか？」 → ライ「お願いします」');
   });
 
   it('selects the web for the local rules and over a Jev answer that left it out', async () => {

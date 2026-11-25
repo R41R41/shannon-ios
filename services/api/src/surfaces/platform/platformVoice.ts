@@ -29,7 +29,7 @@ import {
   speakerPositionLine, speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
-import { introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from './voicePresencePrompt.js';
+import { greetingHintBlock, introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from './voicePresencePrompt.js';
 import { warmedAudiences, type VoiceWarmAsk, type WarmAudience } from '../voice/voiceWarm.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
@@ -39,7 +39,7 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { toolRequestGuide } from '../../contracts/minecraftRequestRules.js';
 
 /**
- * The reply to what someone said in a Discord voice channel (dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、Discordでライ氏や
+ * The reply to what someone said in a Discord voice channel (dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、Discordでライや
  * 友人と会話し、今何をしているか・どういう状況かを込みで実況・会話できるように」). A platform runtime (the Discord bot) sends the words it
  * heard and who said them; the turn is a turn of the conversation kernel through the platform surface (`platformSurface.ts`), exactly
  * as `POST /v1/platform/reply` is, with these differences, all in the one place that knows the channel is a voice channel:
@@ -509,7 +509,7 @@ export class PlatformVoiceService {
         ownerAccount: seat.binding.ownerUserId, modOnly: this.modOnly(request), server, onAir,
         speaker: { account: request.sourceUserId, displayName: request.sourceDisplayName, owner: seat.owner, minecraftName: request.speakerMinecraftName },
       });
-      const introduced = address.introduced === true ? introducedBlock(facts, seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName, request.userMessage) : '';
+      const introduced = address.introduced === true ? introducedBlock(facts, request.userMessage) : address.reason === 'directed' ? greetingHintBlock(facts) : '';
       return [presenceBlock(facts), onAirBlock(facts.onAir), introduced].filter(Boolean).join('\n\n');
     } catch {
       return '';

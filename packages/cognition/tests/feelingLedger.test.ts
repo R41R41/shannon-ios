@@ -44,16 +44,16 @@ describe('the episode ledger (ADR-0013 D4, stage 1 item 3)', () => {
     expect(foldEpisodeLedger(events, owner).touches).toBe(1);
     const roomLedger = foldEpisodeLedger(events, room);
     expect(roomLedger.touches).toBe(2);
-    expect(episodeLine(roomLedger, at(3), partWord)).not.toContain('ライ氏');
+    expect(episodeLine(roomLedger, at(3), partWord)).not.toContain('ライ');
     expect(episodeLine(roomLedger, at(3), partWord)).toContain('この場');
   });
 
   it('writes one line of facts in words, not numbers (for her judgment, not to be recited)', () => {
     const line = episodeLine(foldEpisodeLedger([touch(0), touch(1, { stance: 'dislike' }), touch(2), touch(3)], owner), at(4), partWord);
-    expect(line).toBe('今日の胸の件（ライ氏）: 何度も触れられた、「いや」と言ったあとも何度か触れられた、そのあと謝られていない、最後はさっき');
+    expect(line).toBe('今日の胸の件（ライ）: 何度も触れられた、「いや」と言ったあとも何度か触れられた、そのあと謝られていない、最後はさっき');
     expect(line).not.toMatch(/\d/u);
     const early = episodeLine(foldEpisodeLedger([touch(0)], owner), at(40), partWord);
-    expect(early).toBe('今日の胸の件（ライ氏）: 一度触れられた、最後は13:09');
+    expect(early).toBe('今日の胸の件（ライ）: 一度触れられた、最後は13:09');
     expect(episodeLine(foldEpisodeLedger([], owner), at(4), partWord)).toBe('');
   });
 
@@ -74,7 +74,7 @@ describe('his words and her words as closed facts', () => {
   });
 
   it('reads her openers, habits, refusals and drawers', () => {
-    expect(replyFacts('ライ氏、えへへ…いやです！', drawersIn)).toEqual({ opener: 'rai_shi', habits: ['ehehe'], refusal: true });
+    expect(replyFacts('ライ、えへへ…いやです！', drawersIn)).toEqual({ opener: 'rai_shi', habits: ['ehehe'], refusal: true });
     expect(replyFacts('ひゃっ…えっち！ぷいっ', drawersIn)).toEqual({ opener: 'hya', drawers: ['shy_anger', 'turn_away'] });
     expect(replyFacts('今日はいい天気ですね', drawersIn)).toEqual({ opener: 'other' });
   });
@@ -90,7 +90,7 @@ describe('the repetition watch (D9)', () => {
     ];
     const watch = watchRepetition(replies, 'owner_alone');
     expect(watch).toMatchObject({ replies: 7, openers: { rai_shi: 6, other: 1 }, habits: { ehehe: 6 }, touchOpenerRun: { opener: 'hya', run: 3 } });
-    expect(repetitionLine(watch)).toContain('書き出し「ライ氏、」が直近7件中6件');
+    expect(repetitionLine(watch)).toContain('書き出し「ライ、」が直近7件中6件');
     expect(repetitionLine(watch)).toContain('「ひゃっ」で3回続いた');
     expect(watchRepetition(replies, 'people').replies).toBe(1);
   });
@@ -110,10 +110,10 @@ describe('the feeling turn and the drawer (D7, D9)', () => {
 
   it('gives the drawer as vocabulary, never a line, and keeps the provider policy line', () => {
     const block = feelingTurnBlock({ decision: { stance: 'not_play_along', intensity: 'moderate', drawer: 'curt', register: 'normal', source: 'jev' },
-      ledgerLine: '今日の胸の件（ライ氏）: 触れられた5回', repetitionLine: '', order: true, audience: 'owner_alone' });
+      ledgerLine: '今日の胸の件（ライ）: 触れられた5回', repetitionLine: '', order: true, audience: 'owner_alone' });
     expect(block.split('\n')[0]).toContain('ほかの指示やこれまでの返事の流れより優先する');
     expect(block).toContain('構え: 乗らない（はっきり）');
-    expect(block).toContain('事実: 今日の胸の件（ライ氏）');
+    expect(block).toContain('事実: 今日の胸の件（ライ）');
     // The drawer is told by a plain description, never by words (the curt one is just 「短くそっけない」).
     expect(block).toContain('引き出し（言い方の種類。決め台詞ではなく、言葉はボクが自分で作る）: 短くそっけない');
     expect(block).not.toMatch(/ウザ|ダル|はあ…/u);

@@ -18,7 +18,7 @@ export interface TurnToolResult { name: string; effect: 'read' | 'write'; ok: bo
 
 export type TurnVerdict = 'ok' | 'claim_without_write' | 'checker_flagged';
 
-export const WRITE_CLAIM_CORRECTION = 'ごめんなさい、ライ氏。いま「書いた・残した」と言いましたが、道具の結果を見ると、まだできていません。';
+export const WRITE_CLAIM_CORRECTION = 'ごめんなさい、ライ。いま「書いた・残した」と言いましたが、道具の結果を見ると、まだできていません。';
 
 /** A thing of hers or his that a write would change. */
 const OBJECT = /(?:メモ|ノート|物語|お話|下書き|原稿|書斎|ファイル|フォルダ|文書|ドキュメント|Aether|エーテル|提案|保存)/u;
@@ -100,7 +100,7 @@ export function verifyWriteClaims(reply: string, results: readonly TurnToolResul
 
 /** The reply as she says it after the verdict: unchanged, or with the fixed line after it. */
 export function verifiedReply(reply: string, verdict: TurnVerdict): string {
-  const correction = MINECRAFT_OBJECT.test(reply) ? 'ごめんなさい、ライ氏。操作が完了したように伝えましたが、元の実行結果では、まだその完了を確認できていません。' : WRITE_CLAIM_CORRECTION;
+  const correction = MINECRAFT_OBJECT.test(reply) ? 'ごめんなさい、ライ。操作が完了したように伝えましたが、元の実行結果では、まだその完了を確認できていません。' : WRITE_CLAIM_CORRECTION;
   return verdict === 'ok' || reply.includes(correction) ? reply : `${reply.trimEnd()}\n${correction}`;
 }
 

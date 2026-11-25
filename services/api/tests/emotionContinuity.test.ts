@@ -94,14 +94,14 @@ describe('(a) continuity across conversations, text', () => {
     const { chat, advance, state, prompt } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     expect(state().expressiveEmotion).toMatchObject({ primary: 'sulky', awakeAt: expect.any(Number) });
-    expect(state().lingering).toMatchObject([{ kind: 'sulky', target: 'ライ氏' }]);
+    expect(state().lingering).toMatchObject([{ kind: 'sulky', target: 'ライ' }]);
     const awakeAtNight = state().emotionClock!.awakeMs;
 
     advance(9 * HOUR);
-    const morning = await chat('おはよう', 'おはようございます、ライ氏。');
+    const morning = await chat('おはよう', 'おはようございます、ライ。');
     // The prompt of that first turn says what she still feels, why and for whom, and that it may show and resolve.
     expect(prompt()).toContain('いまの会話感情: sulky');
-    expect(prompt()).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている（sulky \/ 強さ 0\.4\d）。/u);
+    expect(prompt()).toMatch(/まだ残っている気持ち: 9時間前にライとの会話ですねたことを、まだ少し引きずっている（sulky \/ 強さ 0\.4\d）。/u);
     expect(prompt()).toContain('謝罪ややさしい言葉、眠りや起きて過ごす時間で自然にほどけてよい。');
     // Owner 2026-10-19: it colours her voice; it is not added to whatever he asks.
     expect(prompt()).toContain('ふだんは声の調子や間に、少しにじむくらい');
@@ -117,7 +117,7 @@ describe('(a) continuity across conversations, text', () => {
     const { chat, advance, state, prompt, now } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(9 * HOUR);
-    await chat('おはよう', 'おはようございます、ライ氏。');
+    await chat('おはよう', 'おはようございます、ライ。');
     const left = livingLingering(state(), now(), emotionTiming()).find(item => item.feeling.kind === 'sulky')?.strength ?? 0;
     expect(left).toBeGreaterThan(0.15);
     expect(left).toBeLessThan(0.3);
@@ -148,7 +148,7 @@ describe('(a) continuity across conversations, text', () => {
     vi.stubEnv('SHANNON_EMOTION_OVERNIGHT_SHARE', '1'); // the awake clock alone (the night's halving is tested apart)
     const { chat, advance, state, now, stateStore } = harness();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
+      primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.24, carryover: 0.6, updatedAt: NIGHT,
     } });
     const strength = () => livingLingering(state(), now(), emotionTiming()).find(item => item.feeling.kind === 'hurt')?.strength ?? 0;
@@ -169,7 +169,7 @@ describe('(a) continuity across conversations, voice', () => {
     const { api, chat, advance, state, model, now } = harness();
     await chat('今日はもう別のAIと話すね', SULK);
     advance(9 * HOUR);
-    model.reply = 'おはようございます、ライ氏。';
+    model.reply = 'おはようございます、ライ。';
     const response = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: 'おはよう' } });
     const plan = (response.body as { voicePlan: Record<string, any> }).voicePlan;
@@ -179,12 +179,12 @@ describe('(a) continuity across conversations, voice', () => {
     for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt']) expect(plan.emotion).not.toHaveProperty(key);
     expect(Object.keys(plan.emotion).sort()).toEqual(['arousal', 'carryover', 'decay', 'intensity', 'primary', 'secondary', 'startedAt', 'target', 'updatedAt', 'valence', 'visibility']);
     expect(promptOf(model.voiceRequests.at(-1)!)).toContain('primary=bright; secondary=sulky');
-    expect(promptOf(model.voiceRequests.at(-1)!)).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている/u);
+    expect(promptOf(model.voiceRequests.at(-1)!)).toMatch(/まだ残っている気持ち: 9時間前にライとの会話ですねたことを、まだ少し引きずっている/u);
     // A bright tone is not a mood: nothing covers the sulk underneath, and when the moment has passed she is sulking again.
     expect(state().lingering).toMatchObject([{ kind: 'sulky' }]);
     expect(state().lingering).toHaveLength(1);
     advance(8 * MINUTE);
-    expect(presentShannonFeeling(state(), now(), emotionTiming())).toMatchObject({ primary: 'sulky', target: 'ライ氏' });
+    expect(presentShannonFeeling(state(), now(), emotionTiming())).toMatchObject({ primary: 'sulky', target: 'ライ' });
     // A voice turn that says nothing emotional carries it: the plan the voice acts with is the sulk.
     model.reply = 'はい、わかりました。';
     const next = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
@@ -286,7 +286,7 @@ describe('(j) the owner\'s call while someone else can hear', () => {
     for (const countInWindow of [1, 2, 3, 4]) {
       stateStore.apply(scope, { type: 'body-touched', touch: { kind: 'poke', countInWindow, ownerAlone: true } });
     }
-    expect(state().lingering).toMatchObject([{ kind: 'sulky', cause: 'ライ氏につつかれた（続けて4回目）' }]);
+    expect(state().lingering).toMatchObject([{ kind: 'sulky', cause: 'ライにつつかれた（続けて4回目）' }]);
     advance(9 * HOUR);
     const before = state();
     model.reply = 'はい、わかりました。';
@@ -316,7 +316,7 @@ describe('(g) an activity session keeps her awake', () => {
     const api = new SQLiteShannonStore({ path, now });
     api.snapshot(scope);
     api.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sulky', secondary: [], intensity: 0.62, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.5,
+      primary: 'sulky', secondary: [], intensity: 0.62, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.5,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.5, updatedAt: NIGHT,
     } });
     const before = api.snapshot(scope);
@@ -393,7 +393,7 @@ describe('(g) an activity session keeps her awake', () => {
     const clock = { at: NIGHT };
     const api = new SQLiteShannonStore({ path, now: () => clock.at });
     api.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sulky', secondary: [], intensity: 0.62, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.5,
+      primary: 'sulky', secondary: [], intensity: 0.62, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.5,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.5, updatedAt: NIGHT, continued: false, decided: true,
     } });
     expect(JSON.stringify(api.events(scope))).not.toMatch(/"continued"|"decided"|"presentAt"|"underneath"/u);
@@ -456,7 +456,7 @@ describe('(h) stored state from before the awake clock', () => {
     first.apply(scope, { type: 'emotion-adjusted', delta: { valence: 0.3 } });
     first.apply(scope, { type: 'interest-observed', interest: '物語' });
     first.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'happy', secondary: [], intensity: 0.7, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.5, valence: 0.6,
+      primary: 'happy', secondary: [], intensity: 0.7, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.5, valence: 0.6,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.6, updatedAt: NIGHT,
     } });
     first.close();
@@ -490,12 +490,12 @@ describe('her concern for the owner is what every surface shows while it lasts',
   it('answers his loss with concern in the reply, the returned state, the state read afterwards and the body, over a stronger sulk', async () => {
     const { chat, advance, shown, body, stateStore, state } = harness();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sulky', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.6,
+      primary: 'sulky', secondary: [], intensity: 0.8, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.6,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.6, updatedAt: NIGHT,
     } });
     expect(state().lingering).toMatchObject([{ kind: 'sulky', strength: 0.8 }]);
     advance(MINUTE);
-    const reply = await chat('父が亡くなった', 'そばにいます、ライ氏。');
+    const reply = await chat('父が亡くなった', 'そばにいます、ライ。');
     expect(reply.messageEmotion.expression).toBe('tender');
     expect(reply.state.presence.mood).toMatchObject({ expression: 'tender', fromConversation: true });
     expect((await shown()).presence.mood).toEqual(reply.state.presence.mood);
@@ -513,7 +513,7 @@ describe('an apology eases only on proof that it was his', () => {
     const stateStore = new InMemoryCompanionStateStore(now, emotionTiming());
     const conversationStore = new InMemoryConversationStore();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
+      primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
       visibility: 'expressed', startedAt: MORNING, decay: 0.24, carryover: 0.6, updatedAt: MORNING,
     } });
     const processor = new TurnRefinementProcessor(stateStore, conversationStore);
@@ -541,7 +541,7 @@ describe('the state returned with a reply agrees with the state read afterwards'
   it('shows a reaction she is still having, held through a neutral reply, the same in both', async () => {
     const { chat, advance, shown, stateStore } = harness();
     stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sad', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
+      primary: 'sad', secondary: [], intensity: 0.8, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.24, carryover: 0.6, updatedAt: NIGHT,
     } });
     advance(4 * MINUTE);
@@ -562,7 +562,7 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
     expect(state().lingering).toBeUndefined();
     expect(state().emotionClock).toBeUndefined();
     advance(9 * HOUR);
-    const morning = await chat('おはよう', 'おはようございます、ライ氏。');
+    const morning = await chat('おはよう', 'おはようございます、ライ。');
     expect(prompt()).toContain('いまの会話感情: 落ち着いている (前の気持ちは時間とともに落ち着いた)');
     expect(prompt()).not.toContain(LINE);
     expect(morning.messageEmotion.expression).toBe('calm');
@@ -643,7 +643,7 @@ describe('the emotion source stays core', () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => NIGHT });
     store.apply(scope, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'happy', secondary: [], intensity: 0.85, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.5, valence: 0.6,
+      primary: 'happy', secondary: [], intensity: 0.85, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.5, valence: 0.6,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.6, updatedAt: NIGHT,
     } });
     expect(Object.keys(store.snapshot(scope)).filter(key => /emotion|lingering/iu.test(key)).sort())

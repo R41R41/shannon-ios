@@ -42,7 +42,7 @@ class ScriptedModel implements ShannonChatModel {
       const result = JSON.parse(await request.tools!.call(call[0], JSON.stringify(call[1]))) as { ok: boolean };
       this.results.push({ tool: call[0], ok: result.ok });
     }
-    return { mode: this.mode, model: this.model, reply: 'はい、ライ氏。', taskDecision: { disposition: 'propose', reason: 'test' }, taskProposal: proposal };
+    return { mode: this.mode, model: this.model, reply: 'はい、ライ。', taskDecision: { disposition: 'propose', reason: 'test' }, taskProposal: proposal };
   }
 }
 

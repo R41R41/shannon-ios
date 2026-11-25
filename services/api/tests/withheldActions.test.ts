@@ -36,7 +36,7 @@ describe('the withheld vocabulary', () => {
     expect(withheldFactsSection([
       { tool: 'public_read', reason: 'budget_exhausted', retryAt: '2026-10-07T15:00:00.000Z' },
       { tool: 'study.create', reason: 'audience', retryAt: null },
-    ], () => '0:00')).toBe(`${WITHHELD_FACTS_HEADER}\n- 止められた：〈public_read〉〈今日の予算に収まらない〉（0:00から、また試せる）\n- 止められた：〈study.create〉〈ライ氏以外の人が見聞きできる〉`);
+    ], () => '0:00')).toBe(`${WITHHELD_FACTS_HEADER}\n- 止められた：〈public_read〉〈今日の予算に収まらない〉（0:00から、また試せる）\n- 止められた：〈study.create〉〈ライ以外の人が見聞きできる〉`);
   });
 
   it('reads a refusal of her own time\'s gate, with the next day for today\'s budget', () => {
@@ -82,7 +82,7 @@ describe('the withheld store', () => {
     const read = withheldFactsReader(withheld, () => ({ others }), () => '');
     expect(read('owner', AT)).toBeNull();
     others = false;
-    expect(read('owner', AT)).toContain('止められた：〈thinking〉〈ライ氏が一時停止している〉');
+    expect(read('owner', AT)).toContain('止められた：〈thinking〉〈ライが一時停止している〉');
   });
 });
 

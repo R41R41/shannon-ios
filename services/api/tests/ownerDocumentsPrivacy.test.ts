@@ -106,7 +106,7 @@ describe('what she writes after reading the owner\'s documents', () => {
     expect(others.text).not.toContain(document('宿のメモ').id);
     expect(others.text).not.toContain(document('宿の下調べ').id);
     expect((await call('aether.search', { query: '宿題', scope: 'shannonFolder' }, 'others')).text).toContain(station.id);
-    expect(await call('aether.read', { documentId: document('宿の下調べ').id }, 'others')).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('ライ氏の文書を読んだあとで書いたもの') });
+    expect(await call('aether.read', { documentId: document('宿の下調べ').id }, 'others')).toMatchObject({ ok: false, failure: 'refused', text: expect.stringContaining('ライの文書を読んだあとで書いたもの') });
     const listed = (await call('aetherFolder.list', {}, 'others')).text;
     expect(listed).toContain(station.id);
     expect(listed).not.toContain(document('宿の下調べ').id);

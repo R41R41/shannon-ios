@@ -48,7 +48,7 @@ describe('a turn that recalled an impression of a person', () => {
     expect(f.visible(turn.id)).toEqual([turn.id]);
     expect(f.visible(later.id)).toEqual([later.id]);
     expect(f.memory().read('owner', [id], OWNER_AUDIENCE)).toMatchObject([{ id, applicability: 'impression of a person',
-      summary: 'ライ氏は、ボクのことをよく「可愛い」と言う／ボクの気持ち: うれしい' }]);
+      summary: 'ライは、ボクのことをよく「可愛い」と言う／ボクの気持ち: うれしい' }]);
     // A fading one is still shown when the message brings it up.
     f.save(f.impression('imp-a', { status: 'fading' }));
     expect(f.visible(turn.id)).toEqual([turn.id]);
@@ -98,10 +98,10 @@ describe('a turn that recalled an impression of a person', () => {
     f.save(f.impression('imp-e'));
     const id = impressionMemoryId('imp-e');
     const reader = () => ownerImpressionReader(f.store, f.store.snapshot('owner'), 'owner', OWNER_AUDIENCE, {})(id);
-    expect(reader()).toBe('ライ氏は、ボクのことをよく「可愛い」と言う／ボクの気持ち: うれしい');
+    expect(reader()).toBe('ライは、ボクのことをよく「可愛い」と言う／ボクの気持ち: うれしい');
     f.advance(1000);
-    new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: id, action: 'correct', text: 'ライ氏はたまにボクを褒める' });
-    expect(reader()).toBe('ライ氏はたまにボクを褒める');
+    new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: id, action: 'correct', text: 'ライはたまにボクを褒める' });
+    expect(reader()).toBe('ライはたまにボクを褒める');
     f.advance(1000);
     new ShannonMemoryService(f.store, f.store, f.now).mutate('owner', { memoryId: id, action: 'forget' });
     expect(reader()).toBeNull();

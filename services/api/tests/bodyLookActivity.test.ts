@@ -382,8 +382,8 @@ describe('one look in her own time, across two processes', () => {
   it('lets her recall what she saw with the owner alone, guards it while others are present with him, and gives a friend\'s own call nothing', async () => {
     const h = stage2();
     const HEADER = '[ボクが体のカメラで見たこと]（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。話が合う時や聞かれた時に、自分の言葉で話してよい）';
-    const GUARDED = '[ボクが体のカメラで見たこと]（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライ氏の部屋とライ氏のことなので、この場では【機微:…】の確かめに従う）';
-    const MARKED = `- 【機微:未分類・ライ氏だけが知っている】10月2日 10時: ${LOOK_TEXT}`;
+    const GUARDED = '[ボクが体のカメラで見たこと]（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライの部屋とライのことなので、この場では【機微:…】の確かめに従う）';
+    const MARKED = `- 【機微:未分類・ライだけが知っている】10月2日 10時: ${LOOK_TEXT}`;
     const voice = async (body: Record<string, unknown>) => {
       const response = await h.api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: { scopeKey: scope, transcript: '部屋で何か見えた？', ...body } });
       expect(response.status).toBe(200);
@@ -452,7 +452,7 @@ describe('one look in her own time, across two processes', () => {
     // Everything older than a week: no block.
     h.clock.at = '2026-10-20T00:00:00.000Z';
     expect(h.service.pursuitPrompt(scope)).not.toContain('体のカメラで見たこと');
-    expect(guardedShannonSeenPrompt('関係のない文', '【機微:未分類・ライ氏だけが知っている】')).toBe('');
+    expect(guardedShannonSeenPrompt('関係のない文', '【機微:未分類・ライだけが知っている】')).toBe('');
     expect(guardedShannonSeenPrompt(block, '')).toBe('');
   });
 

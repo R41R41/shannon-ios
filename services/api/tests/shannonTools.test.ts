@@ -118,7 +118,7 @@ describe('the tool registry (ADR-0003 stage 1)', () => {
     expect(authorizeToolCall(study, { scopeKey: scope, surface: 'text', audience: 'owner_alone' })).toBeNull();
     const others = authorizeToolCall(study, { scopeKey: scope, surface: 'voice', audience: 'others' })!;
     expect(others).toMatchObject({ ok: false, failure: 'not_offered', retryable: false });
-    expect(others.refusal?.why).toContain('ライ氏以外の人');
+    expect(others.refusal?.why).toContain('ライ以外の人');
     expect(others.refusal?.wouldWork).toContain('二人だけ');
     expect(authorizeToolCall(null, { scopeKey: scope, surface: 'text', audience: 'owner_alone' })).toMatchObject({ failure: 'not_offered' });
     // The autonomy gate's refusals come back in the same shape.
@@ -153,7 +153,7 @@ describe('the study tools', () => {
     const noteId = idIn(note);
     const created = await call('study.create', { kind: 'story', title: '光る本', body: STORY, changeNote: '最初の稿。' });
     const storyId = idIn(created);
-    expect(created.text).toContain('ライ氏にはまだ見えない');
+    expect(created.text).toContain('ライにはまだ見えない');
     expect(store.study.get(scope, storyId)).toMatchObject({ status: 'draft', readableVersion: null, version: 1 });
 
     // Her own unshown draft: title and text are hers to read.
@@ -163,7 +163,7 @@ describe('the study tools', () => {
     const read = await call('study.read', { id: storyId });
     expect(read.text).toContain('題名: 光る本');
     expect(read.text).toContain(STORY);
-    expect(read.text).toContain('ライ氏にはまだ見せていない');
+    expect(read.text).toContain('ライにはまだ見せていない');
     expect((await call('study.search', { query: 'だれも借りない' })).text).toContain('光る本');
 
     const updated = await call('study.update', { id: storyId, body: `${STORY}本はもう光らなかった。`, changeNote: '終わりを足した。' });
@@ -233,7 +233,7 @@ describe('what her writes from a conversation must not repeat', () => {
       { id: 'secret', statement: 'ユーザーはウォンバット会の集まりに毎月出ている', confidence: 0.9, observedAt: at, disclosure: { category: 'secret' as const } },
     ] };
     const secrets = conversationSecrets(state, { experienceCandidates: () => [] }, scope);
-    const refused = await call('study.create', { kind: 'note', title: '会のこと', body: 'ライ氏は、ウォンバット会の集まりに毎月出ているらしい。' }, secrets);
+    const refused = await call('study.create', { kind: 'note', title: '会のこと', body: 'ライは、ウォンバット会の集まりに毎月出ているらしい。' }, secrets);
     expect(refused).toMatchObject({ ok: false, failure: 'refused', retryable: false, refusal: { why: expect.stringContaining('内緒'), wouldWork: expect.stringContaining('除いて') } });
     expect(refused.text).toContain('同じ言い回し');
     // A word or two in common is not the secret: runs of ten characters, with the subject and punctuation left out.
@@ -265,7 +265,7 @@ describe('what her writes from a conversation must not repeat', () => {
     const long = `${'あいうえおかきくけこ'.repeat(60)}ナマケモノ投資の話をした`;
     const turns = [{ id: 'turn-secret', userMessage: long, shannonReply: '', summary: 's', observedAt: at, disclosure: { category: 'secret' as const } }];
     const check = conversationSecrets(state as typeof base, { experienceCandidates: () => turns as never }, scope);
-    expect(check.carries('ライ氏、ウォンバット会に入っているの？')).toBe(true);
+    expect(check.carries('ライ、ウォンバット会に入っているの？')).toBe(true);
     expect(check.carries('アルマジロを集めている人の話')).toBe(true);
     expect(check.carries('カピバラ基金に寄付した、と書く')).toBe(true);
     // Past the first 400 characters of a long turn: checked too.

@@ -24,7 +24,7 @@ import {
   remainingShare,
   type ShannonEmotionTiming,
 } from './emotionTime.js';
-import { SHANNON_OWNER_NAME } from './persona.js';
+import { SHANNON_OWNER_NAME, ownerNameOf } from './persona.js';
 import type {
   CompanionStateSnapshot,
   ShannonEmotion,
@@ -412,7 +412,7 @@ export function restoreLingering(value: unknown, awakeMs: number): readonly Shan
     if (!number(row.strength) || !number(row.awakeAt) || !number(row.startedAwakeAt) || !Number.isFinite(Date.parse(row.startedAt))) continue;
     if ((row.awakeAt as number) > awakeMs || (row.startedAwakeAt as number) > (row.awakeAt as number)) continue;
     const kind = row.kind;
-    const target = Array.from(row.target).slice(0, 80).join('');
+    const target = ownerNameOf(Array.from(row.target).slice(0, 80).join(''));
     const twin = restored.findIndex(item => item.kind === kind && item.target === target);
     // One entry per kind and person: of two, the stronger stays, in the place of the first.
     if (twin >= 0 && restored[twin]!.strength >= clamp(row.strength as number, 0, 1)) continue;

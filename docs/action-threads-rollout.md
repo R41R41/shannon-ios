@@ -1,6 +1,6 @@
 # Stage 4 rollout and verification
 
-Owner: ライ氏. Scope: Shannon only. Production baseline: `16bdf384`.
+Owner: ライ. Scope: Shannon only. Production baseline: `16bdf384`.
 This is an operator procedure, not evidence that rollout has occurred.
 
 ## Before production mutation

@@ -36,7 +36,7 @@ const SERVER_ROOM = 'discord:111:222'; // the server's prefix binding: shared
 const START = '2026-10-20T12:00:00.000Z';
 const TOKEN = 'c'.repeat(40);
 const BINDINGS = [
-  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' },
+  { platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライの部屋', audience: 'owner-private' },
   { platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: OWNER, title: 'テストサーバー' },
 ];
 const BRIDGE = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
@@ -124,7 +124,7 @@ function harness(environment: Record<string, string> = { SHANNON_DC_VOICE: 'on' 
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
     const lines: VoiceTurnLine[] = [];
     await service.turn({
-      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
       userMessage, observedAt: now(), participants: [OWNER], ...fields,
     }, line => lines.push(line));
     return lines;
@@ -163,7 +163,7 @@ describe('POST /v1/platform/voice/turn', () => {
     expect(request.message).toBe('今日はもう遅いね、そろそろ寝ようか');
     const prompt = promptOf(request);
     expect(prompt).toContain('[Discordのボイスチャンネルでの会話]');
-    expect(prompt).toContain('いま聞こえているのはライ氏だけ');
+    expect(prompt).toContain('いま聞こえているのはライだけ');
     expect(prompt).not.toContain('[Shannon shared audience]');
     await background.waitForIdle('owner');
     const kept = store.conversationHistory('owner', roomThread).map(message => message.content);
@@ -192,7 +192,7 @@ describe('POST /v1/platform/voice/turn', () => {
     const prompt = promptOf(model.requests[0]!);
     expect(prompt).toContain('[Shannon shared audience]');
     expect(prompt).toContain('2人いる');
-    expect(prompt).not.toContain('いま聞こえているのはライ氏だけ');
+    expect(prompt).not.toContain('いま聞こえているのはライだけ');
     await background.waitForIdle('owner');
     expect(store.experienceCandidates('owner')[0]?.disclosure?.audience?.kind).not.toBe('owner');
     await close();
@@ -237,7 +237,7 @@ describe('POST /v1/platform/voice/turn', () => {
 
   it('replays a retried request without a second model call, and refuses a changed one', async () => {
     const { service, model, now, refusal, close } = harness();
-    const body = { platform: 'discord', requestId: 'same', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんばんは', observedAt: now(), participants: [OWNER] };
+    const body = { platform: 'discord', requestId: 'same', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんばんは', observedAt: now(), participants: [OWNER] };
     const first: VoiceTurnLine[] = [];
     await service.turn(body, line => first.push(line));
     const again: VoiceTurnLine[] = [];
@@ -255,7 +255,7 @@ describe('POST /v1/platform/voice/turn', () => {
 
   it('refuses what is not a fresh, bound, well-formed spoken turn before any line', async () => {
     const { service, refusal, now, advance, close } = harness();
-    const ok = { platform: 'discord', requestId: 'r', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは', observedAt: now() };
+    const ok = { platform: 'discord', requestId: 'r', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんにちは', observedAt: now() };
     expect(await refusal(service.turn({ ...ok, platform: 'line' }, () => undefined))).toBe('400 BAD_REQUEST');
     expect(await refusal(service.turn({ ...ok, extra: 1 }, () => undefined))).toBe('400 BAD_REQUEST');
     expect(await refusal(service.turn({ ...ok, userMessage: ' ' }, () => undefined))).toBe('400 BAD_REQUEST');
@@ -272,7 +272,7 @@ describe('POST /v1/platform/voice/turn', () => {
     const named = (n: number) => say(`シャノン、${n}番目の質問だよ？`, { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ' });
     for (let n = 1; n <= PLATFORM_VOICE_ALLOWANCE.speakerPerMinute; n += 1) await named(n);
     expect(await refusal(named(99))).toBe('429 RATE_LIMITED');
-    expect((await say('ライ氏からの質問だよ？')).at(-1)).toMatchObject({ type: 'done' });
+    expect((await say('ライからの質問だよ？')).at(-1)).toMatchObject({ type: 'done' });
     await close();
   });
 
@@ -280,7 +280,7 @@ describe('POST /v1/platform/voice/turn', () => {
     const { service, model, now, refusal, close } = harness();
     model.generateStreaming = async () => { throw new Error('boom'); };
     const lines: VoiceTurnLine[] = [];
-    await service.turn({ platform: 'discord', requestId: 'f', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは', observedAt: now() }, line => lines.push(line));
+    await service.turn({ platform: 'discord', requestId: 'f', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんにちは', observedAt: now() }, line => lines.push(line));
     expect(typeOf(lines)).toEqual(['decision', 'error']);
     expect(lines[1]).toMatchObject({ status: 502, error: 'MODEL_UNAVAILABLE' });
     expect(await refusal(service.turn({ platform: 'discord', requestId: 'g', conversationId: ROOM, sourceUserId: FRIEND, userMessage: 'こんにちは', observedAt: now() }, () => undefined))).toBe('400 BAD_REQUEST');
@@ -295,7 +295,7 @@ describe('what the turn is told besides the words', () => {
     let release!: () => void;
     model.pause = { after: 30, until: new Promise<void>(resolve => { release = resolve; }) };
     const lines: VoiceTurnLine[] = [];
-    const turn = service.turn({ platform: 'discord', requestId: 'early', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+    const turn = service.turn({ platform: 'discord', requestId: 'early', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ',
       userMessage: 'いまどんな感じ？', observedAt: now(), participants: [OWNER, FRIEND] }, line => lines.push(line));
     const startedAt = Date.now();
     while (!lines.some(line => line.type === 'sentence') && Date.now() - startedAt < 2_000) await new Promise(resolve => setTimeout(resolve, 5));
@@ -351,7 +351,7 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     expect(prompt).toContain('エンダードラゴンを倒す');
     expect(prompt).toContain('いまの作業への伝言');
     expect(body.calls).toHaveLength(1);
-    expect(body.calls[0]).toMatchObject({ scopeKey: 'owner', speaker: { id: OWNER, name: 'ライ氏', owner: true }, intent: { kind: 'task', goal: 'まず鉄の剣を作ってから向かって' } });
+    expect(body.calls[0]).toMatchObject({ scopeKey: 'owner', speaker: { id: OWNER, name: 'ライ', owner: true }, intent: { kind: 'task', goal: 'まず鉄の剣を作ってから向かって' } });
     expect(body.calls[0]!.experienceId).toBeTruthy();
     expect(lines.find(line => line.type === 'intent')).toMatchObject({ kind: 'task_message', delivered: true, taskId: 'task-1' });
     // A friend asks for the same: the field is offered, and the request is delivered with their name, on a record of their own words.
@@ -421,7 +421,7 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
     model.requests.length = 0;
     const friend = await say('シャノン、これからは声を出さないで', { conversationId: SERVER_ROOM, participants: [OWNER, FRIEND], sourceUserId: FRIEND, sourceDisplayName: 'ユウ', speechMode: 'needed' });
     expect(friend.some(line => line.type === 'speech')).toBe(false);
-    expect(promptOf(model.requests[0]!)).toContain('話し方を変えられるのはライ氏だけ');
+    expect(promptOf(model.requests[0]!)).toContain('話し方を変えられるのはライだけ');
     expect(promptOf(model.requests[0]!)).toContain('いまの話し方: 必要な時だけ');
     // The same words from a friend's seat are dropped even when the model names a way of speaking (the seat decides, not the model).
     model.intent = { kind: 'speech', goal: '', speechRate: 'high' };
@@ -474,7 +474,7 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
       expect(prompt).toContain('選べるのは login だけ');
       expect(prompt).toContain('「抜けて」「落ちて」「切って」は選ばない');
       expect(prompt).toContain('もう入ったことにはしない');
-      expect(lifecycle.asked).toEqual([{ action: 'login', threadId: platformBridgeThreadId('discord', SERVER_ROOM), actor: 'ライ氏' }]);
+      expect(lifecycle.asked).toEqual([{ action: 'login', threadId: platformBridgeThreadId('discord', SERVER_ROOM), actor: 'ライ' }]);
       expect(body.calls).toHaveLength(0);
       expect(sentences(lines).map(line => line.text).join('')).toBe(model.reply);
       await close();
@@ -564,13 +564,13 @@ describe('the owner\'s spoken request for her Minecraft body', () => {
       await say('近くに適当に置いて寝て', { conversationId: SERVER_ROOM, participants: [OWNER], directed: true, speakerMinecraftName: 'Rai1241',
         speakerPosition: { x: 10.4, y: 64, z: -3.6, dimension: 'minecraft:overworld' } });
       expect(body.calls).toHaveLength(1);
-      expect(body.calls[0]).toMatchObject({ speakerName: 'ライ氏', speakerWords: '近くに適当に置いて寝て', speakerPos: { x: 10, y: 64, z: -4, dimension: 'overworld' },
-        speaker: { name: 'ライ氏', owner: true, minecraftName: 'Rai1241' } });
+      expect(body.calls[0]).toMatchObject({ speakerName: 'ライ', speakerWords: '近くに適当に置いて寝て', speakerPos: { x: 10, y: 64, z: -4, dimension: 'overworld' },
+        speaker: { name: 'ライ', owner: true, minecraftName: 'Rai1241' } });
       const prompt = promptOf(model.requests[0]!);
       expect(prompt).toContain('オーバーワールドの x=10, y=64, z=-4');
       expect(prompt).toContain('マイクラの中からキーを押して');
       // The owner alone in the room (the conversation is shared by its binding) is not told that others read this.
-      expect(prompt).toContain('いま聞こえているのはライ氏だけ');
+      expect(prompt).toContain('いま聞こえているのはライだけ');
       await close();
     });
 
@@ -730,7 +730,7 @@ describe('/v1/platform/voice/*', () => {
     expect(fillers.items.length).toBeGreaterThanOrEqual(8);
     expect(fillers.items.find(item => item.id === 'un')?.text).toBe('うん。');
     h.model.reply = 'うん、そうだね。';
-    const response = await h.call('turn', { platform: 'discord', requestId: 'http-1', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは', observedAt: h.now() });
+    const response = await h.call('turn', { platform: 'discord', requestId: 'http-1', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんにちは', observedAt: h.now() });
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/x-ndjson');
     const lines = (await response.text()).trim().split('\n').map(line => JSON.parse(line) as VoiceTurnLine);
@@ -981,7 +981,7 @@ describe('SHANNON_ADDRESSED: answering only what is said to her', () => {
     expect((await off.say('あー疲れた、今日は早く寝よう'))[0]).toMatchObject({ respond: true, reason: 'solo' });
     expect(asked).toEqual([]);
     expect(await off.refusal(off.service.turn({
-      platform: 'discord', requestId: 'bad-1', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは', observedAt: off.now(),
+      platform: 'discord', requestId: 'bad-1', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんにちは', observedAt: off.now(),
       participants: [OWNER], shannonSpokeMsAgo: -1,
     }, () => undefined))).toBe('400 BAD_REQUEST');
     await off.close();
@@ -1092,11 +1092,11 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     const { judge: j } = workJudge();
     const { say, model, advance, close } = harness(ADDRESSED, undefined, j);
     model.reply = 'ケーキができたよ。どこに置けばいい？';
-    await say('シャノン、ケーキはどこまで進んだ？', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ氏' });
+    await say('シャノン、ケーキはどこまで進んだ？', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ' });
     advance(25_000);
     const friend = await say('ここがいいと思う', together);
     expect(friend[0]).toMatchObject({ respond: false, reason: 'no_name' });
-    const owner = await say('そこの作業台の上に置いて', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ氏' });
+    const owner = await say('そこの作業台の上に置いて', { ...together, sourceUserId: OWNER, sourceDisplayName: 'ライ' });
     expect(owner[0]).toMatchObject({ respond: true, reason: 'answer_to_question' });
     await close();
   });
@@ -1188,7 +1188,7 @@ describe('SHANNON_ADDRESSED: a call while she works, and the answer to her own q
     await say('シャノン、これもお願い', together);
     expect(body.calls[1]!.speaker).not.toHaveProperty('minecraftName');
     expect(await refusal(service.turn({
-      platform: 'discord', requestId: 'bad-mc', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏', userMessage: 'こんにちは',
+      platform: 'discord', requestId: 'bad-mc', conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ', userMessage: 'こんにちは',
       observedAt: now(), participants: [OWNER], speakerMinecraftName: 'a'.repeat(100),
     }, () => undefined))).toBe('400 BAD_REQUEST');
     await close();

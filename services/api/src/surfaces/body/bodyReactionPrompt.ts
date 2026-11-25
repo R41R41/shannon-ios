@@ -80,7 +80,7 @@ const clip = (text: string, maximum: number) => {
   return characters.length > maximum ? `${characters.slice(0, maximum - 1).join('')}…` : characters.join('');
 };
 
-/** 「ライ氏に頭をなでられている（3秒ほど、やさしく）」: the touch as she is told it. */
+/** 「ライに頭をなでられている（3秒ほど、やさしく）」: the touch as she is told it. */
 export function bodyTouchLine(touch: BodyReactionTouch, audience: BodyAudience): string {
   const who = audience === 'owner' ? `${SHANNON_OWNER_NAME}に` : `${SHANNON_OWNER_NAME}か、そばにいる誰かに`;
   const detail = [duration(touch.durationMs), strength(touch.strength), touch.input === 'hover' ? 'なぞるように' : ''].filter(Boolean).join('、');

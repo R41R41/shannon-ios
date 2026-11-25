@@ -155,16 +155,16 @@ describe('(a) a night of rest softens what she felt (owner 2026-10-19: it used t
   it('is a trace the next morning, half of what it was, out of sight and not told to the model as something to say', () => {
     const night = sulking();
     expect(night.expressiveEmotion).toMatchObject({ primary: 'sulky', awakeAt: 0 });
-    expect(night.lingering).toMatchObject([{ kind: 'sulky', target: 'ライ氏', span: 'mood', strength: 0.52, startedAt: NIGHT, notedAt: NIGHT }]);
+    expect(night.lingering).toMatchObject([{ kind: 'sulky', target: 'ライ', span: 'mood', strength: 0.52, startedAt: NIGHT, notedAt: NIGHT }]);
     // Nine hours of wall time, nothing happened: her clock advanced by the idle cap alone, and she slept past 3:00.
     expect(awakeTimeAt(night.emotionClock, MORNING, AWAKE)).toBe(12 * MINUTE);
     const kept = presentShannonFeeling(night, MORNING, AWAKE_ONLY).intensity;
     const feeling = presentShannonFeeling(night, MORNING);
-    expect(feeling).toMatchObject({ primary: 'sulky', target: 'ライ氏', visibility: 'hidden' });
+    expect(feeling).toMatchObject({ primary: 'sulky', target: 'ライ', visibility: 'hidden' });
     expect(feeling.intensity).toBeCloseTo(kept / 2, 5);
     expect(lingeringFeelingLine(night, MORNING)).toBe('');
     // Without the night's halving (a timing built without it) the morning is as it was before 2026-10-19.
-    expect(lingeringFeelingLine(night, MORNING, AWAKE_ONLY)).toContain('まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている（sulky / 強さ 0.47）。');
+    expect(lingeringFeelingLine(night, MORNING, AWAKE_ONLY)).toContain('まだ残っている気持ち: 9時間前にライとの会話ですねたことを、まだ少し引きずっている（sulky / 強さ 0.47）。');
     expect(lingeringFeelingLine(night, MORNING, AWAKE_ONLY)).toContain('責めたり罪悪感を誘ったりはしない。謝罪ややさしい言葉、眠りや起きて過ごす時間で自然にほどけてよい。');
   });
 
@@ -173,7 +173,7 @@ describe('(a) a night of rest softens what she felt (owner 2026-10-19: it used t
     expect(presentShannonFeeling(sulking(), threeDays).primary).toBe('neutral');
     // Without the nights, the awake clock alone keeps it; the wall clock is still a fact she can state.
     expect(presentShannonFeeling(sulking(), threeDays, AWAKE_ONLY).primary).toBe('sulky');
-    expect(lingeringFeelingLine(sulking(), threeDays, AWAKE_ONLY)).toContain('3日前にライ氏との会話ですねたこと');
+    expect(lingeringFeelingLine(sulking(), threeDays, AWAKE_ONLY)).toContain('3日前にライとの会話ですねたこと');
     // However rarely she is awake, nothing stays underneath for weeks: after four days it is gone at the next read...
     const fiveDays = at(NIGHT, 5 * 24 * HOUR);
     expect(livingLingering(sulking(), fiveDays, AWAKE_ONLY)).toEqual([]);
@@ -280,7 +280,7 @@ describe('(c) the reaction of a moment is gone within minutes', () => {
 });
 
 describe('(d) a strong feeling lingers one to two awake days', () => {
-  const happy = () => turn(fresh(), 'シャノンの物語、本当に感動した', '……ライ氏。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
+  const happy = () => turn(fresh(), 'シャノンの物語、本当に感動した', '……ライ。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
 
   it('is there through the next awake day and gone after about two', () => {
     const state = happy();
@@ -291,7 +291,7 @@ describe('(d) a strong feeling lingers one to two awake days', () => {
     expect(livingLingering(oneDay, afterOne)[0]!.strength).toBeCloseTo(0.85 / 4, 2);
     expect(presentShannonFeeling(oneDay, afterOne).primary).toBe('happy');
     expect(lingeringFeelingLine(oneDay, afterOne)).toBe(
-      'まだ残っている気持ち: 16時間前にライ氏との会話でうれしかったことの余韻が、まだ残っている（happy / 強さ 0.21）。自然ににじんでよい。');
+      'まだ残っている気持ち: 16時間前にライとの会話でうれしかったことの余韻が、まだ残っている（happy / 強さ 0.21）。自然ににじんでよい。');
     const twoDays = awakeFor(state, NIGHT, 32 * 60);
     expect(twoDays.lingering).toEqual([]);
     expect(presentShannonFeeling(twoDays, at(NIGHT, 32 * HOUR)).primary).toBe('neutral');
@@ -313,7 +313,7 @@ describe('(d) a strong feeling lingers one to two awake days', () => {
     // She mentions it every twenty minutes for over two hours (the cue also matches a denial). It fades as if she had said nothing.
     for (let index = 1; index <= 8; index += 1) {
       const now = at(NIGHT, index * 20 * MINUTE);
-      const said = turn(awakeFor(state, at(NIGHT, (index - 1) * 20 * MINUTE), 20), 'まだ怒ってる？', index % 2 ? 'もう拗ねてませんよ、ライ氏。' : '別にいいですけど。', now);
+      const said = turn(awakeFor(state, at(NIGHT, (index - 1) * 20 * MINUTE), 20), 'まだ怒ってる？', index % 2 ? 'もう拗ねてませんよ、ライ。' : '別にいいですけど。', now);
       state = said.state;
       const under = livingLingering(state, now)[0]?.strength ?? 0;
       expect(under).toBeLessThan(last);
@@ -424,7 +424,7 @@ describe('(e) a feeling is not overwritten easily', () => {
     // After the apology her own words naming the sulk, or denying it, do not bring the reading back up either.
     let denied = apologised;
     for (let index = 1; index <= 5; index += 1) {
-      denied = turn(denied, 'まだ怒ってる？', 'もう拗ねてませんよ、ライ氏。', at(now, index * 2 * MINUTE)).state;
+      denied = turn(denied, 'まだ怒ってる？', 'もう拗ねてませんよ、ライ。', at(now, index * 2 * MINUTE)).state;
       expect(presentShannonFeeling(denied, at(now, index * 2 * MINUTE)).intensity).toBeLessThanOrEqual(eased);
     }
     // A hand-built commit that claims to be stronger and is not replaces nothing.
@@ -442,7 +442,7 @@ describe('(e) a feeling is not overwritten easily', () => {
   it('reads her concern back while it lasts, also over a stronger mood, so every surface agrees with the reply', () => {
     const sulk = turn(fresh(), 'だから違うって', '……。', NIGHT, { primary: 'sulky', intensity: 0.8 }).state;
     const now = at(NIGHT, MINUTE);
-    const grief = turn(sulk, '父が亡くなった', 'そばにいます、ライ氏。', now);
+    const grief = turn(sulk, '父が亡くなった', 'そばにいます、ライ。', now);
     expect(grief.feeling).toMatchObject({ primary: 'caring', overrideReason: 'grief' });
     expect(grief.face.expression).toBe('tender');
     // Stored and read back: the reading, 「いま」 and the next reply are her concern, not the sulk that is stronger underneath.
@@ -482,7 +482,7 @@ describe('(e) a feeling is not overwritten easily', () => {
     expect(holdsFeelingThroughTouch(sorryFor, { primary: 'giggle', intensity: 0.6 }, at(now, MINUTE))).toBe(true);
     expect(JSON.stringify(sorryFor)).not.toContain('underneath');
     // A visible apology is read back the same way, with the mood beside it, and gives the mood back once it is faint.
-    const glad = turn(fresh(), 'すごいよ', '……ライ氏。', NIGHT, { primary: 'gratitude', intensity: 0.78 }).state;
+    const glad = turn(fresh(), 'すごいよ', '……ライ。', NIGHT, { primary: 'gratitude', intensity: 0.78 }).state;
     const sorry = turn(glad, 'それ違うよ', 'ごめんなさい、間違えました。', now).state;
     expect(presentShannonFeeling(sorry, now)).toMatchObject({ primary: 'apologetic', secondary: ['gratitude'] });
     expect(presentShannonFeeling(awakeFor(sorry, now, 6, 2), at(now, 6 * MINUTE)).primary).toBe('gratitude');
@@ -524,7 +524,7 @@ describe('(e) a feeling is not overwritten easily', () => {
     }
     expect(state.lingering).toEqual([]);
     // Concern during grief is spoken and shown, also after the first has faded below what shows.
-    const grief = turn(fresh(), '父が亡くなった', 'そばにいます、ライ氏。', NIGHT).state;
+    const grief = turn(fresh(), '父が亡くなった', 'そばにいます、ライ。', NIGHT).state;
     const later = at(NIGHT, 8 * MINUTE);
     const waited = awakeFor(grief, NIGHT, 8, 1);
     expect(presentShannonFeeling(waited, later).intensity).toBeLessThan(0.3);
@@ -590,7 +590,7 @@ describe('(e) a feeling is not overwritten easily', () => {
   });
 
   it('never keeps her concern, her reassurance or her apology from showing, whatever mood she is in', () => {
-    const glad = turn(fresh(), 'すごいよ', '……ライ氏。', NIGHT, { primary: 'gratitude', intensity: 0.78 }).state;
+    const glad = turn(fresh(), 'すごいよ', '……ライ。', NIGHT, { primary: 'gratitude', intensity: 0.78 }).state;
     const sorry = turn(glad, 'それ違うよ', 'ごめんなさい、間違えました。', at(NIGHT, MINUTE));
     expect(sorry.feeling).toMatchObject({ primary: 'apologetic', secondary: ['gratitude'] });
     expect(sorry.face).toMatchObject({ expression: 'concerned', feeling: 'apologetic' });
@@ -623,7 +623,7 @@ describe('(e) a feeling is not overwritten easily', () => {
     expect(angrier.feeling).toMatchObject({ primary: 'annoyed' });
     // (Her own reply's cue decides the kind; it was resolved at the decided strength and replaced the hurt.)
     expect(angrier.feeling.intensity).toBe(0.9);
-    const moved = turn(hurt(), 'ごめん、言いすぎた。いつも助かってる', 'うれしいです、ライ氏。', at(NIGHT, MINUTE), { primary: 'happy', intensity: 0.75 });
+    const moved = turn(hurt(), 'ごめん、言いすぎた。いつも助かってる', 'うれしいです、ライ。', at(NIGHT, MINUTE), { primary: 'happy', intensity: 0.75 });
     expect(moved.feeling.primary).toBe('excited');
     // The strong opposite feeling also eased the hurt underneath by half.
     expect(moved.state.lingering!.find(item => item.kind === 'hurt')!.strength).toBeCloseTo(0.4, 1);
@@ -665,7 +665,7 @@ describe('(e) a feeling is not overwritten easily', () => {
     // A second apology eases it again until it has settled; a pleasant feeling is never eased by one.
     const twice = reduceCompanionState(reduceCompanionState(apologised, { type: 'feeling-eased', by: 'apology' }, later), { type: 'feeling-eased', by: 'apology' }, later);
     expect(twice.lingering).toEqual([]);
-    const happy = turn(fresh(), '最高だった', '……ライ氏。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
+    const happy = turn(fresh(), '最高だった', '……ライ。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
     expect(reduceCompanionState(happy, { type: 'feeling-eased', by: 'apology' }, NIGHT)).toBe(happy);
     for (const apology of ['さっきはごめん、言いすぎた', 'ごめんね', 'ごめん', '昨日はごめん', 'ボクが悪かった', '言い過ぎた、許してほしい',
       'シャノン、ごめんね。', 'あなたにひどいことを言った、ごめん', '申し訳なかった', 'ひどいこと言ってごめん', 'あんなこと言ってごめんね',
@@ -694,14 +694,14 @@ describe('(e) a feeling is not overwritten easily', () => {
     const state = hurt();
     const nextDay = at(NIGHT, 20 * HOUR);
     expect(presentShannonFeeling(state, nextDay).primary).toBe('hurt');
-    expect(turn(state, 'やあ', 'はい、ライ氏。', nextDay).state.lingering).toMatchObject([{ kind: 'hurt' }]);
+    expect(turn(state, 'やあ', 'はい、ライ。', nextDay).state.lingering).toMatchObject([{ kind: 'hurt' }]);
   });
 });
 
 describe('what must still be true', () => {
   it('shows a low mood as concern for the owner, never as her own sadness, also with something underneath', () => {
     // Her sad answer to his bad news is concern for him: it stays the feeling of that reply and is not kept as her mood.
-    const consoling = turn(fresh(), '今日は仕事で失敗して落ち込んでる', 'それは残念でしたね、ライ氏。', NIGHT).state;
+    const consoling = turn(fresh(), '今日は仕事で失敗して落ち込んでる', 'それは残念でしたね、ライ。', NIGHT).state;
     expect(consoling.expressiveEmotion!.primary).toBe('sad');
     expect(consoling.lingering).toEqual([]);
     expect(presentShannonFeeling(consoling, MORNING).primary).toBe('neutral');
@@ -717,8 +717,8 @@ describe('what must still be true', () => {
   it('lets no one but the owner leave a feeling underneath', () => {
     const pokes = (ownerAlone: boolean) => [1, 2, 3, 4].reduce((state, countInWindow) =>
       reduceCompanionState(state, { type: 'body-touched', touch: { kind: 'poke', countInWindow, ownerAlone } }, NIGHT), fresh());
-    expect(pokes(true).lingering).toMatchObject([{ kind: 'sulky', target: 'ライ氏', cause: 'ライ氏につつかれた（続けて4回目）' }]);
-    expect(lingeringFeelingLine(pokes(true), MORNING, AWAKE_ONLY)).toContain('9時間前にライ氏につつかれたことを、まだ引きずっている（sulky');
+    expect(pokes(true).lingering).toMatchObject([{ kind: 'sulky', target: 'ライ', cause: 'ライにつつかれた（続けて4回目）' }]);
+    expect(lingeringFeelingLine(pokes(true), MORNING, AWAKE_ONLY)).toContain('9時間前にライにつつかれたことを、まだ引きずっている（sulky');
     // Someone else may have been the one touching: the reaction is felt, nothing stays.
     expect(pokes(false).expressiveEmotion).toMatchObject({ primary: 'sulky', target: '触れた人' });
     expect(pokes(false).lingering).toEqual([]);
@@ -735,7 +735,7 @@ describe('what must still be true', () => {
 describe('(h) state stored before the awake clock', () => {
   it('loads with no clock and nothing underneath, reads its feeling by the rule it was stored under, and starts the clock at its first event', () => {
     const stored = JSON.parse(JSON.stringify(reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: {
-      primary: 'sulky', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.6, valence: -0.6,
+      primary: 'sulky', secondary: [], intensity: 0.8, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.6, valence: -0.6,
       visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.5, updatedAt: NIGHT,
     } }, NIGHT, WALL)));
     expect(stored.emotionClock).toBeUndefined();
@@ -755,19 +755,19 @@ describe('(h) state stored before the awake clock', () => {
   });
 
   it('restores the new fields through bounds and drops what it cannot read', () => {
-    const state = turn(fresh(), 'すごい', '……ライ氏。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
+    const state = turn(fresh(), 'すごい', '……ライ。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
     const round = restoreCompanionState('owner', JSON.parse(JSON.stringify(state)), MORNING);
     expect(round.emotionClock).toEqual(state.emotionClock);
     expect(round.lingering).toEqual(state.lingering);
     expect(round.expressiveEmotion).toEqual(state.expressiveEmotion);
     const broken = restoreCompanionState('owner', {
       ...JSON.parse(JSON.stringify(state)),
-      lingering: [{ kind: 'made-up', target: 'ライ氏', cause: 'x', strength: 1, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT },
-        { kind: 'happy', target: 'ライ氏', cause: 'x', strength: 9, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT },
+      lingering: [{ kind: 'made-up', target: 'ライ', cause: 'x', strength: 1, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT },
+        { kind: 'happy', target: 'ライ', cause: 'x', strength: 9, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT },
         // Stamped ahead of her clock: it would never fade, so it is dropped.
-        { kind: 'hurt', target: 'ライ氏', cause: 'x', strength: 0.9, awakeAt: 5 * HOUR, startedAwakeAt: 5 * HOUR, startedAt: NIGHT }, 'text', null],
+        { kind: 'hurt', target: 'ライ', cause: 'x', strength: 0.9, awakeAt: 5 * HOUR, startedAwakeAt: 5 * HOUR, startedAt: NIGHT }, 'text', null],
     }, MORNING);
-    expect(broken.lingering).toEqual([{ kind: 'happy', target: 'ライ氏', cause: 'x', span: 'mood', strength: 1, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT }]);
+    expect(broken.lingering).toEqual([{ kind: 'happy', target: 'ライ', cause: 'x', span: 'mood', strength: 1, awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT }]);
     // A clock that cannot be read takes the awake stamps with it: the feeling settles by the wall-clock rule and nothing is frozen.
     const aged = awakeFor(state, NIGHT, 60);
     const clockless = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(aged)), emotionClock: { awakeMs: -5, at: 'never' } }, MORNING);
@@ -786,7 +786,7 @@ describe('(h) state stored before the awake clock', () => {
     // Two writers a few seconds out of order are not a broken clock: nothing moves back, nothing is counted twice.
     expect(advanceEmotionClock({ awakeMs: 5, at: MORNING }, at(MORNING, -3_000), AWAKE)).toEqual({ clock: { awakeMs: 5, at: MORNING }, elapsedMs: 0 });
     // Two entries of one kind for one person are one: the stronger stays.
-    const twin = { kind: 'happy', target: 'ライ氏', cause: 'x', span: 'mood', awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT };
+    const twin = { kind: 'happy', target: 'ライ', cause: 'x', span: 'mood', awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT };
     const merged = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(state)),
       lingering: [{ ...twin, strength: 0.4 }, { ...twin, strength: 0.7, cause: 'y' }, { ...twin, strength: 0.5 }, { ...twin, kind: 'pride', strength: 0.3 }] }, MORNING);
     expect(merged.lingering!.map(item => [item.kind, item.strength, item.cause])).toEqual([['happy', 0.7, 'y'], ['pride', 0.3, 'x']]);
@@ -839,9 +839,9 @@ describe('a text reply whose feeling was decided (owner decision 2026-10-03)', (
     expect(strong.feeling).toMatchObject({ primary: 'hurt', intensity: 0.9, decided: true, cause: '生成した応答の内容と会話文脈' });
     expect(strong.state.lingering).toMatchObject([{ kind: 'hurt', span: 'lingering', strength: 0.9 }]);
     const morning = reduceCompanionState(strong.state, { type: 'awake-observed' }, MORNING, AWAKE_ONLY);
-    expect(lingeringFeelingLine(morning, MORNING, AWAKE_ONLY)).toContain('9時間前にライ氏との会話で傷ついたことを、まだ引きずっている（hurt / 強さ 0.88）');
+    expect(lingeringFeelingLine(morning, MORNING, AWAKE_ONLY)).toContain('9時間前にライとの会話で傷ついたことを、まだ引きずっている（hurt / 強さ 0.88）');
     // With the night it slept on, half of it (owner 2026-10-19).
-    expect(lingeringFeelingLine(morning, MORNING)).toContain('9時間前にライ氏との会話で傷ついたことを、まだ少し引きずっている（hurt / 強さ 0.44）');
+    expect(lingeringFeelingLine(morning, MORNING)).toContain('9時間前にライとの会話で傷ついたことを、まだ少し引きずっている（hurt / 強さ 0.44）');
     expect(turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.6 }).state.lingering).toMatchObject([{ kind: 'hurt', span: 'mood', strength: 0.6 }]);
     for (const decided of [{ primary: 'hurt', intensity: 0.25 }, undefined]) {
       const quiet = turn(fresh(), HARSH, QUIET, NIGHT, decided).state;
@@ -1076,7 +1076,7 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     const stored = state.expressiveEmotion;
     const said = turn(state, HARSH, QUIET, harsh, { primary: 'hurt', intensity: 0.9 });
     // Not a joyful face for a hurt reply: the hurt, at what is left of the first, with the joy beside it. Nothing is stored.
-    expect(said.feeling).toMatchObject({ primary: 'hurt', secondary: ['happy'], continued: true, target: 'ライ氏' });
+    expect(said.feeling).toMatchObject({ primary: 'hurt', secondary: ['happy'], continued: true, target: 'ライ' });
     expect(said.feeling.intensity).toBeCloseTo(0.45, 2);
     expect(said.face.expression).toBe('sad');
     for (const key of ['heights', 'strengths', 'presentAt', 'underneath', 'easedPeak', 'decided']) expect(said.feeling).not.toHaveProperty(key);
@@ -1377,7 +1377,7 @@ describe('the wall clock as a fact', () => {
   it('says how long ago in whole hours, and in days from twenty-four hours', () => {
     const state = sulking();
     const since = (minutes: number) => lingeringMeaning(state.lingering![0]!, 0.3, at(NIGHT, minutes * MINUTE));
-    expect(since(59)).toMatch(/^さっきライ氏との会話で/u);
+    expect(since(59)).toMatch(/^さっきライとの会話で/u);
     expect(since(60)).toMatch(/^1時間前に/u);
     expect(since(90)).toMatch(/^1時間前に/u);
     expect(since(119)).toMatch(/^1時間前に/u);

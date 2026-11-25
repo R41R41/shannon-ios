@@ -70,6 +70,11 @@ export interface AddressedInput {
    * lines of the list. Absent: she is not, and nothing changes.
    */
   work?: AddressedWork;
+  /**
+   * The words come from a voice call in which she may be presented to the people there (the Discord voice channel): only then is a presentation said in front of the
+   * others read as to her (`ADDRESSED_DECISION.presentingRescue`). The other entrances (a listening room, the resident) do not read a presentation, so for them nothing is loosened.
+   */
+  presentation?: boolean;
 }
 
 export interface AddressedWork {
@@ -318,7 +323,7 @@ function jevNoulOr(answers: Readonly<Record<string, unknown>>, key: string): num
   try { return jevNoul(answers, key); } catch { return 0; }
 }
 
-export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false, working = false): Parsed {
+export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false, working = false, presentation = false): Parsed {
   if (unnamed === 'working') {
     const job = jevNoul(answers, 'about_the_job');
     const about = job >= ADDRESSED_DECISION.job;
@@ -338,7 +343,7 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   const presenting = jevNoulOr(answers, 'introduces_her');
   // A presentation is spoken in front of the others, so `target` may read it as said to "another person" (it did for plain words like こちらがシャノンです): the question that asks for
   // the act itself settles it. `about_shannon` and `self` are never turned.
-  const toHer = target === 'shannon' || (target === 'other_person' && presenting >= ADDRESSED_DECISION.presentingRescue);
+  const toHer = target === 'shannon' || (presentation && target === 'other_person' && presenting >= ADDRESSED_DECISION.presentingRescue);
   const directed = toHer && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);
   const addressed = directed && jevNoul(answers, 'reply_needed') >= ADDRESSED_DECISION.replyNeeded;
   if (!addressed && working && !name && !unnamed) {
@@ -348,7 +353,7 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   const reason: AddressedReason = addressed ? (unnamed ? 'asked_alone' : name ? 'named' : 'continuation')
     : directed ? 'no_reply_needed' : target === 'about_shannon' ? 'about_her' : unnamed ? 'no_name' : 'not_to_her';
   // Whether it was a presentation: only read once she is to answer it (a missing answer reads as no).
-  const introduced = addressed && presenting >= ADDRESSED_DECISION.introduced;
+  const introduced = presentation && addressed && presenting >= ADDRESSED_DECISION.introduced;
   return { addressed, target, noul, reason, ...(introduced ? { introduced } : {}) };
 }
 
@@ -399,7 +404,7 @@ export class AddressedJudge {
       const decision = await this.options.chooser.decide<Parsed>({
         scopeKey: input.scopeKey, surface: 'voice', decision: 'addressed', sets: [JEV_QUESTION_SETS.addressed],
         state: addressedState(input, gate.name, gate.follows), questions: addressedQuestions(),
-        parse: answers => parsedAddressed(answers, gate.name, gate.unnamed ?? false, gate.working === true),
+        parse: answers => parsedAddressed(answers, gate.name, gate.unnamed ?? false, gate.working === true, input.presentation === true),
         fallback: () => ({ ...local(), target: 'fallback', noul: 0 }),
         traceAnswers: (value, source) => ({
           addressed: value.addressed, target: value.target, noul: value.noul, name: gate.name ? (gate.name.tier === 'strong' ? 'exact' : 'possible') : 'none',

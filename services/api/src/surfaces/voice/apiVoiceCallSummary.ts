@@ -7,7 +7,7 @@ import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns, type GuestCallTurn }
 export const VOICE_CALL_SUMMARY_PATH = '/v1/voice/gemini/cascade/summaries';
 export const VOICE_CALL_SUMMARY_HEADING = '【友人も一緒の通話の要約】';
 export const VOICE_CALL_SUMMARY_NOTE_KIND = 'voice_call_summary';
-const SUMMARY_FOOTER = '（ライ氏が残すと選んだ要約です。会話そのものは保存していません）';
+const SUMMARY_FOOTER = '（ライが残すと選んだ要約です。会話そのものは保存していません）';
 const MAXIMUM_SUMMARY_CHARACTERS = 400;
 const MAXIMUM_SUMMARY_LINES = 5;
 /** A summary that repeats this many characters of someone's speech in a row is a quotation. */
@@ -16,8 +16,8 @@ const SUMMARIES_PER_WINDOW = 6;
 const WINDOW_MILLISECONDS = 10 * 60_000;
 
 const SUMMARY_INSTRUCTIONS = [
-  'You write a short note for ライ氏\'s own Talk thread about a voice call in which he introduced Shannon to a friend (「友人も一緒」).',
-  'The input is that call only. Lines marked 話し手 were spoken by ライ氏 or the friend; speakers were not identified. Lines marked シャノン are Shannon\'s replies.',
+  'You write a short note for ライ\'s own Talk thread about a voice call in which he introduced Shannon to a friend (「友人も一緒」).',
+  'The input is that call only. Lines marked 話し手 were spoken by ライ or the friend; speakers were not identified. Lines marked シャノン are Shannon\'s replies.',
   'Write plain Japanese text with exactly these three lines and nothing else:',
   '相手: the friend\'s name with さん only if a name was clearly said in the call; otherwise 「お友達（名前は聞いていません）」',
   '話したこと: one or two sentences describing the topics in your own words',

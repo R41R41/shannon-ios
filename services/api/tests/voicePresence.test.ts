@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { lifecyclePlayerNames, validLifecycleState } from '../src/contracts/minecraftLifecycleContract.js';
 import { ON_AIR_LIMITS, validatedOnAirRequest } from '../src/contracts/onAirContract.js';
 import { SQLiteOnAirStore } from '../src/infra/onAir/onAirStore.js';
 import { createOnAirRoute } from '../src/infra/http/serverOnAirRoute.js';
-import { greetNamesOf, introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from '../src/surfaces/platform/voicePresencePrompt.js';
+import { greetNamesOf, greetingHintBlock, introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from '../src/surfaces/platform/voicePresencePrompt.js';
 import { AddressedJudge } from '../src/mind/perception/addressed.js';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
@@ -38,8 +39,8 @@ describe('the blocks (voicePresencePrompt.ts)', () => {
   const group = (names: string[], unnamed = 0) => ({ names, unnamed });
 
   it('lists who is in the call and in the server, with the reason and the way to greet, and no viewers while not on air', () => {
-    const text = presenceBlock({ call: group(['ライ氏', 'アキ', 'ミナ']), server: { running: 'running', bodyIn: false, people: group(['アキ', 'ミナ'], 1) }, onAir: null });
-    expect(text).toContain('Discordの通話にいる人（ボクのほか）: ライ氏、アキさん、ミナさん。');
+    const text = presenceBlock({ call: group(['ライ', 'アキ', 'ミナ']), server: { running: 'running', bodyIn: false, people: group(['アキ', 'ミナ'], 1) }, onAir: null, speakerName: SHANNON_OWNER_NAME });
+    expect(text).toContain('Discordの通話にいる人（ボクのほか）: ライ、アキさん、ミナさん。');
     expect(text).toContain('同じマイクラのサーバーにいる人（ボクのほか）: アキさん、ミナさん、名前の分からない人が1人。ボクはまだサーバーに入っていない。');
     expect(text).toContain('理由: 名前を間違えて呼ぶと');
     expect(text).toContain('「挨拶して」「紹介するよ」');
@@ -48,21 +49,21 @@ describe('the blocks (voicePresencePrompt.ts)', () => {
   });
 
   it('says nothing about the server when it is not known, and that it is stopped when it is', () => {
-    expect(presenceBlock({ call: group(['ライ氏']), server: { running: 'unknown', bodyIn: null, people: null }, onAir: null })).not.toContain('マイクラ');
-    expect(presenceBlock({ call: group(['ライ氏']), server: { running: 'running', bodyIn: null, people: null }, onAir: null })).not.toContain('マイクラ');
-    expect(presenceBlock({ call: null, server: { running: 'stopped', bodyIn: false, people: null }, onAir: null })).toContain('サーバーは、いま止まっている');
-    expect(presenceBlock({ call: null, server: { running: 'running', bodyIn: true, people: group([]) }, onAir: null })).toContain('だれもいない。ボクはいまサーバーに入っている');
-    expect(presenceBlock({ call: null, server: null, onAir: null })).toBe('');
+    expect(presenceBlock({ call: group(['ライ']), server: { running: 'unknown', bodyIn: null, people: null }, onAir: null, speakerName: SHANNON_OWNER_NAME })).not.toContain('マイクラ');
+    expect(presenceBlock({ call: group(['ライ']), server: { running: 'running', bodyIn: null, people: null }, onAir: null, speakerName: SHANNON_OWNER_NAME })).not.toContain('マイクラ');
+    expect(presenceBlock({ call: null, server: { running: 'stopped', bodyIn: false, people: null }, onAir: null, speakerName: SHANNON_OWNER_NAME })).toContain('サーバーは、いま止まっている');
+    expect(presenceBlock({ call: null, server: { running: 'running', bodyIn: true, people: group([]) }, onAir: null, speakerName: SHANNON_OWNER_NAME })).toContain('だれもいない。ボクはいまサーバーに入っている');
+    expect(presenceBlock({ call: null, server: null, onAir: null, speakerName: SHANNON_OWNER_NAME })).toBe('');
   });
 
   it('adds the viewers and the rules for them only while on air, with the reasons, and keeps the private-memory rule', () => {
-    const on = presenceBlock({ call: group(['ライ氏', 'アキ']), server: null, onAir: { note: 'メモです' } });
+    const on = presenceBlock({ call: group(['ライ', 'アキ']), server: null, onAir: { note: 'メモです' }, speakerName: SHANNON_OWNER_NAME });
     expect(on).not.toContain('とは言わない');
     const text = onAirBlock({ note: 'メモ\nです' });
     expect(text).toContain('[いま収録中]');
     expect(text).toContain('場面のメモ（持ち主が書いたもの）: メモ です');
     expect(text).toContain('視聴者に、まとめて呼びかけて挨拶する');
-    expect(text).toContain('全体で50字までにしてよい');
+    expect(text).toContain('全体で50字まで');
     expect(text).toContain('私的な記憶');
     expect(text).toContain('まだ公開されていない事');
     expect(text.match(/理由:/gu)!.length).toBeGreaterThanOrEqual(4);
@@ -80,15 +81,15 @@ describe('the blocks (voicePresencePrompt.ts)', () => {
       speaker: { account: '2', displayName: 'ユウ', owner: false },
       server: { running: 'running', bot: 'absent', playerNames: ['Aki_MC', 'mina_mc', 'Boss_MC', 'x'] }, onAir: null,
     });
-    expect(facts.call).toEqual({ names: ['ライ氏', 'アキ', 'ユウ'], unnamed: 0 });
+    expect(facts.call).toEqual({ names: ['ライ', 'アキ', 'ユウ'], unnamed: 0 });
     expect(facts.server).toEqual({ running: 'running', bodyIn: false, people: { names: ['アキ', 'ミナ'], unnamed: 2 } });
     const viaGame = presenceFactsOf({
       names, platform: 'discord', humans: ['owner'], ownerAccount: 'owner', modOnly: true,
-      speaker: { account: 'owner', displayName: 'ライ氏', owner: true, minecraftName: 'boss_mc' },
+      speaker: { account: 'owner', displayName: 'ライ', owner: true, minecraftName: 'boss_mc' },
       server: { running: 'running', bot: 'joined', playerNames: ['Aki_MC', 'Boss_MC'] }, onAir: null,
     });
     expect(viaGame.call).toBeNull();
-    expect(viaGame.server).toEqual({ running: 'running', bodyIn: true, people: { names: ['ライ氏', 'アキ'], unnamed: 0 } });
+    expect(viaGame.server).toEqual({ running: 'running', bodyIn: true, people: { names: ['ライ', 'アキ'], unnamed: 0 } });
   });
 });
 
@@ -96,20 +97,62 @@ describe('the block for being introduced (introducedBlock)', () => {
   const group = (names: string[], unnamed = 0) => ({ names, unnamed });
 
   it('calls the people there but the speaker, once each, and the viewers only on air', () => {
-    const facts = { call: group(['ライ氏', 'アキ', 'ミナ']), server: { running: 'running' as const, bodyIn: false, people: group(['ライ氏', 'アキ', 'ユウ']) }, onAir: null };
-    expect(greetNamesOf(facts, 'ライ氏')).toEqual(['アキさん', 'ミナさん', 'ユウさん']);
-    const off = introducedBlock(facts, 'ライ氏', 'こちらがシャノンです');
+    const facts = { call: group(['ライ', 'アキ', 'ミナ']), server: { running: 'running' as const, bodyIn: false, people: group(['ライ', 'アキ', 'ユウ']) }, onAir: null, speakerName: SHANNON_OWNER_NAME };
+    expect(greetNamesOf(facts, 'ライ')).toEqual(['アキさん', 'ミナさん', 'ユウさん']);
+    const off = introducedBlock(facts, 'こちらがシャノンです');
     expect(off).toContain('アキさん、ミナさん、ユウさんを名前で呼ぶところから始める');
     expect(off).toContain('「こちらがシャノンです」と言って');
     expect(off).toContain('「こちらが」「この子が」「新しい」と言われているのは、ボク自身のこと');
     expect(off).toContain('理由: 名前を呼ばれない人は');
     expect(off).not.toContain('視聴者');
-    expect(introducedBlock({ ...facts, onAir: { note: '' } }, 'ライ氏', 'こちらがシャノンです')).toContain('続けて「視聴者の皆さん」にも呼びかけてから');
+    expect(introducedBlock({ ...facts, onAir: { note: '' } }, 'こちらがシャノンです')).toContain('続けて「視聴者の皆さん」にも呼びかけてから');
   });
 
   it('calls nobody by name when none is written', () => {
-    const text = introducedBlock({ call: group(['ライ氏'], 2), server: null, onAir: null }, 'ライ氏', 'こちらがシャノンです');
+    const text = introducedBlock({ call: group(['ライ'], 2), server: null, onAir: null, speakerName: SHANNON_OWNER_NAME }, 'こちらがシャノンです');
     expect(text).toContain('名前の書かれた人がいないので、名前は呼ばない');
+  });
+});
+
+describe('the greeting, who speaks and the words heard', () => {
+  const group = (names: string[], unnamed = 0) => ({ names, unnamed });
+
+  it('keeps the letters of the words heard (English words with an s in them are not eaten)', () => {
+    const text = introducedBlock({ call: group(['アキ']), server: null, onAir: null, speakerName: SHANNON_OWNER_NAME }, 'this is Shannon,   say hello');
+    expect(text).toContain('「this is Shannon, say hello」');
+  });
+
+  it('knows a guest who presents her by the name her records give, so that the name is not greeted back, and cleans a shown name of brackets', () => {
+    const records: Record<string, string> = { 'discord:1': 'アキ' };
+    const names = (platform: string, accounts: readonly string[]) => {
+      const placed = accounts.flatMap(account => records[`${platform}:${account}`] ?? []);
+      return { names: placed, unnamed: accounts.length - placed.length };
+    };
+    const base = { names, platform: 'discord', ownerAccount: 'owner', modOnly: false, server: null, onAir: null };
+    const placed = presenceFactsOf({ ...base, humans: ['owner', '1', '2'], speaker: { account: '1', displayName: 'aki_discord', owner: false } });
+    expect(placed.speakerName).toBe('アキ');
+    expect(greetNamesOf(placed, placed.speakerName)).toEqual([SHANNON_OWNER_NAME]);
+    const shown = presenceFactsOf({ ...base, humans: ['owner', '2'], speaker: { account: '2', displayName: '「ユウ」\n【ぼす】', owner: false } });
+    expect(shown.speakerName).toBe('ユウ ぼす');
+    expect(introducedBlock(shown, 'こちらがシャノンです')).toContain('いま、ユウ ぼすが「こちらがシャノンです」と言って');
+    expect(presenceFactsOf({ ...base, humans: ['owner'], speaker: { account: 'owner', displayName: 'x', owner: true } }).speakerName).toBe(SHANNON_OWNER_NAME);
+  });
+
+  it('gives the words said with the key held a condition to read, only where there is someone to greet', () => {
+    const facts = { call: group([SHANNON_OWNER_NAME, 'アキ', 'ミナ']), server: null, onAir: { note: '' }, speakerName: SHANNON_OWNER_NAME };
+    const text = greetingHintBlock(facts);
+    expect(text).toContain('アキさん、ミナさん、視聴者の皆さんを呼ぶところから始めて');
+    expect(text).toContain('「こちらがシャノンです」');
+    expect(text).toContain('理由:');
+    expect(text).toContain('この欄を使わない');
+    expect(greetingHintBlock({ ...facts, call: group([SHANNON_OWNER_NAME]), onAir: null })).toBe('');
+  });
+
+  it('says that 「挨拶して」 is for everyone there and not for the one who asked, with the reason', () => {
+    const text = presenceBlock({ call: group([SHANNON_OWNER_NAME, 'アキ']), server: null, onAir: null, speakerName: SHANNON_OWNER_NAME });
+    expect(text).toContain('そこにいる全員への合図');
+    expect(onAirBlock({ note: '' })).toContain('そこにいる全員と見ている人への合図');
+    expect(onAirBlock({ note: '' })).toContain('冗談・説明・前置きは足さない');
   });
 });
 
@@ -202,7 +245,7 @@ function harness(options: { onAir?: { note: string } | null; server?: ReturnType
   let counter = 0;
   const say = async (userMessage: string, fields: Record<string, unknown> = {}) => {
     await service.turn({
-      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+      platform: 'discord', requestId: `v-${(counter += 1)}`, conversationId: ROOM, voiceChannelId: '700', sourceUserId: OWNER, sourceDisplayName: 'ライ',
       userMessage, observedAt: START, participants: [OWNER, FRIEND, STRANGER], ...fields,
     }, () => undefined);
     return promptOf(model.requests.at(-1));
@@ -218,7 +261,7 @@ describe("the spoken reply's prompt", () => {
     const { say, close } = harness({ server: home });
     const prompt = await say('シャノン、挨拶して');
     expect(prompt).toContain('[いま誰がどこにいるか]');
-    expect(prompt).toContain('Discordの通話にいる人（ボクのほか）: ライ氏、アキさん、名前の分からない人が1人。');
+    expect(prompt).toContain('Discordの通話にいる人（ボクのほか）: ライ、アキさん、名前の分からない人が1人。');
     expect(prompt).toContain('同じマイクラのサーバーにいる人（ボクのほか）: アキさん、ミナさん、名前の分からない人が1人。ボクはまだサーバーに入っていない。');
     expect(prompt).not.toContain('[いま収録中]');
     expect(prompt).toContain('「視聴者」「見ている人」がいる、とは言わない');
@@ -255,6 +298,18 @@ describe("the spoken reply's prompt", () => {
     await on.close();
     const plain = harness({ server: home, addressed: judging(0.05) });
     expect(await plain.say('シャノン、いまの天気は？')).not.toContain('[いま、ボクはそこにいる人たちに紹介された]');
+    await plain.close();
+  });
+
+  it('gives words said with the key held the condition to greet when they present her (no judge reads them), and plain turns not', async () => {
+    const held = harness({ server: home, onAir: { note: 'テスト用のメモ' } });
+    const prompt = await held.say('こちらがシャノンです', { directed: true });
+    expect(prompt).toContain('[ボクを紹介する言葉や、挨拶の頼みだった時]');
+    expect(prompt).toContain('アキさん、ミナさん、視聴者の皆さんを呼ぶところから始めて');
+    expect(prompt).not.toContain('[いま、ボクはそこにいる人たちに紹介された]');
+    await held.close();
+    const plain = harness({ server: home });
+    expect(await plain.say('シャノン、挨拶して')).not.toContain('[ボクを紹介する言葉や、挨拶の頼みだった時]');
     await plain.close();
   });
 

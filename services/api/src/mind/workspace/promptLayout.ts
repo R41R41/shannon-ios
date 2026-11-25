@@ -38,11 +38,11 @@ export const NOTICE_MARKERS = Object.freeze({
 const SURFACE_LABEL: Readonly<Record<MindSurface, string>> = Object.freeze({
   text: 'アプリの文字', voice: '声の会話', body: '体', minecraft: 'マイクラ', platform: 'メッセージの場', outreach: 'ボクからの連絡', own_time: 'ボクの時間',
 });
-const SPEAKER_LABEL = Object.freeze({ owner: 'ライ氏', person: 'ほかの人', unknown: '誰か', shannon: 'ボク', system: '' });
+const SPEAKER_LABEL = Object.freeze({ owner: 'ライ', person: 'ほかの人', unknown: '誰か', shannon: 'ボク', system: '' });
 /** A moment her own time perceived of the owner through her body (owner decision 2026-10-14): what it was, as a fact. */
 const MOMENT_WORD: Readonly<Record<string, string | undefined>> = Object.freeze({
-  owner_returned: 'ライ氏が席に戻ってきた', long_quiet: 'ライ氏がそばで長く静かにしている', morning: '朝で、ライ氏がそばにいる',
-  late_night: '夜更けに、ライ氏がまだそばにいる', awaiting_reaction: 'ボクの物語が、ライ氏に読まれるのを待っている',
+  owner_returned: 'ライが席に戻ってきた', long_quiet: 'ライがそばで長く静かにしている', morning: '朝で、ライがそばにいる',
+  late_night: '夜更けに、ライがまだそばにいる', awaiting_reaction: 'ボクの物語が、ライに読まれるのを待っている',
 });
 const TOUCH_WORD: Readonly<Record<string, string>> = Object.freeze({
   pet: 'なでられた', poke: 'つつかれた', tickle: 'くすぐられた', carry: '画面の上で運ばれた', holdHand: '手をにぎられた',
@@ -112,7 +112,7 @@ function placeLine(item: WorkspaceItem, turn: LayoutTurn, excerpt: string | null
 
 /** A lifecycle operation the operator asked for on his behalf (`operator.minecraft.<action>`): never one she accepted. */
 function operatorOutcomeLine(item: WorkspaceItem, ago: string, tool: string): string {
-  const head = `${NOTICE_MARKERS.task_outcome}${ago}、運用者がライ氏の代わりに頼んだ〈${tool}〉`;
+  const head = `${NOTICE_MARKERS.task_outcome}${ago}、運用者がライの代わりに頼んだ〈${tool}〉`;
   if (item.detail?.reason === 'lifecycle_result_unknown') return `${head}は${RESULT_UNKNOWN_LINE}`;
   return `${head}が${TASK_WORD[item.detail?.code ?? ''] ?? '終わった'}`;
 }

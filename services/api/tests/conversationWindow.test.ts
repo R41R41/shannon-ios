@@ -72,13 +72,13 @@ const word = (index: number) => `しりとり語${String(index).padStart(3, '0')
 describe('the production voice transcript of 2026-10-02', () => {
   it('still has the date in front of the model when the owner asks for advice', async () => {
     const h = harness();
-    await h.spoken('今週の予定ってどうなってたっけ', '日曜日はデートの予定が入っていますよ、ライ氏。');
+    await h.spoken('今週の予定ってどうなってたっけ', '日曜日はデートの予定が入っていますよ、ライ。');
     await h.spoken('へえ', 'はい。');
     await h.spoken('そっか', 'うん、そうです。');
     await h.spoken('んーとあれ', 'すみません、もう一度お願いできますか。');
     await h.spoken('まあいいや', 'わかりました。');
     const request = await h.voice('むしろアドバイスちょうだい');
-    expect(said(request)).toContain('日曜日はデートの予定が入っていますよ、ライ氏。');
+    expect(said(request)).toContain('日曜日はデートの予定が入っていますよ、ライ。');
     expect(said(request)).toHaveLength(10);
     // The rule it replaces (the newest four messages) had already lost the date.
     expect(said({ history: request.history.slice(-4) }).join('')).not.toContain('デート');
@@ -99,7 +99,7 @@ describe('a long game of shiritori', () => {
   it('text: every word of 60 exchanges is in the request of the last turn', async () => {
     const h = harness();
     for (let index = 0; index < 60; index += 1) await h.chat(word(index * 2), word(index * 2 + 1));
-    const request = await h.chat('次はどっちの番？', 'ライ氏の番です。');
+    const request = await h.chat('次はどっちの番？', 'ライの番です。');
     const history = said(request);
     for (let index = 0; index < 120; index += 1) expect(history, word(index)).toContain(word(index));
     expect(history).toHaveLength(120);

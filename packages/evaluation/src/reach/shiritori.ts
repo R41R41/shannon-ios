@@ -255,6 +255,6 @@ export function scriptedShiritoriReply(history: readonly { role: string; content
   const base = last ? nextBase(last) : null;
   const used = new Set(said.map(sameReading));
   const choice = base ? followableWord([...(SHIRITORI_WORDS[base] ?? [])].reverse(), used) : null;
-  return choice ? `『${choice}』！次はライ氏の番です。` : 'うーん、思いつきません。まいりました。';
+  return choice ? `『${choice}』！次はライの番です。` : 'うーん、思いつきません。まいりました。';
 }
 

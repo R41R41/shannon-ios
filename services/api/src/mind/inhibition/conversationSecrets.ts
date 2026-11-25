@@ -23,7 +23,7 @@ export interface SecretCheck {
   carries(text: string): boolean;
 }
 
-const SUBJECT = /^(?:ユーザー|ライ氏|ライさん|オーナー|私|わたし|僕|ぼく|俺)(?:は|が|の|って)/u;
+const SUBJECT = /^(?:ユーザー|ライ氏?|ライさん|オーナー|私|わたし|僕|ぼく|俺)(?:は|が|の|って)/u;
 
 function compact(value: string): string {
   return value.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');

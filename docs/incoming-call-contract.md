@@ -2,7 +2,7 @@
 
 Owner request 2026-10-03: 「イヤホンをつないでいるとき、アプリを起動していなくても、シャノンから話しかけていい」. iOS lets an app that is not running start sound only as an incoming call, and he approved that: 「シャノンからの電話はすてき。出るかどうかはボクが選ぶので問題ない」.
 
-Owner decision of the same day: **the call is her own deliberate act.** His picture of it: 「これをライ氏に伝えたい。あ、でもいまアプリを開いていない。じゃあ電話しよう」. So phoning him is a step she chooses in her own time, beside writing to him (`reach_out`). Nothing rings by itself: an ordinary message of hers is delivered as before (text, the notification, an app in his ears or her body saying it) and is never rung with.
+Owner decision of the same day: **the call is her own deliberate act.** His picture of it: 「これをライに伝えたい。あ、でもいまアプリを開いていない。じゃあ電話しよう」. So phoning him is a step she chooses in her own time, beside writing to him (`reach_out`). Nothing rings by itself: an ordinary message of hers is delivered as before (text, the notification, an app in his ears or her body saying it) and is never rung with.
 
 The step is `autonomyLoopPhoneStep.ts`; asking for the call is `incomingCallRequests.ts`; the vocabulary and bounds are in `incomingCallContract.ts`, the API's side in `incomingCalls.ts`, the store in `incomingCallStore.ts`, the routes in `incomingCallRoutes.ts` and `serverIncomingCallRoute.ts`, the APNs sender in `voipPushSender.ts`. Tests: `services/api/tests/autonomyPhoneCall.test.ts` (the step, end to end) and `incomingCalls.test.ts` (the wire contract). On the iPhone: `apps/ios/Sources/ShannonAppCore/Features/IncomingCall/`. The Mac has no call screen and takes no part.
 
@@ -24,7 +24,7 @@ There is **no count of calls a day** (owner decision: 「コストの範囲内�
 
 **What she is told** (`autonomyLoopPhoneStep.ts`, verbatim). The action, in the list of actions of the thinking prompt:
 
-> call（ライ氏のiPhoneに電話をかける。伝えたいことがあって、ライ氏がアプリを開いていない時のためのもの。ライ氏の電話が鳴り、出るかどうかはライ氏が選ぶ。出てくれたら、最初の一言をボクの声で伝えて、そのまま会話になる。同じ一言はトークにも文字で残る。reason は share、wonder のどれか。かけたあとで、出てくれた・出ないことを選んだ・出なかった・つながらなかった、のどれだったかが分かる。時間帯の決まりはなく夜中でも鳴るので、時刻と下の「いまの様子」を見て、本当にかけたい時だけ。一度の計画で1回まで、reach_out とは一緒に置かない）、
+> call（ライのiPhoneに電話をかける。伝えたいことがあって、ライがアプリを開いていない時のためのもの。ライの電話が鳴り、出るかどうかはライが選ぶ。出てくれたら、最初の一言をボクの声で伝えて、そのまま会話になる。同じ一言はトークにも文字で残る。reason は share、wonder のどれか。かけたあとで、出てくれた・出ないことを選んだ・出なかった・つながらなかった、のどれだったかが分かる。時間帯の決まりはなく夜中でも鳴るので、時刻と下の「いまの様子」を見て、本当にかけたい時だけ。一度の計画で1回まで、reach_out とは一緒に置かない）、
 
 (`upcoming` and `saw（この計画の look より後に置く）` are added to the reasons while they are available.)
 
@@ -32,30 +32,30 @@ The facts of the moment, one section of fixed sentences, shown whenever he switc
 
 ```
 [いまの様子]（サーバーが見た事実）
-- イヤホン: いま、ライ氏にだけ聞こえるイヤホンでアプリを聞いている（reach_out は声でも届く）。 | いま、ライ氏のイヤホンでアプリは聞かれていない。
+- イヤホン: いま、ライにだけ聞こえるイヤホンでアプリを聞いている（reach_out は声でも届く）。 | いま、ライのイヤホンでアプリは聞かれていない。
 - 体: ボクの体（デスクトップ）はいま表示されている。 | ボクの体（デスクトップ）が表示されているかは分からない。
-- 会話: いまライ氏と会話が続いている。 | いまは会話していない。
-- ライ氏が最後に書くか話すかしたのは: 12分前。 | 記録がない。
-- 電話: いまかけられる。 | いまはかけられない（サーバーの準備がまだ） | （電話を鳴らしている最中） | （ライ氏と会話が続いている） | （前の電話から間もない。あと約N分）
-- 前の電話: 3時間前にかけた。出てくれた。 | …ライ氏は出ないことを選んだ。 | …出なかった。 | …つながらなかった。 | …まだ鳴らしている。 | まだかけたことがない。
+- 会話: いまライと会話が続いている。 | いまは会話していない。
+- ライが最後に書くか話すかしたのは: 12分前。 | 記録がない。
+- 電話: いまかけられる。 | いまはかけられない（サーバーの準備がまだ） | （電話を鳴らしている最中） | （ライと会話が続いている） | （前の電話から間もない。あと約N分）
+- 前の電話: 3時間前にかけた。出てくれた。 | …ライは出ないことを選んだ。 | …出なかった。 | …つながらなかった。 | …まだ鳴らしている。 | まだかけたことがない。
 ```
 
 And one rule line:
 
-> - 「いまの様子」は、サーバーが見た事実。電話に出なかったことも、出ないことを選んだことも、悪いことではない。出ないことを選んだのは、ライ氏がいまは出ないと決めたということ。あとでもう一度かけるか、書いて伝えるか、そのままにするかは、ボクが決める。責めたり、急がせたりしない。
+> - 「いまの様子」は、サーバーが見た事実。電話に出なかったことも、出ないことを選んだことも、悪いことではない。出ないことを選んだのは、ライがいまは出ないと決めたということ。あとでもう一度かけるか、書いて伝えるか、そのままにするかは、ボクが決める。責めたり、急がせたりしない。
 
 Every value is a yes or no, a closed state or a time: no word of his, no device name. While he has not switched calls on, none of this is in any prompt.
 
 **What the step does.**
 
-1. One model call words her opening line: the prompt of a message of hers for that reason, plus 「[電話の最初の一言] これは電話。ライ氏が出てくれた時に、最初にボクの声で言う一言になる。同じ言葉がトークに文字で残り、通知にも出る。」 An empty line means she decided not to call.
+1. One model call words her opening line: the prompt of a message of hers for that reason, plus 「[電話の最初の一言] これは電話。ライが出てくれた時に、最初にボクの声で言う一言になる。同じ言葉がトークに文字で残り、通知にも出る。」 An empty line means she decided not to call.
 2. The line is written as a message of hers: one assistant message in his most recent Talk, one initiative, the ordinary notification. Its key is `reach-out-call:<owner-local day>:<random>`, so it is not one of the day's messages when the owner has set a count of those.
 3. She asks for the call: the message's claim is taken as `iphone_call` for the iPhone, and one `pending` row is written to `incoming_calls`. Her process sends no push and reads no key.
 4. She stays with it, renewing her lease, until the call has an outcome (at most 75 seconds; a ring is 30), and records it.
 
 **What she learns.** One closed value on the step's observation (`reachOut.call`), its reason code (`call_answered`, `call_declined`, `call_unanswered`, `call_failed`), and one fixed line (see [What she observes](#what-she-observes)). After anything but an answer she thinks again in the same cycle with that line in front of her and decides herself: write once more (`follow_up`, text), look at the room, jot a note, or let it go; in a later cycle, after the interval, she may call again.
 
-**In conversation.** There is no tool for it: he is already there. Her capability description (`capabilities.ts`, owner audience) says: 「電話: 自分の時間に伝えたいことがあって、ライ氏がアプリを開いていない時、ライ氏のiPhoneに電話をかける。電話が鳴り、出るかどうかはライ氏が選ぶ。ライ氏が着信をオンにしている時だけで、会話の中からはかけない。」
+**In conversation.** There is no tool for it: he is already there. Her capability description (`capabilities.ts`, owner audience) says: 「電話: 自分の時間に伝えたいことがあって、ライがアプリを開いていない時、ライのiPhoneに電話をかける。電話が鳴り、出るかどうかはライが選ぶ。ライが着信をオンにしている時だけで、会話の中からはかけない。」
 
 ## The API process sends it
 
@@ -130,7 +130,7 @@ He answered. The app takes her words through the **existing** claim route, namin
 
 ```json
 { "schemaVersion": 1, "id": "0b6f…", "status": "claimed", "surface": "iphone_call", "spoken": false, "listenSeconds": 0,
-  "message": { "id": "0b6f…", "threadId": "…", "content": "ライ氏、さっき読んだ話をしてもいいですか。", "expression": "curious", "reason": "wonder", "createdAt": "…" } }
+  "message": { "id": "0b6f…", "threadId": "…", "content": "ライ、さっき読んだ話をしてもいいですか。", "expression": "curious", "reason": "wonder", "createdAt": "…" } }
 ```
 
 This is what marks the call `answered`: from here the message counts as said, and its claim is never given back. The same request again answers `held` with the same words. Unlike a claim of an app in his ears, the device does not have to be privately listening: he chose to answer.
@@ -171,9 +171,9 @@ The step records what became of the call as a closed value in `autonomy_loop_obs
 
 | `call` | Line |
 | --- | --- |
-| `answered` | 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれた。 |
-| `declined` | 電話の知らせ: iPhoneに電話をかけたが、ライ氏はいまは出ないことを選んだ。 |
-| `unanswered` | 電話の知らせ: iPhoneに電話をかけたが、ライ氏は出なかった。 |
+| `answered` | 電話の知らせ: iPhoneに電話をかけたら、ライが出てくれた。 |
+| `declined` | 電話の知らせ: iPhoneに電話をかけたが、ライはいまは出ないことを選んだ。 |
+| `unanswered` | 電話の知らせ: iPhoneに電話をかけたが、ライは出なかった。 |
 | `failed` | 電話の知らせ: iPhoneに電話をかけようとしたが、つながらなかった。 |
 
 An answer counts as his reply. No outcome within her wait means the API process is not running: nothing rang, and she is told it could not connect. Her day's record says 「電話をN回かけ」.

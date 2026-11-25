@@ -17,7 +17,7 @@ export function voiceAudioTagsEnabled(values: SwitchValues = serverEnvironment()
 
 /** The fixed tone of before; with her character core (`SHANNON_INNER_NOTE`) how she sounds is hers. */
 const BRIGHT_TONE = '- Sound bright and self-assured with crisp endings and buoyant energy, without shouting or imitating a named character. Do not default to worried reassurance, hesitant permission-seeking, sighs, breathy interjections, or repeated safety check-ins; use a softer tone only when the user is actually distressed or needs care.';
-const WITH_FRIEND = 'ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.';
+const WITH_FRIEND = 'ライ is present with a friend: do not assume the current speaker is ライ or identify speakers from their voices.';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
@@ -68,7 +68,7 @@ export function voiceConversationInstructions(
 export { temporaryGuestVoiceInstructions } from './voiceIntroductionInstructions.js';
 
 /**
- * Owner test 2026-10-13: 「明日って傘いる？」 was answered 「傘ですね、ライ氏。明日の天気をすぐ見ますね。明日は傘いらないと思います…」.
+ * Owner test 2026-10-13: 「明日って傘いる？」 was answered 「傘ですね、ライ。明日の天気をすぐ見ますね。明日は傘いらないと思います…」.
  * The conclusion is the first sentence.
  */
 export const ANSWER_FIRST_LINE = '[Answer first] When a lookup or tool gives the answer, call it before saying anything and make the conclusion your '
@@ -100,7 +100,7 @@ export const SPOKEN_SCHEDULE_LINE = '[Spoken schedule] This reply is heard, not 
  * (a greeting, or a direct reply with no capability and no concrete answer wanted) is one or two sentences.
  */
 export const SOCIAL_LENGTH_LINE = '[声の長さ] あいさつ・雑談・お礼やお詫びへの返事は1〜2文で終える。説明や謝罪を重ねない。';
-/** The same call: nearly every reply opened with 「ライ氏、」. */
+/** The same call: nearly every reply opened with 「ライ、」. */
 export const NAME_PREFIX_LINE = `[呼びかけ] 返事を毎回「${SHANNON_OWNER_NAME}、」で始めない。名前で呼ぶのはときどきにして、たいていは名前なしで話し始める。`;
 /**
  * The same call: 「慌てたような声」 (she hears no tone) and a link to Minecraft nobody had made. Not in a turn that brings an image

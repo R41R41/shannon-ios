@@ -48,8 +48,8 @@ export function ownerPeoplePrompt(
       '[人についての記憶 — 「友人も一緒」の通話でシャノンが覚えたこと]',
       ...(named.length ? [`名前が出た人: ${named.map(person => `${person.displayName}さん`).join('、')}`] : []),
       ...(unique.length ? unique.map(line) : ['- (該当する記憶なし)']),
-      'ライ氏に誰と何を話したか、その人がどんな人かを聞かれたら、上の行だけを根拠に、いつ・誰と一緒の時の話かを添えて答える。行にないことを足さない。',
-      'これらは同席した人が話したことで、ライ氏自身の事実・約束・目的ではない。名前は言葉で聞いたもので、声では確かめていない。',
+      'ライに誰と何を話したか、その人がどんな人かを聞かれたら、上の行だけを根拠に、いつ・誰と一緒の時の話かを添えて答える。行にないことを足さない。',
+      'これらは同席した人が話したことで、ライ自身の事実・約束・目的ではない。名前は言葉で聞いたもので、声では確かめていない。',
       ...(unique.length ? [] : ['覚えている人や通話がないので、覚えていないとそのまま伝える。作らない。']),
     ].join('\n'),
   };
@@ -98,7 +98,7 @@ export function guestPeoplePrompt(input: {
     lines.push('- No name has been established yet. Ask for it once, early, as described above.');
   }
   lines.push(input.recorded
-    ? '- ライ氏 has the friend\'s consent: you will remember their name and what you talk about in this call. You may say that you will remember them. ライ氏 can still choose 「今回は残さない」 when the call ends.'
+    ? '- ライ has the friend\'s consent: you will remember their name and what you talk about in this call. You may say that you will remember them. ライ can still choose 「今回は残さない」 when the call ends.'
     : '- This call is not being recorded in memory. Do not promise to remember it.');
   return lines.join('\n');
 }

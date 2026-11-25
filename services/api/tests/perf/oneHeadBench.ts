@@ -45,7 +45,7 @@ const OWNER = '900000000000000001';
 const FRIEND = '900000000000000002';
 const ROOM = 'discord:222:300';
 const TOKEN = 'd'.repeat(40);
-const BINDINGS = [{ platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' }];
+const BINDINGS = [{ platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライの部屋', audience: 'owner-private' }];
 const BRIDGE = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner', SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(BINDINGS) };
 const REPLY = process.env.REPLY_KIND === 'clause' ? 'えっとね、いまいるのは洞窟のいちばん奥のほうで、鉄を探してるところだよ。体力はまだ大丈夫だから、このまま行ってみるね。'
   : 'うん、いまは鉄を探しながら洞窟を下りてるところだよ。体力はまだ大丈夫だから、このまま奥まで行ってみるね。';
@@ -137,7 +137,7 @@ async function discordVoice(w: ReturnType<typeof world>, n: number, friend: bool
   const startedAt = performance.now();
   let firstOut = 0;
   await w.voice.turn({ platform: 'discord', requestId: `b-${friend ? 'f' : 'o'}-${n}-${Math.random()}`, conversationId: ROOM, sourceUserId: OWNER,
-    sourceDisplayName: 'ライ氏', userMessage: `シャノン、いまマイクラどうなってる？（${n}）`, observedAt: new Date().toISOString(),
+    sourceDisplayName: 'ライ', userMessage: `シャノン、いまマイクラどうなってる？（${n}）`, observedAt: new Date().toISOString(),
     participants: friend ? [OWNER, FRIEND] : [OWNER] }, (line: VoiceTurnLine) => {
     if (!firstOut && line.type === 'sentence') firstOut = performance.now();
   });

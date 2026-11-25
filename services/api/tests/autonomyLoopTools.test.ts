@@ -72,7 +72,7 @@ describe('her tools as steps of her own time', () => {
     const decision = harness.entries().find(entry => entry.kind === 'decision' && entry.tool === 'folder.list')!;
     expect(decision).toMatchObject({ domain: 'host_folder', outcome: 'allowed' });
     expect(harness.entries().find(entry => entry.kind === 'action' && entry.relatedId === decision.id)).toMatchObject({ outcome: 'failed', reasonCode: 'device_offline' });
-    expect(toolRefusalLine('folder.list', { reason: 'paused', explanation: '所有者が一時停止しているため、実行しません。' })).toContain('ライ氏が再開したあと');
+    expect(toolRefusalLine('folder.list', { reason: 'paused', explanation: '所有者が一時停止しているため、実行しません。' })).toContain('ライが再開したあと');
   });
 
   it('offers no tool and leaves the thinking prompt as it was without the tool memory (SHANNON_OWN_TOOLS=off)', async () => {

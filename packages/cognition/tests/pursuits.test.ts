@@ -143,7 +143,7 @@ describe('autonomy wording while the loop runs', () => {
     const preparing = shannonAutonomyRuleLines('owner');
     const running = shannonAutonomyRuleLines('owner', { running: true });
     expect(preparing[0]).toContain('仕組みは準備中');
-    expect(running[0]).toBe('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライ氏が止められる）:');
+    expect(running[0]).toBe('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライが止められる）:');
     expect(running.slice(1)).toEqual(preparing.slice(1));
     // A guest hears neither.
     expect(shannonAutonomyRuleLines('guest', { running: true })).toEqual(shannonAutonomyRuleLines('guest'));

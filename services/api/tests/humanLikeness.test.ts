@@ -17,7 +17,7 @@ import { MINUTE, SECOND, reactionHarness } from './bodyReactionHarness.js';
 /**
  * Human-likeness fixes of 2026-10-14 (the owner's Windows call, 11:01–11:08 JST: 「まだ全然人間っぽくない」). Nine of ten touch lines said
  * 「びっくり」, 「えっ、また！？」 came twelve seconds after 「もちろんいいですよ」, the voice apologized for 「急に大きな声を出して」 because it
- * never knew its preceding line was a touch line, and every voice reply opened with 「ライ氏、」. Owner decisions of the same day: no
+ * never knew its preceding line was a touch line, and every voice reply opened with 「ライ、」. Owner decisions of the same day: no
  * scripted lines anywhere; her note reflects at once only on a big change (another part, touching allowed or refused in conversation).
  */
 
@@ -54,7 +54,7 @@ describe('the touch prompt with her note on (A)', () => {
     expect(prompt.indexOf('[いまの場面]')).toBeLessThan(prompt.indexOf('[体に触れられた]'));
     const scene = blocks[1]!.split('\n').slice(1);
     expect(scene).toHaveLength(BODY_REACTION_LIMITS.sceneMessages);
-    expect(scene.at(-2)).toBe('ライ氏: 触ってもいい？');
+    expect(scene.at(-2)).toBe('ライ: 触ってもいい？');
     // No example line, no count framed as repetition, silence worded as a way to answer.
     for (const scripted of ['また？', '回目', '黙ることも多い', '[いまの会話]']) expect(prompt).not.toContain(scripted);
     for (const rule of BODY_REACTION_INNER_RULES) expect(prompt).toContain(rule);
@@ -132,12 +132,12 @@ describe('the voice knows its preceding line was a touch line (B)', () => {
     const first = chatModel.voiceRequests[0]!;
     expect(first.precedingReply).toBe('ひゃっ、いきなり？');
     expect(first.turnContext).toContain('[さっきの体のこと]');
-    expect(first.turnContext).toContain('- さっき: ライ氏に胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ、いきなり？」（ライ氏がいま答えている、直前のボクの言葉）');
+    expect(first.turnContext).toContain('- さっき: ライに胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ、いきなり？」（ライがいま答えている、直前のボクの言葉）');
     expect(first.turnContext).toContain(VOICE_HONNE_LINE);
     // Three minutes later, another turn that answers no line: the touch is still there as a fact.
     advance(3 * MINUTE);
     await delegate('さっきのこと怒ってる？');
-    expect(chatModel.voiceRequests[1]!.turnContext).toContain('- 3分前: ライ氏に胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ、いきなり？」');
+    expect(chatModel.voiceRequests[1]!.turnContext).toContain('- 3分前: ライに胸をつつかれた。ボクの受け取り（本音）: いや。ボクの一言「ひゃっ、いきなり？」');
     expect(chatModel.voiceRequests[1]!.turnContext).not.toContain('いま答えている');
     // After the window it is gone.
     advance(BODY_REACTION_LIMITS.voiceFactMilliseconds);
@@ -189,7 +189,7 @@ function service(limits: Record<string, number> = {}, counts: { part: string; co
   notes.useBody({ partCounts: () => counts });
   const at = (seconds: number) => { now = new Date(Date.parse(T0) + seconds * 1_000).toISOString(); return now; };
   const touch = (seconds: number, part: string, extra: Partial<InnerNoteTouch> = {}): InnerNoteTouch => ({ scopeKey: 'owner', audience: 'owner',
-    at: at(seconds), touchId: `t-${seconds}`, phrase: `ライ氏に${part}をつつかれた`, kind: 'poke', part, stance: 'unsure', ...extra });
+    at: at(seconds), touchId: `t-${seconds}`, phrase: `ライに${part}をつつかれた`, kind: 'poke', part, stance: 'unsure', ...extra });
   const turn = (seconds: number, userMessage: string, reply: string): InnerNoteTurn => ({ scopeKey: 'owner', surface: 'voice', alone: true,
     at: at(seconds), userMessage, reply, feeling: null });
   return { notes, store, facts, logs, touch, turn };
@@ -207,7 +207,7 @@ describe('her note reflects at once on a big change only (C, owner decision 2026
     await notes.flush('owner');
     // The touch on another part, with the one the session held before it.
     expect(facts).toHaveLength(2);
-    expect(facts[1]!.events.map(event => event.touch?.phrase)).toEqual(['ライ氏に胸をつつかれた', 'ライ氏に頭をつつかれた']);
+    expect(facts[1]!.events.map(event => event.touch?.phrase)).toEqual(['ライに胸をつつかれた', 'ライに頭をつつかれた']);
   });
 
   it('reflects when touching is allowed or refused in conversation, her own yes or no included', async () => {
@@ -308,7 +308,7 @@ describe('her note counts her body when it reflects, after any forgetting (C, re
     const chestBurst = harness.reactionStore.burstOfTouch('owner', 'touch-1')!.id;
     harness.advance(40 * SECOND);
     harness.stateStore.apply('owner', { type: 'memory-control-upserted', control: {
-      memoryId: chestBurst, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: harness.now(), changeReason: 'ライ氏が忘れてと言った',
+      memoryId: chestBurst, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: harness.now(), changeReason: 'ライが忘れてと言った',
     } });
     const before = facts.length;
     notes.turnEnded({ scopeKey: 'owner', surface: 'voice', alone: true, at: harness.now(), userMessage: 'シャノン、頭なでてもいい？', reply: 'いいですよ', feeling: null });
@@ -329,10 +329,10 @@ describe('her note\'s つもり is a stance, never a line to say (C)', () => {
   });
 });
 
-describe('ライ氏 only when it means something (4)', () => {
-  const emotion = { primary: 'happy', secondary: [], intensity: 0.5, visibility: 'subtle', target: 'ライ氏', cause: 'test', carryover: 0, decay: 0.1 } as unknown as ShannonExpressiveEmotion;
+describe('ライ only when it means something (4)', () => {
+  const emotion = { primary: 'happy', secondary: [], intensity: 0.5, visibility: 'subtle', target: 'ライ', cause: 'test', carryover: 0, decay: 0.1 } as unknown as ShannonExpressiveEmotion;
 
-  it('replaces 「address the owner as ライ氏 when natural」 with her note on, and leaves the switched-off block as it was', () => {
+  it('replaces 「address the owner as ライ when natural」 with her note on, and leaves the switched-off block as it was', () => {
     expect(buildExpressiveEmotionPrompt(emotion, 'owner')).toContain(ADDRESS_WHEN_NATURAL);
     for (const audience of ['owner', 'others'] as const) {
       const prompt = innerNoteExpressiveEmotionPrompt(emotion, audience);
@@ -341,7 +341,7 @@ describe('ライ氏 only when it means something (4)', () => {
       expect(prompt).toContain('never as the opening of a reply');
     }
     // A guest's line never named him: it keeps its own wording.
-    expect(innerNoteExpressiveEmotionPrompt(emotion, 'guest')).toContain('do not address them as ライ氏');
+    expect(innerNoteExpressiveEmotionPrompt(emotion, 'guest')).toContain('do not address them as ライ');
     expect(innerNoteExpressiveEmotionPrompt(emotion, 'guest')).not.toContain(INNER_NOTE_ADDRESS_LINE);
   });
 });

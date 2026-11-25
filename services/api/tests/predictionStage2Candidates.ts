@@ -493,7 +493,7 @@ function computeShadowDay(): { rows: StoredPredictionOutcome[]; comparisons: Sha
       touches.observe(SCOPE, { id: `touch-${touchId += 1}`, type: kind, audience: 'owner', occurredAt: clock.at, region, surface: 'windows' });
     const feel = (primary: ShannonEmotionKind, intensity: number) => store.apply(SCOPE, {
       type: 'expressive-emotion-updated',
-      emotion: resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', reply: 'ボクはそう思います。', now: clock.at, target: 'ライ氏' }),
+      emotion: resolveShannonEmotionState({ provisionalPrimary: primary, provisionalIntensity: intensity, transcript: '', reply: 'ボクはそう思います。', now: clock.at, target: 'ライ' }),
     });
     const apply = (event: CompanionStateEvent) => store.apply(SCOPE, event);
     apply({ type: 'awake-observed' });

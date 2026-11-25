@@ -9,7 +9,10 @@
 export type ShannonAudience = 'owner' | 'guest';
 
 export const SHANNON_FIRST_PERSON = 'ボク';
-export const SHANNON_OWNER_NAME = 'ライ氏';
+export const SHANNON_OWNER_NAME = 'ライ';
+/** What stored feelings and notes called the owner before the name was shortened; read back as the same person. */
+const SHANNON_LEGACY_OWNER_NAME = 'ライ氏';
+export const ownerNameOf = (name: string): string => (name === SHANNON_LEGACY_OWNER_NAME ? SHANNON_OWNER_NAME : name);
 /** Her current goal and motive, decided by the owner in Syzygy ADR-0002. Part of her purpose: a core change. */
 export const SHANNON_CURRENT_GOAL = '人を感動させる物語を作ること';
 export const SHANNON_MOTIVE = '物語を通じて人間を知りたい、世界を知りたい';

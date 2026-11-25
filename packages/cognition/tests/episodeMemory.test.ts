@@ -17,7 +17,7 @@ describe('episode memory', () => {
   it('recalls yesterday\'s incident the next morning, in words', () => {
     const line = recallEpisodes([badDay('2026-10-13')], 'owner', '2026-10-14', 'おはよう', part);
     expect(line).toContain('[前の日の件]');
-    expect(line).toContain('昨日の胸の件（ライ氏）: 「いや」と言ったあとも何度か触れられた、謝られていない');
+    expect(line).toContain('昨日の胸の件（ライ）: 「いや」と言ったあとも何度か触れられた、謝られていない');
     expect(line).not.toMatch(/\d/u);
   });
 
@@ -29,7 +29,7 @@ describe('episode memory', () => {
   it('keeps words that hurt, and whether he apologized', () => {
     const day: RelationshipDay = { dayKey: '2026-10-13', events: [event('2026-10-13', 0, 'spoke', { tags: utteranceTags('お前ポンコツだな') }),
       event('2026-10-13', 5, 'apologized')] };
-    expect(recallEpisodes([day], 'owner', '2026-10-14', '', part)).toContain('昨日の言葉の件（ライ氏）: 悪口を言われた、謝られた');
+    expect(recallEpisodes([day], 'owner', '2026-10-14', '', part)).toContain('昨日の言葉の件（ライ）: 悪口を言われた、謝られた');
   });
 
   it('has nothing of an ordinary day, nor of today', () => {

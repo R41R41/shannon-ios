@@ -80,7 +80,7 @@ export function pursuitKindLabel(kind: ShannonPursuitKind): string {
  */
 export function buildShannonPursuitsPrompt(
   pursuits: readonly ShannonPursuit[],
-  options: { maximumItems?: number; maximumCharacters?: number; /** ADR-0012: he is ライ氏 to her, not 持ち主. */ characterCore?: boolean } = {},
+  options: { maximumItems?: number; maximumCharacters?: number; /** ADR-0012: he is ライ to her, not 持ち主. */ characterCore?: boolean } = {},
 ): string {
   const maximumItems = Math.max(0, Math.min(8, Math.trunc(options.maximumItems ?? 4)));
   const maximumCharacters = Math.max(0, options.maximumCharacters ?? 360);
@@ -89,7 +89,7 @@ export function buildShannonPursuitsPrompt(
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, maximumItems);
   if (!current.length) return '';
-  const header = `[ボク自身のやりたいこと]（${options.characterCore ? 'ライ氏' : '持ち主'}の目的とは別。やったことの証拠ではない）`;
+  const header = `[ボク自身のやりたいこと]（${options.characterCore ? 'ライ' : '持ち主'}の目的とは別。やったことの証拠ではない）`;
   let result = header;
   for (const pursuit of current) {
     const line = `- ${KIND_LABEL[pursuit.kind]}: ${pursuit.title.slice(0, 60)}`;
@@ -110,7 +110,7 @@ export const SHANNON_SEEN_LIMITS = Object.freeze({ notes: 3, characters: 400, da
 const SEEN_TITLE = '[ボクが体のカメラで見たこと]';
 const SEEN_HEADER = `${SEEN_TITLE}（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。話が合う時や聞かれた時に、自分の言葉で話してよい）`;
 /** The header while other people are present: what she saw is the owner's room, so the speak-time check applies. */
-const SEEN_GUARDED_HEADER = `${SEEN_TITLE}（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライ氏の部屋とライ氏のことなので、この場では【機微:…】の確かめに従う）`;
+const SEEN_GUARDED_HEADER = `${SEEN_TITLE}（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライの部屋とライのことなので、この場では【機微:…】の確かめに従う）`;
 
 /**
  * Her recent notes about what she saw of the room, for a conversation the owner is part of.

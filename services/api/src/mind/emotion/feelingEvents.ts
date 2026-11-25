@@ -197,7 +197,7 @@ export class FeelingEvents {
 
   /**
    * Her replies of this day in front of this audience, for the repetition watch (owner, 2026-10-14: it persists across the day and catches
-   * 「ライ氏、」 from the first turn). The owner's are seeded from today's replies of his Talk that are not events yet (before the switch, or
+   * 「ライ、」 from the first turn). The owner's are seeded from today's replies of his Talk that are not events yet (before the switch, or
    * from another path), so a watch is never empty in the morning; nothing is seeded for anyone else.
    */
   private todaysReplies(scopeKey: string, key: FeelingKey, at: string, snapshot: CompanionStateSnapshot): { replies: FeelingEvent[]; texts: string[] } {

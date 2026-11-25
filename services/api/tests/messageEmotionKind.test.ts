@@ -141,7 +141,7 @@ describe('voice: the plan and the stored turn', () => {
 
   it('names the voiced kind when the stored face is the one the voice acted with', () => {
     const mood = { valence: 0.2, arousal: 0.4, openness: 0.4 };
-    const goingOn: ShannonExpressiveEmotion = { primary: 'content', secondary: [], intensity: 0.4, target: 'ライ氏', cause: '', arousal: 0.3,
+    const goingOn: ShannonExpressiveEmotion = { primary: 'content', secondary: [], intensity: 0.4, target: 'ライ', cause: '', arousal: 0.3,
       valence: 0.3, visibility: 'expressed', startedAt: at, decay: 0.5, carryover: 0.5, continued: true };
     const resolved: ReplyEmotion = { messageEmotion: createShannonMessageEmotion(mood, goingOn), expressiveEmotion: goingOn };
     expect(resolved.messageEmotion.kind).toBe('content');

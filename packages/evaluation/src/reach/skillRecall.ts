@@ -18,14 +18,14 @@ export const skillFormScenario = definition('skill.form', 'grow', '経験が手�
   ]);
 
 export const skillUseScenario = definition('skill.use', 'be_useful', '手順を使って役に立つ',
-  '会話の中でスキルを skill.read で開くと、ターンの終わりに skill.use の選択として台帳に残り、次のライ氏のターンで決着し、二回うまくいった下書きが夜に使えるスキルになるか。', [
+  '会話の中でスキルを skill.read で開くと、ターンの終わりに skill.use の選択として台帳に残り、次のライのターンで決着し、二回うまくいった下書きが夜に使えるスキルになるか。', [
     { id: 'use.recorded', judge: 'deterministic', threshold: 1, description: 'The turn\'s end records the choice skill.use with the skill as its source (and no tool.skill.read).' },
     { id: 'use.settled', judge: 'deterministic', threshold: 1, description: 'The owner\'s next turn settles the use on the skill and the choice in the ledger.' },
     { id: 'use.activated', judge: 'deterministic', threshold: 1, description: 'After two successful uses the night accepts the new skill\'s trial (active), and the audit says accepted.' },
   ]);
 
 export const skillRetireScenario = definition('skill.retire', 'grow', 'うまくいかない手順はやめる',
-  '使うたびにライ氏に直されたスキルが、直近8回の成功が0.4を下回った夜に引退し、目次から消え、開けなくなるか。', [
+  '使うたびにライに直されたスキルが、直近8回の成功が0.4を下回った夜に引退し、目次から消え、開けなくなるか。', [
     { id: 'retire.night', judge: 'deterministic', threshold: 1, description: 'Below 0.4 success over its last eight resolved uses, the night retires it.' },
     { id: 'retire.out_of_index', judge: 'deterministic', threshold: 1, description: 'A retired skill is out of the index and skill.read answers not_found.' },
   ]);
@@ -57,8 +57,8 @@ export const skillAuditScenario = definition('skill.audit', 'grow', '同じ失�
     { id: 'audit.shown', judge: 'deterministic', threshold: 1, description: 'The proposer is shown the reverted change before it proposes.' },
   ]);
 
-export const skillExportScenario = definition('skill.export', 'be_useful', 'ライ氏が読めて、直せる',
-  '使えるスキルの読める写しがAetherのシャノン用フォルダにあり（引退したスキルには新しく作らず、同じ本文は二度書かない）、ライ氏が写しを直したら次の睡眠で新しい版として取り込み、上書きしないか。Aetherがない時は何も書かないか。', [
+export const skillExportScenario = definition('skill.export', 'be_useful', 'ライが読めて、直せる',
+  '使えるスキルの読める写しがAetherのシャノン用フォルダにあり（引退したスキルには新しく作らず、同じ本文は二度書かない）、ライが写しを直したら次の睡眠で新しい版として取り込み、上書きしないか。Aetherがない時は何も書かないか。', [
     { id: 'export.copies', judge: 'deterministic', threshold: 1, description: 'Every usable skill has a copy whose body is its SKILL.md, a retired one never gets one; a second night writes nothing (idempotent by hash).' },
     { id: 'export.owner_edit', judge: 'deterministic', threshold: 1, description: 'An owner\'s edit of a copy is adopted at the next sleep as a new version (actor owner) and never written over.' },
     { id: 'export.off', judge: 'deterministic', threshold: 1, description: 'Without Aether, or with SHANNON_SKILL_EXPORT=off, there is no export.' },

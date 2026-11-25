@@ -1,6 +1,6 @@
 # Stage 4 implementation evidence
 
-Owner: ライ氏. Implementation: Codex, `codex/shannon/adr8-stage4`, based on `16bdf384`.
+Owner: ライ. Implementation: Codex, `codex/shannon/adr8-stage4`, based on `16bdf384`.
 Observed: 2026-10-08 (JST). Reviewed runtime source: `12dd3688378c37fd2570db7c4700b276ec4f575a`. Measurement interruption cleanup is a separate script-only fix at `e260e66e`.
 Production and `main` remain Stage 3 at `16bdf384`; Stage 4 defaults to OFF.
 

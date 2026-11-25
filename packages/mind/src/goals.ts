@@ -191,13 +191,13 @@ export function goalsOverCap(active: readonly ActiveGoalFacts[], keep: string | 
 /** The predicate in plain Japanese for the owner's 目標 tab (`docs/executive-ui-contract.md`); `label` names a capability. */
 export function goalPredicateSummary(predicate: GoalPredicate, label: (capability: string) => string = capability => capability): string {
   switch (predicate.type) {
-    case 'piece_shown': return predicate.minVersion > 1 ? `物語を第${predicate.minVersion}版まで直して、ライ氏に見せる` : '物語を書いて、ライ氏に見せる';
-    case 'owner_reaction': return predicate.positive ? '見せたものに、ライ氏がよい反応をくれる' : '見せたものに、ライ氏から反応がある';
+    case 'piece_shown': return predicate.minVersion > 1 ? `物語を第${predicate.minVersion}版まで直して、ライに見せる` : '物語を書いて、ライに見せる';
+    case 'owner_reaction': return predicate.positive ? '見せたものに、ライがよい反応をくれる' : '見せたものに、ライから反応がある';
     case 'notes_count': return `メモを${predicate.n}件書く`;
     case 'research_report': return '調べたことを報告にまとめる';
     case 'task_completed': return `「${label(predicate.capability)}」を最後までやり遂げる`;
     case 'minecraft_report': return 'マイクラで遊んで、報告を残す';
-    case 'owner_confirm': return 'ライ氏が完了を認める';
+    case 'owner_confirm': return 'ライが完了を認める';
   }
 }
 

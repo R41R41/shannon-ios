@@ -41,7 +41,7 @@ function ledger() {
 type Options = { apiKey: string; model?: string; fetcher: typeof fetch; usageStore: LlmUsageStore };
 type Example = { name: string; answer: string; lane: string; call: (options: Options) => Promise<unknown> };
 const examples: Example[] = [
-  { name: 'replay text', answer: '会話の要約。', lane: 'memory_background', call: o => new OpenAIReplaySummaryWriter(o).update('owner', { previousSummary: null, lines: ['ライ氏: 話を続けたい'] }) },
+  { name: 'replay text', answer: '会話の要約。', lane: 'memory_background', call: o => new OpenAIReplaySummaryWriter(o).update('owner', { previousSummary: null, lines: ['ライ: 話を続けたい'] }) },
   { name: 'replay template', answer: '{}', lane: 'memory_background', call: o => new OpenAIReplaySummaryWriter(o).updateTemplate('owner', { previous: null, messages: [] }) },
   { name: 'impressions', answer: '{"observations":[],"candidates":[]}', lane: 'memory_background', call: o => new OpenAIImpressionAnalyzer(o).analyze('owner', { person: 'ミキさん', localDate: '2026-10-08', lines: ['こんにちは'], impressions: [], maximumNew: 2 }) },
   { name: 'person facts', answer: '{"judgements":[]}', lane: 'memory_background', call: o => new OpenAIPersonFactJudge(o).judge('owner', { newFacts: [{ key: 'n1', text: '猫が好き' }], facts: [] }) },
@@ -188,7 +188,7 @@ describe('all background small-model paths use native Haiku', () => {
       return message('{"say":false,"text":"","feeling":"neutral"}', bodies.length === 1 ? coldUsage : { ...coldUsage, cache_creation_input_tokens: 0, cache_read_input_tokens: 600,
         cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } });
     } });
-    await speaker.decide({ scopeKey: 'owner', prompt: 'ライ氏と二人だけ。首をつつかれた。', signal: new AbortController().signal });
+    await speaker.decide({ scopeKey: 'owner', prompt: 'ライと二人だけ。首をつつかれた。', signal: new AbortController().signal });
     await speaker.decide({ scopeKey: 'owner', prompt: 'ほかの人もいる。手に触れられた。', signal: new AbortController().signal });
     expect(bodies[0]!.system[0]).toEqual(bodies[1]!.system[0]);
     expect(JSON.stringify(bodies[1])).not.toContain('首をつつかれた');

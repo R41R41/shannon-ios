@@ -187,7 +187,7 @@ export function boundedVoiceSummary(value: string): string | null {
 }
 
 export const VOICE_SUMMARY_INSTRUCTIONS = [
-  'You keep the summary of one spoken call between ユーザー (ライ氏, the owner, unless a line says otherwise) and シャノン.'
+  'You keep the summary of one spoken call between ユーザー (ライ, the owner, unless a line says otherwise) and シャノン.'
     + ' The reply model hears only the last few exchanges after this summary, so it is its only record of what came before in the call.',
   `Write plain Japanese, at most ${VOICE_SUMMARY_CHARACTERS} characters, as four short lines that begin with 話題:, 事実:, 約束:, 気持ち:`
     + ' (なし when a line has nothing). Merge the previous summary with the new messages; when space runs out, drop what was settled earliest first.',

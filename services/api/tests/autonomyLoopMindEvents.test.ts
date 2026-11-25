@@ -31,7 +31,7 @@ describe('her own time and the mind', () => {
     const speaker = new SQLiteReachOutSpeaker(path);
     const harness = loopHarness({ path: join(directory, 'autonomy.sqlite'), clock, model, reachOuts: speaker,
       emitMindEvent: (scopeKey, draft, at) => { emitted.push(draft); inbox.emit(scopeKey, draft, at); } });
-    model.plans = [{ thought: 'ライ氏はいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] }];
+    model.plans = [{ thought: 'ライはいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] }];
     await runUntilIdle(harness.loop);
     expect(model.kinds()).toContain('reach_out');
     // One row: the message she sent; her thoughts and her rest are not handed over.

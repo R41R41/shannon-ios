@@ -11,14 +11,14 @@ import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
  * are words for her judgment (nothing reads the owner's sentence for a phrase), so what is pinned here is that each rule is written, with its reason.
  */
 const owner = (running: string | null = 'ケーキを1個作る') => minecraftQueueGuide({
-  queueLines: ['#7 実行中 「ケーキを1個作る」'], running, who: 'ライ氏' }).join('\n');
+  queueLines: ['#7 実行中 「ケーキを1個作る」'], running, who: 'ライ' }).join('\n');
 
 describe('the order of requests is the one who asks\'s to decide', () => {
   it('maps 「先に」 「優先」 「やめて」 to now, and a request that says nothing of order to end, each with its reason', () => {
     const text = owner();
     expect(text).toContain('順番に触れない新しい頼み');
     for (const word of ['「先に」', '「優先して」', '「今のはやめて〜を」']) expect(text).toContain(word);
-    expect(text).toContain('順番を決めるのは頼んだライ氏');
+    expect(text).toContain('順番を決めるのは頼んだライ');
     expect(text).toContain('保留は自動で戻る');
     expect(text).toContain('夜になった（暗い）・危険がある');
     expect(text).toContain('夜に「ベッドを作って」と頼まれたら now');

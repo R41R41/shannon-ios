@@ -145,13 +145,13 @@ describe('the body\'s present for a call', () => {
   });
 
   it('tells everyone on a call what was asked, and still keeps it from other shared places and keeps the owner\'s exchanges to him', () => {
-    const call = liveBlock(snapshot(), { alone: false, participants: true, exchanges: 'ライ氏だけの話' });
+    const call = liveBlock(snapshot(), { alone: false, participants: true, exchanges: 'ライだけの話' });
     expect(call).toContain('取り組んでいること: ケーキを1個作る（通話の誰かに頼まれた）');
-    expect(call).not.toContain('ライ氏だけの話');
+    expect(call).not.toContain('ライだけの話');
     const elsewhere = liveBlock(snapshot(), { alone: false });
     expect(elsewhere).not.toContain('ケーキ');
     expect(elsewhere).toContain('頼まれた作業の最中');
-    expect(liveBlock(snapshot(), { alone: true })).toContain('（ライ氏に頼まれた）');
+    expect(liveBlock(snapshot(), { alone: true })).toContain('（ライに頼まれた）');
   });
 
   it('tells her plan\'s section and points when the body\'s head keeps them, and nothing when it does not', () => {

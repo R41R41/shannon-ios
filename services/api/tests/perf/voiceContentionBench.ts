@@ -89,7 +89,7 @@ function voiceWorkload(world: { path: string; store: never }, actions: ReturnTyp
     peopleMemory: peopleStore, mind: mind as never,
   });
   const environment = { SHANNON_PLATFORM_BRIDGE_TOKEN: TOKEN, SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
-    SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([{ platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライ氏の部屋', audience: 'owner-private' }]) };
+    SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([{ platform: 'discord', conversationId: ROOM, ownerUserId: OWNER, title: 'ライの部屋', audience: 'owner-private' }]) };
   const bridge = new PlatformBridgeService(configuredPlatformBridge(environment)!, store as never, store as never, background, now,
     new PlatformPeople(peopleStore, store as never), () => true);
   const log = new SQLiteSurfaceTurnLog(world.path, 'platform_voice_turns');
@@ -104,7 +104,7 @@ function voiceWorkload(world: { path: string; store: never }, actions: ReturnTyp
     const lines: Array<{ at: number; line: VoiceTurnLine }> = [];
     const started = performance.now();
     await service.turn({
-      platform: 'discord', requestId: `bench-${index}`, conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ氏',
+      platform: 'discord', requestId: `bench-${index}`, conversationId: ROOM, sourceUserId: OWNER, sourceDisplayName: 'ライ',
       userMessage: SAYINGS[index % SAYINGS.length], observedAt: now(), participants: shared ? [OWNER, FRIEND] : [OWNER],
     }, line => lines.push({ at: performance.now(), line }));
     const call = model.calls[calls];

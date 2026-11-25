@@ -269,7 +269,7 @@ const capabilityEvidence: Record<ShannonCapabilityId | ConditionalCapabilityId, 
     && !withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes(`- ${SHANNON_LIMITATIONS.find(item => item.id === 'calendar_mail')!.text}`)
     // Changing and deleting an event are tools too (a proposal she shows, then his yes): only what no tool does stays.
     && withDeviceActionsCapability(shannonCapabilityPrompt('owner')).includes('- メールやメッセージの送信、ほかの人への電話、予約、購入。')
-    && SHANNON_DEVICE_ACTIONS_CAPABILITY.text.includes('予定を変える・消す時は、先に案をライ氏に見せ'),
+    && SHANNON_DEVICE_ACTIONS_CAPABILITY.text.includes('予定を変える・消す時は、先に案をライに見せ'),
   phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
     && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };

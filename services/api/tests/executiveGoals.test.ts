@@ -120,11 +120,11 @@ describe('the owner\'s Executive routes (docs/executive-ui-contract.md)', () => 
     expect(events('status')).toHaveLength(1);
     const goals = call('GET', '/v1/autonomy/goals').body;
     const item = goals.goals.find((goal: { id: string }) => goal.id === resting.id);
-    expect(item).toMatchObject({ status: 'resting', closedReason: 'ライ氏が休めた', ownerCanConfirm: true, ownerCanRest: false, ownerCanDrop: true });
+    expect(item).toMatchObject({ status: 'resting', closedReason: 'ライが休めた', ownerCanConfirm: true, ownerCanRest: false, ownerCanDrop: true });
     expect(goals.activeLimit).toBe(8);
     const confirmed = call('POST', `/v1/autonomy/pursuits/${resting.id}/confirm`);
     expect(confirmed.status).toBe(200);
-    expect(confirmed.body.goals.find((goal: { id: string }) => goal.id === resting.id)).toMatchObject({ status: 'done', closedReason: 'ライ氏が完了を認めた', progress: 1 });
+    expect(confirmed.body.goals.find((goal: { id: string }) => goal.id === resting.id)).toMatchObject({ status: 'done', closedReason: 'ライが完了を認めた', progress: 1 });
     expect(call('POST', `/v1/autonomy/pursuits/${resting.id}/confirm`).status).toBe(200);
     expect(events('owner_confirmed')).toHaveLength(1);
     expect(service.activityDays(scope, 1)[0]!.entries.filter(entry => entry.summary.includes('やり終えたと認めました'))).toHaveLength(1);

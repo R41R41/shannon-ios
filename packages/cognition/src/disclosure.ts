@@ -117,7 +117,7 @@ export function mayDisclose(disclosure: MemoryDisclosure | undefined, present: M
 }
 
 /** Marker for derived text with no label of its own (summaries, Shannon's notes, goals, interests). */
-export const UNLABELLED_DISCLOSURE_MARKER = '【機微:未分類・ライ氏だけが知っている】';
+export const UNLABELLED_DISCLOSURE_MARKER = '【機微:未分類・ライだけが知っている】';
 
 /**
  * The compact marker a guarded item carries into the prompt: what kind of personal
@@ -132,7 +132,7 @@ export function disclosureMarker(
   const kind = disclosure?.category ? SENSITIVITY_CATEGORY_LABELS[disclosure.category] : '未分類';
   const audience = disclosure?.audience;
   const names = audience?.kind === 'people' ? audience.personIds.flatMap(id => nameOf(id) ?? []).map(name => `${name}さん`) : [];
-  const knownBy = !audience || isOwnerOnly(audience) ? 'ライ氏だけが知っている'
+  const knownBy = !audience || isOwnerOnly(audience) ? 'ライだけが知っている'
     : audience.kind === 'group' ? '別のグループの会話で出た'
       : `${names.length ? names.join('・') : '別の人'}と一緒の時に聞いた`;
   return `【機微:${kind}・${knownBy}】`;
@@ -258,11 +258,11 @@ export const SENSITIVITY_CATEGORY_LABELS: Readonly<Record<MemorySensitivityCateg
   unknown_audience: '相手が分からない場での会話',
 });
 
-/** 「ライ氏と二人の時」「ミキさんと一緒の時」: how an audience is shown to the owner and to the model. */
+/** 「ライと二人の時」「ミキさんと一緒の時」: how an audience is shown to the owner and to the model. */
 export function describeAudience(audience: MemoryAudience | undefined, nameOf: (personId: string) => string | undefined = () => undefined): string {
-  if (!audience || isOwnerOnly(audience)) return 'ライ氏と二人の時';
+  if (!audience || isOwnerOnly(audience)) return 'ライと二人の時';
   if (audience.kind === 'group') return 'グループの会話';
-  if (audience.kind !== 'people') return 'ライ氏と二人の時';
+  if (audience.kind !== 'people') return 'ライと二人の時';
   const names = audience.personIds.map(id => nameOf(id)).filter((name): name is string => Boolean(name)).map(name => `${name}さん`);
   const unnamed = audience.unknownGuest === true || names.length < audience.personIds.length;
   const everyone = [...names, ...(unnamed ? ['名前を聞いていない方'] : [])];

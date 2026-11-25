@@ -425,7 +425,7 @@ describe('a lifecycle operation retried after a failed first try reaches her nex
     // An unknown id is still refused by the executor, and a field that is not in the schema by the input check.
     const g = fixture();
     expect((await g.calls(name, `unknown-${action}`, [{ serverId: 'elsewhere' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
-    expect((await g.calls(name, `field-${action}`, [{ reason: 'ライ氏に頼まれた' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
+    expect((await g.calls(name, `field-${action}`, [{ reason: 'ライに頼まれた' }]))[0]).toMatchObject({ ok: false, failure: 'invalid_input' });
   });
 
   it('tells the other ends of an accepted operation as they are, and keeps a failure that was never followed by a success', async () => {

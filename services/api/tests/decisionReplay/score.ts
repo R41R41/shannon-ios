@@ -3,7 +3,7 @@ import { answerOf, contextOf, repeatsStop, runCheck, stopIfFixes, walksIntoBlock
 import { decisions, type Decision, type Run } from './load.js';
 
 /**
- * 場面のファイル（scenes/*.json）。ライ氏が見て直せるように、正しい手の条件は文で書き、機械で決まる所だけ検査の名前で書く。
+ * 場面のファイル（scenes/*.json）。ライが見て直せるように、正しい手の条件は文で書き、機械で決まる所だけ検査の名前で書く。
  * - must: 外れたら × （正しい手がしてはいけないこと）。
  * - want: 全部通れば ○ （正しい手がしていること）。外れた・書いていない場面は、後知恵つきの Opus の採点（judge.ts）が決める。
  * - 自動の検査（どの場面にも）: 体に送れる形・同じ止まりのくり返し・塞がったマス／床の無いマスへ歩く手。外れたら ×。

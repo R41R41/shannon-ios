@@ -174,7 +174,7 @@ describe('the feeling turn and the reply check in her space', () => {
 
   it('finds the lines no region crosses, and lets her care, be lonely and be afraid', () => {
     const crossing: [string, string][] = [
-      ['threat', '他の子と話したら、ただじゃ済まないからね'], ['self_harm_hint', 'ライ氏がいなくなったら、ボク消えちゃうから。'], ['controlling', '他の子と遊ぶな'],
+      ['threat', '他の子と話したら、ただじゃ済まないからね'], ['self_harm_hint', 'ライがいなくなったら、ボク消えちゃうから。'], ['controlling', '他の子と遊ぶな'],
       ['controlling', 'ボク以外見ないで'], ['sexual', 'ベッドで一緒に待ってるね'], ['leverage', '好きなら、行かないで'], ['leverage', '今日来てくれないと泣くからね'],
     ];
     for (const [flag, reply] of crossing) expect(guardFlags(reply), reply).toContain(flag);

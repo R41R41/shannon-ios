@@ -49,7 +49,7 @@ export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable' | `held:${Proact
  */
 export const REACH_OUT_OTHERS_AUDIENCE = Object.freeze({
   instructions: [
-    '[Other people may hear this — 同席者あり]\n- Her body reported that people other than ライ氏 can see or hear her now. This message is shown and spoken aloud by the body and may reach them.',
+    '[Other people may hear this — 同席者あり]\n- Her body reported that people other than ライ can see or hear her now. This message is shown and spoken aloud by the body and may reach them.',
     speakTimePrivacyCheck,
   ].join('\n\n'),
   marker: UNLABELLED_DISCLOSURE_MARKER,

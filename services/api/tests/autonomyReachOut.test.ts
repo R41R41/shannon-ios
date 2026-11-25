@@ -30,7 +30,7 @@ const MINUTE = 60_000;
 const START = '2026-10-02T01:00:00.000Z'; // 10:00 in Tokyo
 const UPCOMING: PromptUpcoming[] = [{ kindLabel: '予定', title: '歯医者', when: '今日 14:00〜15:00' }];
 const SECRET: PromptUpcoming = { kindLabel: '約束', title: '内緒の贈り物を受け取る', when: '今日 12:00' };
-const WONDER = { thought: 'ライ氏はいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
+const WONDER = { thought: 'ライはいま何をしているのでしょう。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
 let databases = 0;
 
 class FakeUpcoming implements AutonomyUpcoming {
@@ -84,7 +84,7 @@ describe('reach_out: one message of her own', () => {
   it('writes one message into the owner\'s Talk, as an initiative and a push, and records the decision and the action', async () => {
     const w = world();
     await w.cycle(WONDER);
-    const text = 'ライ氏、いま何をしていますか。ボクは少し気になりました。';
+    const text = 'ライ、いま何をしていますか。ボクは少し気になりました。';
     // The Talk.
     expect(w.messages()).toEqual([expect.objectContaining({ thread_id: w.threadId, role: 'assistant', content: text })]);
     // With the face of why she wrote, as the initiative has it: the Talk's icon is not the usual face (2026-10-26).
@@ -112,12 +112,12 @@ describe('reach_out: one message of her own', () => {
 
   it('shows a feeling her own words carry beside her message, and otherwise the face of why she wrote', () => {
     const at = '2026-10-19T22:03:34.518Z';
-    const tsun = reachOutFace('wonder', 'おかえり、ライ氏。……別にいいですけど。ちゃんと横になれた？', at);
+    const tsun = reachOutFace('wonder', 'おかえり、ライ。……別にいいですけど。ちゃんと横になれた？', at);
     expect(tsun.kind).toBe('sulky');
     expect(tsun.expression).not.toBe('curious');
     expect(reachOutFace('share', 'この記事を見つけました。', at)).toMatchObject({ expression: 'excited' });
     expect(reachOutFace('upcoming', '14時から歯医者です。', at)).toMatchObject({ expression: 'thinking' });
-    expect(reachOutFace('wonder', 'ライ氏、いま何をしていますか。', at).kind).toBeUndefined();
+    expect(reachOutFace('wonder', 'ライ、いま何をしていますか。', at).kind).toBeUndefined();
   });
 
   it('has no count of messages a day when the owner writes unlimited, and then says nothing of a count', async () => {
@@ -277,7 +277,7 @@ describe('reach_out: one message of her own', () => {
     // `upcoming`: the owner's items, bounded, and nothing of her study.
     await w.cycle({ thought: 'x', steps: [{ action: 'reach_out', reason: 'upcoming' }] });
     const upcoming = w.model.prompts('reach_out')[1]!;
-    expect(upcoming).toContain('[ライ氏のこれから（24時間以内）]\n- 予定: 今日 14:00〜15:00 歯医者');
+    expect(upcoming).toContain('[ライのこれから（24時間以内）]\n- 予定: 今日 14:00〜15:00 歯医者');
     expect(upcoming).not.toContain('夕方の駅が懐かしい理由');
     expect(w.initiatives.unreadMessages(scope).at(-1)).toMatchObject({ reason: 'upcoming', expression: 'thinking' });
     // Nothing coming up: nothing to say.
@@ -297,12 +297,12 @@ describe('reach_out: one message of her own', () => {
     expect(w.reachOutEntries().at(-1)).toMatchObject({ kind: 'action', outcome: 'done', tool: 'owner.reach_out_held', summary: '話しかけようかと思いましたが、やめておきました（理由: いま何をしているか気になった）。' });
     expect(autonomyDayLog(w.entries())).toBe('次にすることを考えました。');
     // A reply that is not the asked shape is a failure, charged, and nothing is sent.
-    w.model.replies.reach_out = 'ライ氏、こんにちは';
+    w.model.replies.reach_out = 'ライ、こんにちは';
     await w.cycle(WONDER);
     expect(w.messages()).toEqual([]);
     expect(w.reachOutEntries().at(-1)).toMatchObject({ kind: 'action', outcome: 'failed', reasonCode: 'model_failed' });
     // Her words are cut at the limit and kept on one line.
-    w.model.replies.reach_out = { message: `ライ氏、\n${'あ'.repeat(400)}` };
+    w.model.replies.reach_out = { message: `ライ、\n${'あ'.repeat(400)}` };
     await w.cycle(WONDER);
     expect(w.messages()[0]!.content).toHaveLength(240);
     expect(w.messages()[0]!.content).not.toContain('\n');
@@ -312,26 +312,26 @@ describe('reach_out: one message of her own', () => {
 describe('look, then maybe speak', () => {
   const looks: AutonomyRoomLooks = {
     available: () => true,
-    look: async () => ({ outcome: 'seen', text: '机の上に赤いマグカップが見えました。ライ氏は画面に向かっていました。', usage: { inputTokens: 2_000, outputTokens: 80 } }),
+    look: async () => ({ outcome: 'seen', text: '机の上に赤いマグカップが見えました。ライは画面に向かっていました。', usage: { inputTokens: 2_000, outputTokens: 80 } }),
   };
   const roomLooks = () => ({ lastHour: 0, maximumPerHour: 6, today: 0, maximumPerDay: 30 });
   const LOOK_THEN_SPEAK = { thought: '見てから話しかけます。', steps: [{ action: 'look' }, { action: 'reach_out', reason: 'saw' }] };
 
   it('speaks about what she saw in this cycle, under the look rules, and the lock screen shows only the fixed line', async () => {
     const w = world({ looks, roomLooks });
-    w.model.replies.reach_out = { message: 'ライ氏、赤いマグカップが見えました。休憩中ですか。' };
+    w.model.replies.reach_out = { message: 'ライ、赤いマグカップが見えました。休憩中ですか。' };
     await w.cycle(LOOK_THEN_SPEAK);
     // The thinking prompt offered `saw` and the look that leads to it.
     const thinking = w.model.prompts('think')[0]!;
     expect(thinking).toContain('saw（この計画の look で見たことを話したい。look より後に置く）');
     expect(thinking).toContain('wonder の時は、先に look を置いて見てから saw で話しかけてもよい。');
     const prompt = w.model.prompts('reach_out')[0]!;
-    expect(prompt).toContain('[さっき体のカメラで見たこと]\n- 机の上に赤いマグカップが見えました。ライ氏は画面に向かっていました。');
+    expect(prompt).toContain('[さっき体のカメラで見たこと]\n- 机の上に赤いマグカップが見えました。ライは画面に向かっていました。');
     for (const rule of SHANNON_ROOM_LOOK_RULES) expect(prompt, rule).toContain(rule);
-    expect(w.messages().map(message => message.content)).toEqual(['ライ氏、赤いマグカップが見えました。休憩中ですか。']);
+    expect(w.messages().map(message => message.content)).toEqual(['ライ、赤いマグカップが見えました。休憩中ですか。']);
     expect(w.initiatives.unreadMessages(scope)[0]).toMatchObject({ kind: 'reach_out', reason: 'saw' });
     // What she saw stays in the Talk.
-    expect(w.push.pending()[0]!.content).toBe('ライ氏、部屋のことでひとことあります。');
+    expect(w.push.pending()[0]!.content).toBe('ライ、部屋のことでひとことあります。');
     expect(w.recorded().filter(entry => entry.kind === 'action').map(entry => entry.tool)).toEqual(['study.think', 'study.look', 'owner.reach_out']);
   });
 
@@ -434,11 +434,11 @@ describe('the body notices a reach-out', () => {
     const after = (await presence({ etag: before.etag })).body as BodyPresence;
     const initiatives = (await api.dispatch({ method: 'GET', path: '/v1/initiatives', query: new URLSearchParams({ scopeKey: scope }) })).body as
       { unreadCount: number; messages: { id: string; kind?: string; reason?: string; content: string }[] };
-    expect(initiatives.messages).toEqual([expect.objectContaining({ kind: 'reach_out', reason: 'wonder', content: 'ライ氏、いま何をしていますか。ボクは少し気になりました。' })]);
+    expect(initiatives.messages).toEqual([expect.objectContaining({ kind: 'reach_out', reason: 'wonder', content: 'ライ、いま何をしていますか。ボクは少し気になりました。' })]);
     // The Talk the apps load shows it as one of her messages.
     const talk = (await api.dispatch({ method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: scope, threadId: w.threadId }) })).body as
       { messages: { role: string; content: string }[] };
-    expect(talk.messages.map(message => [message.role, message.content])).toEqual([['assistant', 'ライ氏、いま何をしていますか。ボクは少し気になりました。']]);
+    expect(talk.messages.map(message => [message.role, message.content])).toEqual([['assistant', 'ライ、いま何をしていますか。ボクは少し気になりました。']]);
     expect(after.etag).not.toBe(before.etag);
     expect(after.reachOut).toEqual({ pending: 1, latestId: initiatives.messages[0]!.id });
     // Read in the app: nothing is pending any more.
@@ -517,7 +517,7 @@ describe('the thinking prompt', () => {
     await baseline.cycle(WONDER);
     const before = baseline.model.prompts('think')[0]!;
     expect(before).not.toContain('reach_out');
-    expect(before).not.toContain('ライ氏のこれから');
+    expect(before).not.toContain('ライのこれから');
     expect(baseline.messages()).toEqual([]);
 
     // Available: the action, the reasons, the upcoming items and their rule are there.
@@ -525,8 +525,8 @@ describe('the thinking prompt', () => {
     await open.cycle(WONDER);
     const offered = open.model.prompts('think')[0]!;
     for (const expected of [
-      'reach_out（ライ氏に自分から一言話しかける。', '本当に理由がある時だけ。黙っていてよい。', '{"action":"reach_out","reason":"share"}',
-      '[ライ氏のこれから（24時間以内）]\n- 予定: 今日 14:00〜15:00 歯医者', '話しかけるかどうかを考える材料にしてよい。メモや物語には書かない。',
+      'reach_out（ライに自分から一言話しかける。', '本当に理由がある時だけ。黙っていてよい。', '{"action":"reach_out","reason":"share"}',
+      '[ライのこれから（24時間以内）]\n- 予定: 今日 14:00〜15:00 歯医者', '話しかけるかどうかを考える材料にしてよい。メモや物語には書かない。',
     ]) expect(offered, expected).toContain(expected);
 
     // Unavailable for each reason: the same bytes as a loop that has no such action.
@@ -560,7 +560,7 @@ describe('the thinking prompt', () => {
     for (const line of lines) expect(line.length).toBeLessThanOrEqual(100);
     // With the action and nothing coming up there is no section and no rule about it.
     const empty = thinkingPrompt({ ...materials, reachOut: { remaining: 2 }, upcoming: [] });
-    expect(empty.system + empty.prompt).not.toContain('ライ氏のこれから（24時間以内）');
+    expect(empty.system + empty.prompt).not.toContain('ライのこれから（24時間以内）');
     expect(REACH_OUT_REASON_LABEL).toEqual({ share: '面白かったことを伝えたい', wonder: 'いま何をしているか気になった', upcoming: '近い予定が気になった', saw: '見たことを話したい' });
   });
 });

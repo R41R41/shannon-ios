@@ -51,7 +51,7 @@ function longThread(state: CompanionStateStore, history: ConversationStore, thre
   new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, source.observedAt);
   const fact = state.snapshot('owner').userFacts[0]!;
   for (const [user, reply] of unrelated) say(`${user}（続き）`, `${reply}（続き）`);
-  const restated = say('おすすめの飲み物は？', 'ライ氏は紅茶が好きなので、ダージリンはどうですか。');
+  const restated = say('おすすめの飲み物は？', 'ライは紅茶が好きなので、ダージリンはどうですか。');
   const paraphrased = say('午後に何か飲みたい', '温かい一杯を用意しましょうか。', { recalledMemoryIds: [fact.id] });
   const sameWordsNoProvenance = say('夕方に何か飲みたい', '温かい一杯を用意しましょうか。');
   return { source, fact, restated, paraphrased, sameWordsNoProvenance, turns: clock };
@@ -273,7 +273,7 @@ describe('recall, search, embeddings and private knowledge never surface the for
     const source = store.appendTurn('owner', a, '私は紅茶が好き。', '覚えておきます。', minute(1), turnContext({ threadSummary: 'ドリンクの好みを聞いた' }));
     new TurnRefinementProcessor(store, store).process('owner', source.userMessage, source.id, source.observedAt);
     const fact = store.snapshot('owner').userFacts[0]!;
-    const restated = store.appendTurn('owner', b, '差し入れは何がいい？', 'ライ氏は紅茶が好きなので茶葉にしましょう。', minute(2), turnContext({ threadSummary: '差し入れの相談をした' }));
+    const restated = store.appendTurn('owner', b, '差し入れは何がいい？', 'ライは紅茶が好きなので茶葉にしましょう。', minute(2), turnContext({ threadSummary: '差し入れの相談をした' }));
     const paraphrased = store.appendTurn('owner', c, '午後の休憩どうしよう', '温かい一杯で一息つきましょう。', minute(3),
       turnContext({ threadSummary: '午後の休憩を相談した', recalledMemoryIds: [fact.id] }));
     const tripThread = store.createThread('owner');

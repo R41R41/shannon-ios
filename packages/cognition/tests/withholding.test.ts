@@ -44,7 +44,7 @@ describe('withholding rules', () => {
   it('withholds an earlier text that restates the item, and nothing written after the boundary', () => {
     const [rule] = memoryWithholdingRules(base([control({ sourceEvidence: '私は紅茶が好き', contextInvalidatedAt: at })]));
     expect(rule).toMatchObject({ memoryId: 'fact-1', boundary: at, needed: 1, wide: false });
-    expect(ruleWithholdsText(rule!, 'ライ氏は紅茶が好きですよね。', at)).toBe(true);
+    expect(ruleWithholdsText(rule!, 'ライは紅茶が好きですよね。', at)).toBe(true);
     expect(ruleWithholdsText(rule!, '署名設定を確認しましょう。', at)).toBe(false);
     expect(ruleWithholdsText(rule!, '紅茶は3分蒸らします。', later)).toBe(false);
   });

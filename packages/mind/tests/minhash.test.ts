@@ -44,7 +44,7 @@ describe('MinHash over character 3-grams', () => {
   });
 
   it('is close to the exact similarity on average over many pairs', () => {
-    const base = 'シャノンとライ氏は夕方の駅で傘の話をした。帰り道に雨が降ってきた。';
+    const base = 'シャノンとライは夕方の駅で傘の話をした。帰り道に雨が降ってきた。';
     let error = 0;
     for (let cut = 1; cut <= 20; cut += 1) {
       const other = base.slice(cut) + base.slice(0, cut / 2);
@@ -59,7 +59,7 @@ describe('MinHash over character 3-grams', () => {
   });
 
   it('stores a signature as 512 hexadecimal characters and reads it back', () => {
-    const signature = minHashSignature('ライ氏の誕生日の話')!;
+    const signature = minHashSignature('ライの誕生日の話')!;
     const text = encodeSignature(signature);
     expect(text).toMatch(/^[0-9a-f]{512}$/u);
     expect(decodeSignature(text)).toEqual(signature);

@@ -152,7 +152,7 @@ type ServiceOptions = { enabled?: boolean; alone?: boolean; gameOnly?: boolean; 
   stopTakes?: boolean };
 function service(options: ServiceOptions = {}) {
   const audit = new OperatorAuditStore(new DatabaseSync(':memory:'));
-  const tasks = new Map<string, TaskView>([[OTHER, task(OTHER, 'executing', 'ライ氏の依頼')]]);
+  const tasks = new Map<string, TaskView>([[OTHER, task(OTHER, 'executing', 'ライの依頼')]]);
   const activity: OperatorActivity[] = [], notes: Array<{ id: string; text: string }> = [], stopped: string[] = [], admitted: unknown[] = [];
   let clock = at, wakes = 0;
   const requests = {
@@ -198,7 +198,7 @@ const events = (audit: OperatorAuditStore) => audit.recent('owner', 200).reverse
 describe('the operator service', () => {
   it('audits and refuses an out-of-scope invocation, and records it as refused', async () => {
     const s = service();
-    const reply = await s.operator.handle(envelope('send', { text: 'ライ氏として話す' }, 'chat'));
+    const reply = await s.operator.handle(envelope('send', { text: 'ライとして話す' }, 'chat'));
     expect(reply).toMatchObject({ status: 403, body: { outcome: 'refused', code: 'out_of_scope' } });
     expect(events(s.audit)).toEqual(['unknown/invoked/invoked', 'unknown/refused/out_of_scope']);
     expect(s.audit.recent('owner')[0]!.argsJson).toContain('chat');
@@ -220,7 +220,7 @@ describe('the operator service', () => {
     expect(events(s.audit)).toEqual(['request/invoked/invoked', 'request/accepted/accepted']);
     expect(s.audit.budgetYen(TASK)).toBe(300);
     expect(s.activity[0]!.summary).toContain('運用者（ops.ryo）');
-    expect(s.notes[0]!.text).toBe(`${OPERATOR_NOTE_MARK}運用者がライ氏の代わりに Minecraft の依頼「石を集めて」を始めました。`);
+    expect(s.notes[0]!.text).toBe(`${OPERATOR_NOTE_MARK}運用者がライの代わりに Minecraft の依頼「石を集めて」を始めました。`);
     expect(s.wakes()).toBe(1);
   });
 
@@ -391,7 +391,7 @@ describe('the operator service', () => {
     expect(s.lifecycleCalls).toEqual([{ id, serverId: 'shannon-home', action: 'start' }]);
     expect(s.audit.operation(id).map(row => row.event)).toEqual(['invoked', 'accepted']);
     expect(s.audit.operation(id)[0]).toMatchObject({ action: 'start', serverId: 'shannon-home' });
-    expect(s.notes[0]!.text).toContain('運用者がライ氏の代わりに Minecraft の操作（start・shannon-home）');
+    expect(s.notes[0]!.text).toContain('運用者がライの代わりに Minecraft の操作（start・shannon-home）');
   });
 });
 
@@ -431,7 +431,7 @@ describe('the operator request in the common task tree', () => {
     expect(f.bodyStore.body(created.id)).toBe('minecraft:world');
     expect(admittedMinecraftRequest(created, root, true)).toBe(true);
     const inbox = f.runtime.snapshot('owner', created.id)!.messages.map(message => message.text).join('\n');
-    expect(inbox).toContain('この依頼は運用者（ops.ryo）がライ氏の代わりに渡したものです。ライ氏が直接言った言葉ではありません。');
+    expect(inbox).toContain('この依頼は運用者（ops.ryo）がライの代わりに渡したものです。ライが直接言った言葉ではありません。');
     expect(f.runtime.readyTasks('owner').map(item => item.id)).toContain(created.id);
     expect(f.operator.admit({ operationId: OTHER, goal: 'もう一つ', operator: 'ops.ryo' })).toEqual({ ok: false, code: 'minecraft_busy' });
   });
@@ -541,7 +541,7 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
     // His own request whose words happen to start with the operator's mark is still his.
     reports.request('owner', { ...handed, id: OTHER }, { report: { id: 'r2', text: '石を16個集めました。', updatedAt: at } } as never);
     await reports.idle();
-    expect(recorded[0]).toBe('運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
+    expect(recorded[0]).toBe('運用者がライの代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
     expect(recorded[1]).toBe('石を16個集めました。');
     expect(recorded[0]).not.toContain('頼まれ');
     expect(operatorRequester(null, 'owner')(handed)).toBe('owner');
@@ -549,7 +549,7 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
 
   it('keeps the operator line within what a call says', () => {
     expect([...handedOverReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
-    expect(plainSpokenReport(handed, '長い報告。', 'operator')).toContain('運用者がライ氏の代わりに渡した依頼');
+    expect(plainSpokenReport(handed, '長い報告。', 'operator')).toContain('運用者がライの代わりに渡した依頼');
     expect(plainSpokenReport(handed, '石を集めました。', 'owner')).toBe('石を集めました。');
     expect(plainSpokenReport(handed, '石を集めました。', 'unknown')).toBe('依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。');
     expect([...neutralReportLine({ goal: 'あ'.repeat(200) })].length).toBeLessThanOrEqual(SPOKEN_REPORT_CHARACTERS);
@@ -566,7 +566,7 @@ describe('the result of a request the operator handed over (review 2026-10-14, M
     reports.request('owner', handed, progress);
     reports.request('owner', { ...handed, id: OTHER, title: '石を16個集めて' }, { report: { id: 'r2', text: '長い報告です。', updatedAt: at } } as never);
     await reports.idle();
-    expect(recorded).toEqual(['運用者がライ氏の代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。',
+    expect(recorded).toEqual(['運用者がライの代わりに渡した依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。',
       '依頼「石を16個集めて」の結果が届いています。詳しくは画面にあります。']);
     for (const line of recorded) expect(line).not.toContain('頼まれ');
   });
@@ -583,9 +583,9 @@ describe('a lifecycle operation the operator asked for, in her notices (review 2
     expect(own!.draft.tool).toBe('minecraft.start');
     expect(theirs!.draft.tool).toBe('operator.minecraft.start');
     const line = (draft: typeof own) => noticeLine({ kind: 'task_outcome', at: draft!.at, detail: draft!.draft } as never, now);
-    expect(line(theirs)).toContain('運用者がライ氏の代わりに頼んだ〈minecraft.start〉が');
+    expect(line(theirs)).toContain('運用者がライの代わりに頼んだ〈minecraft.start〉が');
     expect(line(theirs)).not.toContain('受け付けた');
-    expect(line(unknown)).toContain('運用者がライ氏の代わりに頼んだ〈minecraft.login〉は');
+    expect(line(unknown)).toContain('運用者がライの代わりに頼んだ〈minecraft.login〉は');
     expect(line(own)).toContain('〈minecraft.start〉が');
     expect(line(own)).not.toContain('運用者');
   });

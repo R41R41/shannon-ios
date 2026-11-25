@@ -275,7 +275,7 @@ export function boundedReplaySummary(value: string | null | undefined): string |
 }
 
 export const REPLAY_SUMMARY_INSTRUCTIONS = [
-  'You keep the running summary of one conversation between ユーザー (ライ氏, the owner, unless a line says otherwise) and シャノン. The reply model no longer sees the messages given here, so the summary is its only record of them.',
+  'You keep the running summary of one conversation between ユーザー (ライ, the owner, unless a line says otherwise) and シャノン. The reply model no longer sees the messages given here, so the summary is its only record of them.',
   `Write the new summary in plain Japanese, at most ${REPLAY_SUMMARY_CHARACTERS} characters, one paragraph: merge the previous summary with the new messages.`,
   'Keep what a later turn needs: the topic and purpose, what was decided or promised, open questions, facts and dates that were stated, and the state of anything in progress. For a game or a list in progress, keep the rules and every item said so far in order (for a word game, every word); drop greetings and repetition first when space runs out.',
   'Use nothing that is not in the input. Do not address anyone, add no advice and no Markdown.',
@@ -350,7 +350,7 @@ export class OpenAIReplaySummaryWriter implements ReplaySummaryWriter {
 }
 
 export const REPLAY_TEMPLATE_INSTRUCTIONS = [
-  'You keep the running summary of one conversation between ユーザー (ライ氏, the owner, unless a line says otherwise) and シャノン, as a template of eight sections. The reply model no longer sees the messages given here, so the template is its only record of them.',
+  'You keep the running summary of one conversation between ユーザー (ライ, the owner, unless a line says otherwise) and シャノン, as a template of eight sections. The reply model no longer sees the messages given here, so the template is its only record of them.',
   'Sections: 目的 (what the conversation is for), 制約 (rules, conditions and limits that were set), 済み (what is done), 途中 (what is in progress), 詰まり (what is stuck or unresolved), 決めたこと (decisions and promises), 次 (what comes next), 重要な文脈 (facts, dates, names and items a later turn needs; for a game or a list in progress, its rules and every item said so far, in order, as far as they fit).',
   `Each section is a list of at most ${COMPACTION_V1.maximumItems} short items in plain Japanese, each at most ${COMPACTION_V1.maximumItemCharacters} characters. Merge the previous template (or previousText, a summary written before the template) with the new messages: give a section as its new whole list only when it changes, and null for a section that stays as it was.`,
   `A tool call and its result come as a pair; a result shown as ${COMPACTION_V1.trimmedToolOutput} was left out for length.`,

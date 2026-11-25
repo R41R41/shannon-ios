@@ -104,7 +104,7 @@ describe('how a name is established', () => {
 
   it.each([
     ['ミキです', ''], ['元気です', 'お名前、聞いてもいいですか？'], ['シャノンって呼んで', ''], ['私は学生です', ''],
-    ['声、可愛いね', ''], ['ライ氏と言います', ''], ['名前は何ですか？', ''], ['友達の話を聞いて', ''],
+    ['声、可愛いね', ''], ['ライと言います', ''], ['名前は何ですか？', ''], ['友達の話を聞いて', ''],
     // Talking about someone who is not here is not an introduction.
     ['同僚の佐藤さんが転職したらしい', ''], ['田中さんを紹介してもらった', ''], ['友達のミキさんが昨日来た', ''],
     ['ミキさんって知ってる', ''], ['ミキさんは元気かな', ''], ['この前ケンさんを紹介された', ''],
@@ -208,7 +208,7 @@ describe('remembering a friend from a 「友人も一緒」 call', () => {
       userUtterance: { id: 'old-1', text: 'はじめまして、ミキと言います', source: 'speech', callContext: { turns: [], introductionStart: true } } } });
     expect(promptOf(model.last)).toContain('This call is not being recorded in memory');
     // That client's own notice says no owner memory is used, so none is given to it.
-    expect(promptOf(model.last)).not.toContain('[この場で使ってよいライ氏についての記憶]');
+    expect(promptOf(model.last)).not.toContain('[この場で使ってよいライについての記憶]');
     expect(promptOf(model.last)).not.toContain('[Current cognitive context');
     expect(await overview()).toEqual({ people: [], unnamed: [] });
     expect((await post(calls, { turns: [{ role: 'participant', text: 'こんにちは' }] })).status).toBe(400);
@@ -264,7 +264,7 @@ describe('using what she remembers', () => {
     expect(recent).toContain('ミキさんと一緒の時');
     expect(recent).toContain('好きな食べ物と映画の話');
     expect(recent).toContain('いつ・誰と一緒の時の話かを添えて答える');
-    expect(recent).toContain('ライ氏自身の事実・約束・目的ではない');
+    expect(recent).toContain('ライ自身の事実・約束・目的ではない');
     const about = await chat('ミキさんってどんな人？');
     expect(about).toContain('名前が出た人: ミキさん');
     expect(about).toContain('ミキさんは辛いものが苦手');

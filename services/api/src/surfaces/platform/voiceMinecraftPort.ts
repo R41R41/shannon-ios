@@ -3,7 +3,7 @@ import type { SpeakerPos } from '../minecraft/minecraftPeopleWords.js';
 
 /**
  * What a Discord voice channel's turn may ask of her Minecraft body (Syzygy dc-voice, owner request 2026-10-20: 「エンドラ討伐をしながら、
- * Discordでライ氏や友人と会話」). The port is the common task tree's side of it (`fcaMinecraftRequests.ts`, `voice`): the voice route
+ * Discordでライや友人と会話」). The port is the common task tree's side of it (`fcaMinecraftRequests.ts`, `voice`): the voice route
  * asks it what the body is doing before her reply, and hands it the owner's spoken request after.
  *
  * - Anyone in the channel may ask (owner decision 2026-11-21: 「全員と自由に話せてほしい」; before it only the verified owner's words

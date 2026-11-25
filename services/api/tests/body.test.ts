@@ -158,9 +158,9 @@ describe('body events in an owner conversation turn', () => {
     const prompt = await chat('ただいま');
     const block = prompt.slice(prompt.indexOf(HEADER)).split('\n\n')[0]!;
     expect(block.split('\n')).toEqual([
-      '[体に起きたこと]（PCに表示されているボクの体にライ氏がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）',
+      '[体に起きたこと]（PCに表示されているボクの体にライがしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）',
       '- 3分前になでられた（2回）',
-      '- 5分前にライ氏が42分ぶりに席へ戻った',
+      '- 5分前にライが42分ぶりに席へ戻った',
     ]);
   });
 
@@ -298,7 +298,7 @@ describe('GET /v1/body/presence', () => {
     stateStore.apply(scope, {
       type: 'expressive-emotion-updated',
       emotion: {
-        primary: 'happy', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '内緒の旅行の話をした', arousal: 0.6, valence: 0.7,
+        primary: 'happy', secondary: [], intensity: 0.8, target: 'ライ', cause: '内緒の旅行の話をした', arousal: 0.6, valence: 0.7,
         visibility: 'expressed', startedAt: START, decay: 0.2, carryover: 0.8, updatedAt: START,
       },
     });
@@ -418,8 +418,8 @@ describe('GET /v1/body/nudges (retired, owner decision 2026-10-14)', () => {
     const root = new URL('../src/', import.meta.url);
     expect(existsSync(new URL('surfaces/body/bodyNudges.ts', root))).toBe(false);
     const sources = apiSourceFiles().map(path => ({ path, text: readFileSync(path, 'utf8') }));
-    // The five retired lines, as they were written (ボク's greetings to ライ氏); the morning brief he asked for is his, not a nudge.
-    for (const line of ['おかえりなさい、ライ氏', '少し休憩しませんか', 'おはようございます、ライ氏', 'そろそろ休みませんか', '読んでほしいものがあります']) {
+    // The five retired lines, as they were written (ボク's greetings to ライ); the morning brief he asked for is his, not a nudge.
+    for (const line of ['おかえりなさい、ライ', '少し休憩しませんか', 'おはようございます、ライ', 'そろそろ休みませんか', '読んでほしいものがあります']) {
       expect(sources.filter(source => source.text.includes(line)).map(source => source.path), line).toEqual([]);
     }
   });

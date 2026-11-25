@@ -6,7 +6,7 @@
  */
 const KANJI_KATAKANA = /[\p{Script=Han}\p{Script=Katakana}A-Za-z]/u;
 const NOISE = new Set(['今日', '明日', '昨日', '今夜', '今朝', '最近', '本当', '全部', '自分', '時間', '感じ', '気持ち', '元気', '調子', '大丈夫',
-  'シャノン', 'ライ氏', '名前', '会話', '返事', '画面', '頭', '体', '手', '胸', '髪', '腰', '声', '心配', '安心', '我慢', '無理', '期待', '想像', '用意',
+  'シャノン', 'ライ', '名前', '会話', '返事', '画面', '頭', '体', '手', '胸', '髪', '腰', '声', '心配', '安心', '我慢', '無理', '期待', '想像', '用意',
   '確認', '説明', '質問', '連絡', '失礼', '邪魔']);
 
 /** A topic of talk: a noun with kanji, katakana or letters, not ending in kana (an adjective or a verb), not a word of every day. */
@@ -76,6 +76,6 @@ export function followUpLine(topics: readonly FollowUpTopic[], timeZone = 'Asia/
   const day = (at: string) => {
     try { return new Intl.DateTimeFormat('ja-JP', { timeZone, month: 'numeric', day: 'numeric' }).format(new Date(at)); } catch { return at.slice(5, 10); }
   };
-  return `[話の続き] 少し前にライ氏が話していたこと: ${topics.map(item => `${item.topic}（${day(item.at)}）`).join('、')}。`
+  return `[話の続き] 少し前にライが話していたこと: ${topics.map(item => `${item.topic}（${day(item.at)}）`).join('、')}。`
     + '話の流れに合えば、このうち一つだけ、その後どうなったかを自然に聞いてよい（毎回はしない。今の話を優先する）。';
 }

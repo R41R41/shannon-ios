@@ -108,7 +108,7 @@ describe('the stable voice prefix', () => {
       expect(after).toContain(line);
     }
     expect(JSON.stringify(sent(variants.plain!).messages.at(-1))).toContain('tool_open と tool_call は呼ばずに');
-    expect(JSON.stringify(sent(variants.withheld!).messages.at(-1))).toContain('いまはライ氏以外の人もいるかもしれない');
+    expect(JSON.stringify(sent(variants.withheld!).messages.at(-1))).toContain('いまはライ以外の人もいるかもしれない');
   });
 
   it('offers the text plan\'s tool pair, so text and voice turns of a Talk share the cached tools', () => {

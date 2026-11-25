@@ -26,7 +26,7 @@ import { anthropicFixture, scriptedAnthropic, type AnthropicMessage } from './su
  * a hard or research turn, and every turn with `SHANNON_TEXT_LIGHT_NO_THINKING=off`, thinks exactly as before.
  */
 const HAIKU = { model: 'claude-haiku-5-5', effort: 'low', textThinking: 'adaptive', voiceThinking: 'disabled' } as const;
-const base: ShannonChatModelRequest = { scopeKey: 'owner', systemPrompt: '[シャノン]', profilePrompt: '[ライ氏のこと]', turnContext: '[いまの文脈]',
+const base: ShannonChatModelRequest = { scopeKey: 'owner', systemPrompt: '[シャノン]', profilePrompt: '[ライのこと]', turnContext: '[いまの文脈]',
   history: [{ role: 'user', content: 'ただいま' }, { role: 'assistant', content: 'おかえりなさい。' }], message: 'ねえ、きいて' };
 
 const tier = (extra: Partial<RoutedTier>): RoutedTier => ({

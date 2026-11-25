@@ -52,7 +52,7 @@ export function unannouncedShowing(showing: StudyShowing): StudyShowing {
   };
 }
 
-/** Sentence presented as Shannon speaking (です・ます, ボク, ライ氏). */
+/** Sentence presented as Shannon speaking (です・ます, ボク, ライ). */
 export function studyShowingMessage(piece: ShowablePiece): string {
   const title = piece.title.replace(/\s+/gu, ' ').trim().slice(0, 80);
   return piece.revised

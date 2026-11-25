@@ -29,7 +29,7 @@ Syzygy ADR-0014 の段 2（戦術を Sonnet、作戦を Opus に分ける）の�
 
 ## 採点
 
-- 場面ごとに `scenes/*.json`（ライ氏が見て直せる形）。`situation`（状況）・`correct`（正しい手の条件）・`hindsight`（実際に起きたこと）は文で書く。
+- 場面ごとに `scenes/*.json`（ライが見て直せる形）。`situation`（状況）・`correct`（正しい手の条件）・`hindsight`（実際に起きたこと）は文で書く。
 - 機械で決まる所だけ検査の名前で書く（`checks.ts`）。
   - 自動（どの場面にも）: 体に送れる形（`llmcPrepare` が通す）、直前に止まった手のくり返し、塞がったマス・床の無いマス・1 段の上り下りで塞がる柱への walk（地図に、その手の前までの dig・place を写して見る）。
   - 場面ごと: `must`（外れたら ×）、`want`（全部通れば ○）。例: 壁の無い橋、`exposeOk` で見られるのを受け入れる、`stopIf hpBelow` が今の HP 以上、待つ act に `hostileWithin` が無い、急ぎの答え方の行（手は 3 つまで）、急ぎの先頭が安全、素手の dig に `tool:"hand"`、計画を p3 に飛ばす。

@@ -44,7 +44,7 @@ export function peopleMigrationReport(database: DatabaseSync, scopeKey: string, 
     scopeKey, at,
     temporal: { columns, itemsToBackfill, impressionsToBackfill: rows.filter(row => row.validAt === undefined).length },
     decay: decayDryRun(rows, { memoryControls: controls }, at).map(person => ({ ...person,
-      displayName: person.personKey === OWNER_PERSON_KEY ? 'ライ氏（持ち主）' : names.get(person.personKey) ?? '（名前のない人）' })),
+      displayName: person.personKey === OWNER_PERSON_KEY ? 'ライ（持ち主）' : names.get(person.personKey) ?? '（名前のない人）' })),
     impressions: rows.length,
   };
 }

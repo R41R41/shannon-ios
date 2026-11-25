@@ -37,7 +37,7 @@ function world(options: { spent?: boolean } = {}) {
   const db = new DatabaseSync(':memory:');
   cleanups.push(() => db.close());
   const spend = new TaskBudgetStore(db);
-  const tasks = new Map<string, TaskView>([[OTHER, taskView(OTHER, 'executing', 'ライ氏の依頼')]]);
+  const tasks = new Map<string, TaskView>([[OTHER, taskView(OTHER, 'executing', 'ライの依頼')]]);
   const activity: OperatorActivity[] = [], notes: string[] = [];
   let clock = at, enabled = true;
   const requests = {

@@ -48,7 +48,7 @@ describe('a boundary she was told', () => {
     const { port, notes, handed } = setup([]);
     await say(port, '胸は嫌だって言わないとだめだよ', T0, clean(), 'told');
     const block = await say(port, 'ねえ', later(1), clean(), 'next');
-    expect(block).toContain('胸: ライ氏に「嫌と言わないと」と言われて持った境界。まだボクが自分で決めたものではない');
+    expect(block).toContain('胸: ライに「嫌と言わないと」と言われて持った境界。まだボクが自分で決めたものではない');
     notes.turnEnded({ scopeKey: 'owner', surface: 'text', alone: true, at: later(2), userMessage: 'さっきはごめんね', reply: 'うん。', feeling: null });
     await notes.flush('owner');
     expect(handed.at(-1)!.toldBoundaries).toEqual([{ subject: 'chest', word: '胸' }]);
@@ -60,7 +60,7 @@ describe('a boundary she was told', () => {
     await say(port, '胸は嫌だって言わないとだめだよ', T0, clean(), 'told');
     notes.turnEnded({ scopeKey: 'owner', surface: 'text', alone: true, at: later(2), userMessage: 'さっきはごめんね', reply: 'うん。', feeling: null });
     await notes.flush('owner');
-    expect(await say(port, 'ねえ', later(3), clean(), 'after')).toContain('胸: ライ氏に言われて考え、ボクが自分のものにした境界');
+    expect(await say(port, 'ねえ', later(3), clean(), 'after')).toContain('胸: ライに言われて考え、ボクが自分のものにした境界');
     const forgot = forgetting(['told']);
     set(forgot);
     expect(await say(port, 'ねえ', later(4), forgot, 'later')).not.toContain('[ボクの境界]');

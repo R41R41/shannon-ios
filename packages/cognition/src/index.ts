@@ -25,6 +25,7 @@ export {
   SHANNON_SUITE_PRODUCTS,
   SHANNON_TEMPERAMENT,
   mentionsSuiteProduct,
+  ownerNameOf,
   shannonPersonaCharacter,
   shannonPersonaPrompt,
   shannonTemperament,

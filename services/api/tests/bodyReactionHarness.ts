@@ -17,7 +17,7 @@ export const scope = 'owner';
 export const START = '2026-10-02T06:00:00.000Z';
 export const SECOND = 1_000;
 export const MINUTE = 60_000;
-export const HEHE = 'えへへ、なんですかライ氏？';
+export const HEHE = 'えへへ、なんですかライ？';
 
 /** The fast model, faked: it records what it was told and answers what the test sets, after `delayMilliseconds`. */
 export class FakeSpeaker implements BodyReactionSpeaker {
@@ -53,7 +53,7 @@ export class FakeChat implements ShannonChatModel {
   voiceReply = 'ふふ、呼ばれた気がしたので。';
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
-    return { mode: this.mode, model: this.model, reply: 'はい、ライ氏。' };
+    return { mode: this.mode, model: this.model, reply: 'はい、ライ。' };
   }
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
     this.voiceRequests.push(request);

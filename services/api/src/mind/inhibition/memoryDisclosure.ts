@@ -255,7 +255,7 @@ export class DisclosureGate {
 }
 
 /**
- * The profile for a context with other people present: what Shannon knows about ライ氏,
+ * The profile for a context with other people present: what Shannon knows about ライ,
  * each protected line marked. Items that must not reach the model are already removed.
  */
 export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16, openOnly = false): string {
@@ -274,8 +274,8 @@ export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16, ope
   ].slice(0, maximumItems);
   const interests = openOnly ? [] : disclosed.interests.slice(0, 6);
   return [
-    '[ライ氏についての記憶 — ほかの人がいる場]',
-    '「ユーザー」はライ氏のこと。【機微:…】が付いた行は、この場の人がまだ知らない個人情報。',
+    '[ライについての記憶 — ほかの人がいる場]',
+    '「ユーザー」はライのこと。【機微:…】が付いた行は、この場の人がまだ知らない個人情報。',
     ...(lines.length ? lines : ['- (なし)']),
     ...(interests.length ? [`- ${gate.unlabelledMarker}最近の関心: ${interests.join('、')}`] : []),
   ].join('\n');

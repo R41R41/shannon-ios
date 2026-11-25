@@ -161,8 +161,8 @@ describe('a voice channel of three: anyone may ask for her body', () => {
     expect(calls.some(call => call.startsWith('task-1 Discordの通話でのミキの言葉（いまのタスクへ）: 剣は2本にして'))).toBe(true);
     // The owner speaks too, by the name, as anyone does.
     model.intent = { kind: 'message', goal: '終わったら家を建てて' };
-    await say('シャノン、終わったら家を建てて', { id: OWNER, name: 'ライ氏' });
-    expect(calls.some(call => call.startsWith('task-1 Discordの通話でのライ氏の言葉（いまのタスクへ）: 終わったら家を建てて'))).toBe(true);
+    await say('シャノン、終わったら家を建てて', { id: OWNER, name: 'ライ' });
+    expect(calls.some(call => call.startsWith('task-1 Discordの通話でのライの言葉（いまのタスクへ）: 終わったら家を建てて'))).toBe(true);
     // A friend's stop stops the body's tasks and the list.
     model.intent = { kind: 'stop', goal: '' };
     const stop = await say('シャノン、止めて', { id: FRIEND, name: 'ユウ' });
@@ -176,7 +176,7 @@ describe('a voice channel of three: anyone may ask for her body', () => {
     const { say, model, queue, close } = world();
     for (const [goal, who] of [['鉄の剣を作る', FRIEND], ['パンを作る', OTHER], ['家を建てる', OWNER]] as const) {
       model.intent = { kind: 'task', goal };
-      await say(`シャノン、${goal}`, { id: who, name: who === OWNER ? 'ライ氏' : who === FRIEND ? 'ユウ' : 'ミキ' });
+      await say(`シャノン、${goal}`, { id: who, name: who === OWNER ? 'ライ' : who === FRIEND ? 'ユウ' : 'ミキ' });
     }
     const states = () => queue.view().entries.map(entry => `${entry.goal}:${entry.state}`);
     expect(states()).toEqual(['鉄の剣を作る:running', 'パンを作る:queued', '家を建てる:queued']);

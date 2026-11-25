@@ -97,7 +97,7 @@ export function prepareToolStep(dependencies: StepDependencies, cycle: AutonomyL
   // A session marked by what it read of the owner's writes nothing into her folder on his PC or Mac, which is not marked (ADR-0007).
   if (tool.domain === 'host_folder' && tool.effect === 'write' && sessionMarked(dependencies, cycle)) {
     dependencies.service.tools.note(cycle.scopeKey, 'autonomy', tool.name, 'owner_informed'); // Withheld (ADR-0008 §14).
-    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。ライ氏の文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない。次の時間に書く。`);
+    results.add(cycle.id, `- ${tool.name}: できなかった（refused）。ライの文書やNotionを読んだこの時間には、PCやMacのフォルダに書かない。次の時間に書く。`);
     return null;
   }
   // Reading the owner's documents serves one of her active pursuits (ADR-0007): she names it, and an unknown or closed one is refused.
@@ -140,7 +140,7 @@ function listing(dependencies: StepDependencies, cycle: AutonomyLoopCycle): { un
 function pursuitRefusal(dependencies: StepDependencies, scopeKey: string, pursuitId: unknown): string | null {
   const pursuit = typeof pursuitId === 'string' && pursuitId.trim() ? dependencies.store.pursuits.get(scopeKey, pursuitId.trim()) : null;
   if (pursuit?.status === 'active') return null;
-  return `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライ氏の文書は、いま進めている気になっていることのためにだけ読む（pursuitId に台帳の id を書く）。`;
+  return `${pursuit ? 'その気になっていることは、いま進めていない' : '台帳にない id だった'}。ライの文書は、いま進めている気になっていることのためにだけ読む（pursuitId に台帳の id を書く）。`;
 }
 
 /** A `tool` step of a thinking reply, or why it is not taken, as a closed code. */

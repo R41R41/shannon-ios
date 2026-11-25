@@ -77,7 +77,7 @@ describe('liveBlock', () => {
     expect(alone.startsWith(LIVE_BLOCK_HEADER)).toBe(true);
     expect(LIVE_BLOCK_HEADER).toContain('「持ち物の要点」に書いてない物は持っていない');
     expect(LIVE_BLOCK_HEADER).toContain('話が食い違うため');
-    expect(alone).toContain('取り組んでいること: エンドラを討伐してください（ライ氏に頼まれた）');
+    expect(alone).toContain('取り組んでいること: エンドラを討伐してください（ライに頼まれた）');
     const shared = liveBlock(snapshot(), { alone: false });
     expect(shared).not.toContain('エンドラ');
     expect(shared).toContain('頼まれた作業の最中');

@@ -206,7 +206,7 @@ async function spokenReply(turn: VoiceConversation, spoken: VoiceSpoken): Promis
   const { completion, guard } = spoken;
   const { acknowledged, heard } = await researchAfterAck(turn.composed.fcaTurn, spoken.admitted, completion, turn.input.observer);
   const written = `${researchSaid(acknowledged, spoken.work)}${heard}`;
-  const answered = turn.confirmedImplementationRequest ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
+  const answered = turn.confirmedImplementationRequest ? 'よし、ライ。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : spoken.placeSkill ? spokenPlaceReply(completion.reply) : displayedVoiceText(guard ? guard.reply(written) : written);
   if (!deps.turnRouting) return { reply: answered };
   let feedbackRecordId: string | undefined;

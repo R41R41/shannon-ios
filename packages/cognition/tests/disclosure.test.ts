@@ -51,7 +51,7 @@ describe('disclosure rule', () => {
       const money: MemoryDisclosure = { ...label('sensitive'), category: 'money' };
       expect(disclosureDecision(money, present)).toBe('guarded');
       expect(mayDisclose(money, present)).toBe(true);
-      expect(disclosureMarker(money, present)).toBe('【機微:お金・ライ氏だけが知っている】');
+      expect(disclosureMarker(money, present)).toBe('【機微:お金・ライだけが知っている】');
     }
   });
 
@@ -95,7 +95,7 @@ describe('disclosure rule', () => {
     for (const disclosure of [undefined, {}, { sensitivity: 'sensitive' as const }, label(undefined, withA)]) {
       expect(disclosureDecision(disclosure, withB)).toBe('guarded');
     }
-    expect(disclosureMarker(undefined, withA)).toBe('【機微:未分類・ライ氏だけが知っている】');
+    expect(disclosureMarker(undefined, withA)).toBe('【機微:未分類・ライだけが知っている】');
     // An unidentified guest is in no audience, not even one recorded with an unidentified guest.
     expect(audienceCovers(UNKNOWN_GUEST_PRESENCE, UNKNOWN_GUEST_PRESENCE)).toBe(false);
     expect(audienceCovers(peopleAudience(['person-a'], true), peopleAudience(['person-a'], true))).toBe(false);
@@ -142,7 +142,7 @@ describe('disclosure rule', () => {
 
   it('describes an audience for the owner', () => {
     const nameOf = (id: string) => ({ 'person-a': 'ミキ' } as Record<string, string>)[id];
-    expect(describeAudience(undefined)).toBe('ライ氏と二人の時');
+    expect(describeAudience(undefined)).toBe('ライと二人の時');
     expect(describeAudience(withA, nameOf)).toBe('ミキさんと一緒の時');
     expect(describeAudience(UNKNOWN_GUEST_PRESENCE, nameOf)).toBe('名前を聞いていない方と一緒の時');
     expect(describeAudience(discord)).toBe('グループの会話');
@@ -267,7 +267,7 @@ describe('labels in the companion snapshot', () => {
       relationships: [], prospectiveMemories: [], memoryControls: [], interests: [], activeMemories: [] }, at);
     expect(legacy.userFacts[0]?.disclosure).toBeUndefined();
     expect(discloseSnapshot(legacy, withA).userFacts).toHaveLength(1);
-    expect(disclosureMarker(resolveDisclosure(legacy, 'old', undefined), withA)).toBe('【機微:未分類・ライ氏だけが知っている】');
+    expect(disclosureMarker(resolveDisclosure(legacy, 'old', undefined), withA)).toBe('【機微:未分類・ライだけが知っている】');
     expect(discloseSnapshot(legacy, OWNER_AUDIENCE).userFacts).toHaveLength(1);
   });
 });

@@ -14,7 +14,7 @@ import { promptOf } from './modelPrompt.js';
 const at = '2026-10-06T03:00:00.000Z';
 const delegations = '/v1/voice/gemini/cascade/delegations';
 const GOAL = 'シャノンを一貫した人格として感じられるように改善したい。';
-const MARKED_FRAME = '【機微:未分類・ライ氏だけが知っている】[Current intention frame';
+const MARKED_FRAME = '【機微:未分類・ライだけが知っている】[Current intention frame';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu;
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -100,7 +100,7 @@ describe('the owner\'s current goal with other people present', () => {
     // (A18 S3, owner approval) the `own_folder` line drops its note that the Mac's folder is only read: 81990bce01279119 with
     // the note. Recomputed after merging main 97b52985: unchanged. On the stage-2 branch (2026-10-06, owner decision "a") her
     // body line gained her temperament (9c61cf2910b8466e); with scope (a) it moved to her persona: 5776c6948507cd9c without it.
-    expect(fingerprint(alone)).toBe('89239154af689e83');
+    expect(fingerprint(alone)).toBe('e5ca28740c8ce21f');
 
     const others = await chat('人格の改善はどう進める？', { audience: 'others' });
     expect(others).not.toContain('current_goal=');
@@ -122,7 +122,7 @@ describe('the owner\'s current goal with other people present', () => {
     // On the stage-2 branch (owner decision "a") the body line gained her temperament (74a4ca961d8d1a66); with scope (a) it
     // moved to her persona: 891f915e25710768 without it. On the heart branch (owner 2026-10-19, item 15) her mood's numbers in the shared
     // state moved (a 「？」 no longer raises her arousal): a3209b96faf9eff5 before.
-    expect(fingerprint(alone)).toBe('74cbeaca968fbfe8');
+    expect(fingerprint(alone)).toBe('9ebcb4d08d80133a');
 
     const companion = await voice('前に話した人格の改善のこと覚えてる？', true);
     expect(companion).toContain('[Current cognitive context');

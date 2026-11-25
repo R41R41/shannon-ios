@@ -19,7 +19,7 @@ export interface VoicePerceptionInput {
   guest: boolean;
   /**
    * The words may not be his to her as heard (an uncertain transcript, an echo, overheard talk, a fragment: stage 3 review): then
-   * the speaker is not proven and the item is someone's words, at a lower salience, without 「ライ氏が話した」.
+   * the speaker is not proven and the item is someone's words, at a lower salience, without 「ライが話した」.
    */
   unverified?: boolean;
   /** The device that heard it, when the request named one. */

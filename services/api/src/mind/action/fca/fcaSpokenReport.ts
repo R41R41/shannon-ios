@@ -16,7 +16,7 @@ const ATTEMPTS_KEPT = 512;
 /** What the model is told: delivery only. Who she is comes from the persona, given beside it. */
 export const SPOKEN_REPORT_INSTRUCTIONS = [
   '[調べた結果を声で伝える]',
-  'ライ氏に頼まれて調べたことの結果が届いた。通話の切れ目に、ボクから自分で伝えるひと言を作る。',
+  'ライに頼まれて調べたことの結果が届いた。通話の切れ目に、ボクから自分で伝えるひと言を作る。',
   `- 1〜2文、全体で${SPOKEN_REPORT_TARGET_CHARACTERS}字以内（句読点込みで${SPOKEN_REPORT_CHARACTERS}字を超えない）。最初の文で答えを言い、話しかける口調にする。`,
   '- 依頼に複数の対象があれば、要点だけをひとまとめに言う。理由・経緯・補足は言わない。詳しいことは画面に残っている。',
   '- 話し言葉にする。見出し・箇条書き・記号・URL・出典の列挙・細かい数字の羅列は使わない。',
@@ -130,7 +130,7 @@ export function pausedReportLine(title: string, reason?: string): string {
  */
 export function handedOverReportLine(task: { goal: string }): string {
   const named = [...task.goal.replace(/\s+/gu, ' ').trim()].slice(0, 22).join('');
-  return `運用者がライ氏の代わりに渡した依頼「${named}」の結果が届いています。詳しくは画面にあります。`;
+  return `運用者がライの代わりに渡した依頼「${named}」の結果が届いています。詳しくは画面にあります。`;
 }
 
 /**

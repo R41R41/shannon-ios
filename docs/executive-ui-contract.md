@@ -28,7 +28,7 @@ Her goals (`autonomy_pursuits` with the E2 columns), open and recently closed.
     {
       "id": "p-…",
       "title": "短い詩集を作る",
-      "why": "前に書いた詩をライ氏が喜んでくれたから",
+      "why": "前に書いた詩をライが喜んでくれたから",
       "status": "active",
       "origin": "self",
       "interest": "詩",
@@ -36,7 +36,7 @@ Her goals (`autonomy_pursuits` with the E2 columns), open and recently closed.
       "progressLabel": "3/5",
       "reviewAt": "2026-10-16T00:00:00.000+09:00",
       "lastWorkedAt": "2026-10-12T23:10:00.000+09:00",
-      "completion": { "summary": "5篇そろって、ライ氏が読む", "met": false },
+      "completion": { "summary": "5篇そろって、ライが読む", "met": false },
       "evidenceCount": 3,
       "closedReason": null,
       "closedAt": null,
@@ -62,14 +62,14 @@ Her goals (`autonomy_pursuits` with the E2 columns), open and recently closed.
 | `completion.summary` | The completion predicate in plain Japanese, rendered by the server from the typed predicate. `null` or missing: 「完了の条件は、まだ決まっていません」. |
 | `completion.met` | The evidence suggests the predicate is met. The app then shows 「条件を満たしたかもしれません」 on an active goal; the goal is still not done until the predicate is met by evidence on the server or the owner confirms. |
 | `evidenceCount` | How many pieces of evidence the goal has. |
-| `closedReason` | Why it was rested, done or dropped, in words (「ライ氏が完了を認めた」). |
+| `closedReason` | Why it was rested, done or dropped, in words (「ライが完了を認めた」). |
 | `ownerCanConfirm`, `ownerCanRest`, `ownerCanDrop` | Whether to show 完了を認める, 休める, やめる. Without them the app uses: confirm and rest for an `active` goal that is not a seed, drop for an open (`active` or `resting`) goal that is not a seed (seeds are `PURSUIT_SEED_IMMUTABLE`). |
 
 The app lists open goals (active first, then resting; the nearest review first) and folds `done`/`dropped` goals under 「終えた・やめた目標」. Send closed goals of the last 14 days at most.
 
 ## `POST /v1/autonomy/pursuits/{id}/confirm`
 
-The owner confirms that a goal is done. Body `{"scopeKey": "..."}`. Records a pursuit event with actor `owner` and reason `owner_confirmed`, sets `status` to `done`, `closedReason` 「ライ氏が完了を認めた」, `closedAt` now.
+The owner confirms that a goal is done. Body `{"scopeKey": "..."}`. Records a pursuit event with actor `owner` and reason `owner_confirmed`, sets `status` to `done`, `closedReason` 「ライが完了を認めた」, `closedAt` now.
 
 - `200`: the same body as `GET /v1/autonomy/goals` after the change (the app shows it at once).
 - `200` also when the goal is already `done` (idempotent).
@@ -77,7 +77,7 @@ The owner confirms that a goal is done. Body `{"scopeKey": "..."}`. Records a pu
 
 ## `POST /v1/autonomy/pursuits/{id}/status` (exists)
 
-休める and やめる use the existing route: body `{"scopeKey": "...", "status": "resting" | "dropped"}`, answered with the autonomy overview. The app ignores the body and reads `GET /v1/autonomy/goals` again. Server work: make it write a pursuit event (E2's `autonomy_pursuit_events`, actor `owner`) and set `closedReason` (「ライ氏が休めた」／「ライ氏がやめた」), and make it idempotent for the same status (`resting` → `resting` answers `200`).
+休める and やめる use the existing route: body `{"scopeKey": "...", "status": "resting" | "dropped"}`, answered with the autonomy overview. The app ignores the body and reads `GET /v1/autonomy/goals` again. Server work: make it write a pursuit event (E2's `autonomy_pursuit_events`, actor `owner`) and set `closedReason` (「ライが休めた」／「ライがやめた」), and make it idempotent for the same status (`resting` → `resting` answers `200`).
 
 ## `GET /v1/autonomy/choices?scopeKey=&days=7`
 
@@ -96,7 +96,7 @@ What the executive chose (the `executive_deliberations` rows and their choice-le
       "label": "詩を1篇書いた",
       "goalId": "p-…",
       "goalTitle": "短い詩集を作る",
-      "reason": "前回ライ氏が喜んでくれたから",
+      "reason": "前回ライが喜んでくれたから",
       "outcome": "done",
       "offCandidates": false,
       "topByValue": true

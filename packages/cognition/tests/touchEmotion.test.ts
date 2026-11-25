@@ -63,8 +63,8 @@ describe('the touch → feeling table', () => {
   });
 
   it('names the touch as the cause, with the owner only when he was alone with her', () => {
-    expect(touchCause(touch('pet'))).toBe('ライ氏に頭をなでてもらった');
-    expect(touchCause(touch('pet', 3))).toBe('ライ氏に頭をなでてもらった（続けて3回目）');
+    expect(touchCause(touch('pet'))).toBe('ライに頭をなでてもらった');
+    expect(touchCause(touch('pet', 3))).toBe('ライに頭をなでてもらった（続けて3回目）');
     expect(touchCause(touch('poke', 2, { ownerAlone: false }))).toBe('つつかれた（続けて2回目）');
   });
 });
@@ -79,10 +79,10 @@ describe('body-touched in the one emotion state', () => {
     for (const key of ['valence', 'arousal', 'openness'] as const) {
       expect(Math.abs(after.emotion[key] - before.emotion[key])).toBeLessThanOrEqual(SHANNON_TOUCH_MOOD_STEP + 1e-9);
     }
-    expect(after.expressiveEmotion).toMatchObject({ primary: 'happy', target: 'ライ氏', cause: 'ライ氏に頭をなでてもらった', updatedAt: START });
+    expect(after.expressiveEmotion).toMatchObject({ primary: 'happy', target: 'ライ', cause: 'ライに頭をなでてもらった', updatedAt: START });
     expect(after.expressiveEmotion!.visibility).not.toBe('hidden');
     // The same projection every screen uses now shows it.
-    expect(presentShannonMood(after, START)).toMatchObject({ expression: 'joyful', fromConversation: true, cause: 'ライ氏に頭をなでてもらった' });
+    expect(presentShannonMood(after, START)).toMatchObject({ expression: 'joyful', fromConversation: true, cause: 'ライに頭をなでてもらった' });
     // Nothing else of the state is touched.
     expect(after.userFacts).toEqual(before.userFacts);
     expect(after.temperament).toEqual(before.temperament);
@@ -135,7 +135,7 @@ describe('body-touched in the one emotion state', () => {
   it('does not replace a feeling she holds for the owner\'s safety or grief; only the mood moves', () => {
     const base = fresh();
     const protective = reduceCompanionState(base, { type: 'expressive-emotion-updated', emotion: {
-      primary: 'protective', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '相手の安全を最優先する必要がある', arousal: 0.6, valence: 0.6,
+      primary: 'protective', secondary: [], intensity: 0.8, target: 'ライ', cause: '相手の安全を最優先する必要がある', arousal: 0.6, valence: 0.6,
       visibility: 'expressed', startedAt: START, decay: 0.48, carryover: 0.7, updatedAt: START, overrideReason: 'emergency',
     } }, START);
     const after = touched(protective, touch('tickle'), later(1));
@@ -155,7 +155,7 @@ describe('body-touched in the one emotion state', () => {
 
   it('keeps a feeling from conversation that is stronger than the touch, and lets a touch replace a weaker one or another touch', () => {
     const feeling = (primary: 'sad' | 'curiosity', intensity: number) => reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: {
-      primary, secondary: [], intensity, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.5,
+      primary, secondary: [], intensity, target: 'ライ', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.5,
       visibility: 'expressed', startedAt: START, decay: 0.24, carryover: 0.6, updatedAt: START,
     } }, START);
     // She is sad at 0.8: one pat does not make her happy. The mood still lifts a little.
@@ -220,19 +220,19 @@ describe('a part where her body flinches first: the reflex alone (Syzygy ADR-000
   });
 
   it('names the part as the cause, keeps it a feeling from a touch, and gives way to the next touch', () => {
-    expect(touchCause(touch('poke', 1, { reflexPart: '首' }))).toBe('ライ氏に首をつつかれた');
+    expect(touchCause(touch('poke', 1, { reflexPart: '首' }))).toBe('ライに首をつつかれた');
     // The verbs of the reaction prompt, by gesture: a stroke, and a touch that rests.
-    expect(touchCause(touch('pet', 2, { reflexPart: '胸' }))).toBe('ライ氏に胸をなでられた（続けて2回目）');
-    expect(touchCause(touch('pet', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
-    expect(touchCause(touch('pet', 1, { resting: true }))).toBe('ライ氏に頭をなでてもらった');
+    expect(touchCause(touch('pet', 2, { reflexPart: '胸' }))).toBe('ライに胸をなでられた（続けて2回目）');
+    expect(touchCause(touch('pet', 1, { reflexPart: '胸', resting: true }))).toBe('ライに胸に触れられた');
+    expect(touchCause(touch('pet', 1, { resting: true }))).toBe('ライに頭をなでてもらった');
     expect(touchCause(touch('tickle', 1, { reflexPart: '腰', ownerAlone: false }))).toBe('腰をくすぐられた');
-    expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライ氏に画面の上で運ばれた');
+    expect(touchCause(touch('carry', 1, { reflexPart: 'スカート' }))).toBe('ライに画面の上で運ばれた');
     // A hand resting on such a part is not hand-holding: no favour in the words.
-    expect(touchCause(touch('holdHand', 1, { reflexPart: '胸', resting: true }))).toBe('ライ氏に胸に触れられた');
-    expect(touchCause(touch('holdHand', 1, { reflexPart: '腰' }))).toBe('ライ氏に腰に触れられた');
-    expect(touchCause(touch('holdHand'))).toBe('ライ氏に手をつないでもらった');
+    expect(touchCause(touch('holdHand', 1, { reflexPart: '胸', resting: true }))).toBe('ライに胸に触れられた');
+    expect(touchCause(touch('holdHand', 1, { reflexPart: '腰' }))).toBe('ライに腰に触れられた');
+    expect(touchCause(touch('holdHand'))).toBe('ライに手をつないでもらった');
     const startled = touched(fresh(), touch('pet', 1, { reflexPart: '胸' }));
-    expect(startled.expressiveEmotion).toMatchObject({ primary: 'surprised', target: 'ライ氏', cause: 'ライ氏に胸をなでられた' });
+    expect(startled.expressiveEmotion).toMatchObject({ primary: 'surprised', target: 'ライ', cause: 'ライに胸をなでられた' });
     expect(isTouchFeeling(touched(fresh(), touch('pet', 1, { reflexPart: '脚', resting: true })).expressiveEmotion)).toBe(true);
     expect(isTouchFeeling(startled.expressiveEmotion)).toBe(true);
     expect(touched(startled, touch('holdHand'), later(1)).expressiveEmotion!.primary).toBe('shy');

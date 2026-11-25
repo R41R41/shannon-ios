@@ -26,7 +26,7 @@ function world() {
 describe('remembered turns read once while nothing changed', () => {
   it('reuses the read until this connection writes, and reads the new turn after it', () => {
     const { store, thread } = world();
-    store.appendTurn('owner', thread, 'こんにちは', 'こんにちは、ライ氏。', at);
+    store.appendTurn('owner', thread, 'こんにちは', 'こんにちは、ライ。', at);
     const first = store.experienceCandidates('owner');
     expect(store.experienceCandidates('owner')).toBe(first);
     store.appendTurn('owner', thread, '元気？', '元気です。', at);
@@ -38,7 +38,7 @@ describe('remembered turns read once while nothing changed', () => {
 
   it('reads afresh after another connection changed a payload in place', () => {
     const { store, path, thread } = world();
-    store.appendTurn('owner', thread, 'こんにちは', 'こんにちは、ライ氏。', at);
+    store.appendTurn('owner', thread, 'こんにちは', 'こんにちは、ライ。', at);
     const before = store.experienceCandidates('owner');
     const other = new DatabaseSync(path); cleanups.push(() => other.close());
     const row = other.prepare("SELECT event_id, payload_json FROM experience_events WHERE event_type='turn.completed'").get() as { event_id: string; payload_json: string };

@@ -36,7 +36,7 @@ const directory = mkdtempSync(join(tmpdir(), 'shannon-moments-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const MINUTE = 60_000;
 const START = '2026-10-02T01:00:00.000Z'; // 10:00 in Tokyo
-const CANNED = ['おかえりなさい、ライ氏', '少し休憩しませんか', 'おはようございます、ライ氏', 'そろそろ休みませんか', '読んでほしいものがあります'];
+const CANNED = ['おかえりなさい、ライ', '少し休憩しませんか', 'おはようございます、ライ', 'そろそろ休みませんか', '読んでほしいものがあります'];
 let databases = 0;
 
 function facts(overrides: Partial<ProactiveMomentFacts> = {}): ProactiveMomentFacts {
@@ -289,7 +289,7 @@ function gateWorld() {
     ask: async () => 0.9, usdPerDecision: 0.001, maximumDecisionsPerDay: 24, maximumMessagesPerDay: 8,
   });
   const model = new FakeModel();
-  model.replies.reach_out = { message: 'ライ氏、さっきまでどこへ行っていたんですか。ボクはちょっと退屈でした。' };
+  model.replies.reach_out = { message: 'ライ、さっきまでどこへ行っていたんですか。ボクはちょっと退屈でした。' };
   const harness = loopHarness({ path, clock, model, reachOuts: speaker, moments });
   const database = new DatabaseSync(path);
   const count = (sql: string) => Number((database.prepare(sql).get() as { n: number }).n);
@@ -389,7 +389,7 @@ describe('the templated lines are retired (owner decision 2026-10-14)', () => {
     expect(service.study.overview(scope).pieces[0]).toMatchObject({ hidden: false, awaitingReaction: true });
     expect(shown).toEqual([]);
     const action = entries().find(entry => entry.kind === 'action' && entry.tool === 'study.ready')!;
-    expect(action.summary).toBe('物語「傘のある駅」をライ氏が読めるようにしました（知らせてはいません）。');
+    expect(action.summary).toBe('物語「傘のある駅」をライが読めるようにしました（知らせてはいません）。');
     expect(action.summary).not.toContain('持ち主');
     // No cycle comes back to tell him later: there is nothing to tell.
     advance(5 * MINUTE);
