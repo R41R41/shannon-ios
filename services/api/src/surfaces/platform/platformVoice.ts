@@ -510,7 +510,9 @@ export class PlatformVoiceService {
         speaker: { account: request.sourceUserId, displayName: request.sourceDisplayName, owner: seat.owner, minecraftName: request.speakerMinecraftName },
       });
       const introduced = address.introduced === true ? introducedBlock(facts, request.userMessage) : address.reason === 'directed' ? greetingHintBlock(facts) : '';
-      return [presenceBlock(facts), onAirBlock(facts.onAir), introduced].filter(Boolean).join('\n\n');
+      // A call she has already spoken in is past its first greeting: the rules for it go only to the turn that presents her (or to the first turn).
+      const spoken = this.rooms.exchange(request.conversationId).some(line => line.role === 'shannon');
+      return [presenceBlock(facts), onAirBlock(facts.onAir, address.introduced === true || !spoken), introduced].filter(Boolean).join('\n\n');
     } catch {
       return '';
     }

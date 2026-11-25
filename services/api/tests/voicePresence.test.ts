@@ -155,6 +155,15 @@ describe('the greeting, who speaks and the words heard', () => {
     expect(onAirBlock({ note: '' })).toContain('この通話でまだ挨拶していない時だけ');
     expect(onAirBlock({ note: '' })).toContain('冗談・説明・前置きは足さない');
   });
+
+  it('leaves the first-greeting rules out for a turn after she has spoken, and keeps the rest of the block', () => {
+    const text = onAirBlock({ note: 'メモ' }, false);
+    expect(text).not.toContain('そこにいる全員と見ている人への合図');
+    expect(text).not.toContain('冗談・説明・前置きは足さない');
+    expect(text).toContain('呼びかけの挨拶はせず、頼まれた事・聞かれた事への返事から始める');
+    expect(text).toContain('場面のメモ（持ち主が書いたもの）: メモ');
+    expect(text).toContain('「話さない」とされた事は、聞かれても話さない');
+  });
 });
 
 describe('the player names of a lifecycle frame', () => {

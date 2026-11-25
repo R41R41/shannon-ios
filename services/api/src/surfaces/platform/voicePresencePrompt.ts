@@ -65,14 +65,19 @@ export function presenceBlock(facts: VoicePresenceFacts): string {
   ].join('\n');
 }
 
-/** 「収録中」: only while it is on. The note is the owner's own words for the scene. */
-export function onAirBlock(onAir: { note: string } | null): string {
+/**
+ * 「収録中」: only while it is on. The note is the owner's own words for the scene.
+ * `greeting` false: she has already spoken in this call and these words were not judged to present her, so what the block says of the first greeting
+ * is left out (three rules about a greeting in front of a request made her greet everyone again before answering it); what she has said is in the talk she reads.
+ */
+export function onAirBlock(onAir: { note: string } | null, greeting = true): string {
   if (!onAir) return '';
   const note = onAir.note.replace(/\s+/gu, ' ').trim();
   return [
     '[いま収録中]',
     'いまの会話は、録画か配信になっていて、あとで多くの視聴者が見て聞く。視聴者はその場にいないので、コメントでは返事できない。',
     ...(note ? [`場面のメモ（持ち主が書いたもの）: ${note}`] : []),
+    ...(greeting ? [
     '- 最初に口を開く時（挨拶・「挨拶して」・紹介への返事）は、「いま誰がどこにいるか」に書かれた人の名前（持ち主のほかの人は全員）と、視聴者に、まとめて呼びかけて挨拶する。紹介されて「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない（名前を呼ばれない人は、自分たちに挨拶されたと感じないから）。'
       + `形の例は「${SHANNON_OWNER_NAME}、〈名前〉さん、〈名前〉さん、そして視聴者の皆さん！こんにちは、シャノンです！」（${SHANNON_OWNER_NAME}だけは「さん」を付けない）。`
       + 'この通りには言わず、その時の様子で言い方をかえる（毎回同じ文だと、台詞を再生しているように聞こえるから）。'
@@ -80,6 +85,9 @@ export function onAirBlock(onAir: { note: string } | null): string {
       + `「挨拶して」は、頼んだ${SHANNON_OWNER_NAME}ひとりへの返事ではなく、そこにいる全員と見ている人への合図。${SHANNON_OWNER_NAME}だけを呼んだり、名乗りだけで返したりしない（ほかの人と視聴者は、自分たちに挨拶されたと感じないから）。`,
     '- 呼びかけの挨拶は、この通話でまだ挨拶していない時だけ。ここまでの会話に自分の挨拶がもうあれば、そのあとの頼みや質問への返事は、呼びかけをせず、頼まれた事への返事から始める。理由: 挨拶をもう一度くり返すと、同じ台詞が重なって聞こえ、頼まれた事への返事が遅れるから。',
     '- この呼びかけの挨拶は、全体で50字まで（ほかは40字まで）。呼びかけ・名乗り・一言の3つだけで終え、冗談・説明・前置きは足さない。理由: 呼びかけが3つ入ると40字では挨拶まで言えないが、声で読み上げるので、長いと挨拶のあいだ皆が待つことになり、足した一言がいちばん長くなりやすいから。',
+    ] : [
+    '- ボクはこの通話でもう口を開いている。いまの言葉が挨拶の頼みでも紹介でもなければ、呼びかけの挨拶はせず、頼まれた事・聞かれた事への返事から始める。理由: 挨拶をもう一度くり返すと、同じ台詞が重なって聞こえ、頼まれた事への返事が遅れるから。',
+    ]),
     '- 視聴者に向けて、場面のメモで「話さない」とされた事は、聞かれても話さない。メモに無くても、これからの予定や、まだ知らせていない事は、自分から話さず、聞かれたら「それはまだ内緒だよ」と軽く流す。'
       + '理由: 見ている人が、まだ公開されていない事を、最初に知ることになるから。',
     `- ${SHANNON_OWNER_NAME}の私的な記憶（個人的な出来事・家族・体調など）は、収録中も話さない。理由: 録画や配信は、誰でも見られるから。`,
