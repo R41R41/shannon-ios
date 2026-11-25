@@ -16,7 +16,7 @@ import { readApiSource, repositoryRoot } from './support/sources.js';
  */
 const BODY_BEARER_CALLS: ReadonlyArray<readonly [method: string, path: string]> = [
   ['POST', '/v1/body/minecraft/turns'], ['POST', '/v1/body/minecraft/claim'], ['POST', '/v1/body/minecraft/stop'],
-  ['GET', '/v1/body/minecraft/queue'], ['POST', '/v1/body/minecraft/queue'], ['POST', '/v1/body/minecraft/control'],
+  ['GET', '/v1/body/minecraft/queue'], ['POST', '/v1/body/minecraft/queue'], ['POST', '/v1/body/minecraft/plan'], ['POST', '/v1/body/minecraft/control'],
   ['POST', '/v1/body/minecraft/lifecycle'], ['POST', '/v1/body/minecraft/lifecycle/permit'], ['POST', '/v1/body/minecraft/lifecycle-request'],
   ['POST', '/v1/body/events'], ['GET', '/v1/body/presence'], ['GET', BODY_MIND_PATH],
 ];

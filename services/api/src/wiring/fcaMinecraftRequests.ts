@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { configurePlanOpWake } from './fcaMinecraftPlanOp.js';
 import type { FcaConversationPort, FcaSourceGuard } from '../mind/action/fca/fcaConversationPorts.js';
 import type { TaskRecord, TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
@@ -244,6 +245,11 @@ export function fcaMinecraftRequests(parts: { control: MinecraftControl; runtime
   };
   const queue = fcaMinecraftQueue(queueTaskPorts({ db: parts.db, control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope,
     atomic: parts.atomic, stop: parts.stop, log, spec, newTask, requestOrigin: task => requestOrigin(task) }));
+  // The owner's hand on one node tells the task at once when the words came with a turn of his (`fcaMinecraftPlanOp.ts`).
+  configurePlanOpWake((taskId, text, context) => {
+    parts.runtime.observeExternal(parts.ownerScope, taskId, { eventId: `${context.requestId ?? `node:${taskId}:${Date.now()}`}:node`,
+      experienceIds: [context.experienceId!], observedAt: context.observedAt ?? new Date().toISOString(), text });
+  });
   const voice = fcaMinecraftVoice({ control: parts.control, runtime: parts.runtime, ownerScope: parts.ownerScope, stop: parts.stop,
     sourceVisible: parts.sourceVisible, ...(parts.sourceWhy ? { sourceWhy: parts.sourceWhy } : {}), bound: () => bound(undefined, unfinished), openRequest, resting, log, queue });
   /**

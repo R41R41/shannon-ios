@@ -77,6 +77,8 @@ vi.mock('../src/mind/selectors/toolMenu.js', async importOriginal => {
  * The two digests of `minecraft` (its first and third provider requests) were changed by hand again on 2026-11-24 for a change that is not stage 3's (what a
  * reply may promise: only the list is what was accepted, and the order example is a blank): the first and third provider requests carry the guide.
  * The same two digests were changed by hand once more for the sleep hand's words (`on=false`, not tonight, in the act's description), the intent field's `call_join` kind and the request guide's words about advice and conditions: not stage 3's either.
+ * The same two were changed by hand once more on 2026-11-26 for a change that is not stage 3's (the owner's hand on one node of a request's plan: the intent field has the kind skip and the field node, and the request guide says when a word is about one step and not the whole request): the first and third provider requests carry them.
+ * Changed by hand again on 2026-11-26 (the fix of that change): the guide says the node is taken from the lines of the plan's nodes under the list, and a word about the whole request leaves node empty; the two digests are to be taken again on the merged head.
  */
 const fixture = new URL('./fixtures/stage3-switched-off-v1.json', import.meta.url);
 

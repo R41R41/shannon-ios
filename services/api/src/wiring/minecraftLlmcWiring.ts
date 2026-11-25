@@ -9,6 +9,7 @@ import { createEndgame } from '../surfaces/minecraft/minecraftEndgame.js';
 import { registerSingleRequest } from '../surfaces/minecraft/minecraftLlmcNightWaitHold.js';
 import { registerEyeLedger } from '../surfaces/minecraft/minecraftEyeThrowHold.js';
 import { withReplanInbox } from '../surfaces/minecraft/minecraftLlmcReplan.js';
+import { registerOwnerPlan, withOwnerNodeInbox } from '../surfaces/minecraft/minecraftPlanOp.js';
 import { adoptProblem, unattendedFailureStop, unheldReplan, withReplan } from './minecraftLlmcReplanWiring.js';
 import {
 LLMC_PERMIT_WINDOW_MS,LLMC_HISTORY_HARD,llmcTools,llmcModelRouter,llmcCompletionMistake,LLMC_CATALOG_SELECTOR,
@@ -91,7 +92,7 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const validate = (before: PlanTree, after: PlanTree) =>
     targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe());
   const adopted = (before: PlanTree, after: PlanTree) => adoptProblem({ validate, observe }, before, after);
-  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withReplanInbox(firstPlanInbox, log, adopted), log,
+  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withOwnerNodeInbox(withReplanInbox(firstPlanInbox, log, adopted), log), log,
     validateUpdate: validate,
     lost: tree => lostDoneUpdate(step.taskId, tree, observe()),
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
@@ -148,6 +149,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
     onHeld: info => { void holds?.hold(step.taskId, { id: `cleanup:${info.command}`, heavy: true, why: `結果が不明で、解放を確かめられなかった（${info.why}）`,
        held: true, frozen: null, command: info.command })
       .catch(error => log(`Shannon Minecraft cleanup hold failed task=${step.taskId} ${String(error)}`)); } });
+  // The owner's hand on one node (`minecraftPlanOp.ts`): the door reads this step's plan and cuts the acts that serve the node.
+  registerOwnerPlan(step.taskId, { tree: () => plan.port.tree(), async cut(nodes) {
+    const ids = queue.openItems().filter(item => item.node && nodes.has(item.node)).map(item => item.item);
+    return ids.length ? queue.replace(ids) : '';
+  } });
   queue.onRan(({ why }, result) => noteChestsOpened(step.taskId, result.text, why));
   queue.onRan((_item, _result, receipt) => endgame.noteResult(receipt?.id, receipt?.result, observe()));
   tapEyes(control, step.taskId, (id, result) => endgame.noteResult(id, result, observe()));

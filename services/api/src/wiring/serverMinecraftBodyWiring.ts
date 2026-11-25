@@ -18,6 +18,8 @@ import type { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
 import { MINECRAFT_QUEUE_LIMITS, MINECRAFT_QUEUE_PATH, parsedMinecraftQueueRequest } from '../contracts/minecraftQueueContract.js';
 import type { MinecraftQueue } from './fcaMinecraftQueue.js';
 import { answerQueueRequest } from './fcaMinecraftQueueIntent.js';
+import { answerPlanOp } from './fcaMinecraftPlanOp.js';
+import { MINECRAFT_PLAN_LIMITS, MINECRAFT_PLAN_PATH, parsedMinecraftPlanRequest } from '../contracts/minecraftPlanOpContract.js';
 
 /** Every route of her Minecraft body (`docs/minecraft-body-contract.md`). */
 export const MINECRAFT_BODY_ROUTE_PREFIX = '/v1/body/minecraft/';
@@ -103,6 +105,24 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
       }
     }
   }
+  /**
+   * The owner's hand on one node of the plan of a request (`MINECRAFT_PLAN_PATH`, `fcaMinecraftPlanOp.ts`): skip it, hold it, put it back; the request goes on.
+   * The owner's game device, like the list's route. A refusal is an answer (200, `ok: false`, its code), not a failure of the call.
+   */
+  async function servePlan(request: IncomingMessage, response: ServerResponse, principal: ShannonDevicePrincipal | null): Promise<void> {
+    if (request.method !== 'POST') sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    else if (!principal || !isGameBody(principal) || principal.scopeKey !== configuration?.ownerScopeKey) sendJson(response, 403, { error: 'FCA_BODY_DEVICE_DENIED' });
+    else if (!common?.queue) sendJson(response, 503, { error: 'FCA_BODY_NOT_ENABLED' });
+    else {
+      const input = await readJson(request, MINECRAFT_PLAN_LIMITS.bodyBytes).catch(() => undefined);
+      const parsed = parsedMinecraftPlanRequest(input);
+      if (!parsed) sendJson(response, 400, { error: 'MINECRAFT_PLAN_INPUT_INVALID' });
+      else {
+        try { sendJson(response, 200, await answerPlanOp(common.queue, parsed, { requestId: null })); }
+        catch { sendJson(response, 500, { error: 'MINECRAFT_PLAN_FAILED' }); }
+      }
+    }
+  }
   return {
     configuration,
     connectLifecycle(value: MinecraftLifecycle): void { lifecycle = value; },
@@ -131,7 +151,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
         : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason: 'body_unavailable' as const });
       // Without the common runtime there is no body to hand anything to; said after her reply (a stop is answered there too).
       const fcaAdmission: MinecraftBodyDependencies['fcaAdmission'] = input => common ? common.admission?.(input) ?? null : 'body_unavailable';
-      const fcaQueueLines = () => common?.queue?.promptLines() ?? [];
+      const fcaQueueLines = () => common?.queue?.promptLinesWithPlan() ?? [];
       route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent, fcaAdmission, fcaQueueLines });
     },
     /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */
@@ -212,6 +232,10 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
           if (!parsed) sendJson(response, 400, { error: 'MINECRAFT_LIFECYCLE_REQUEST_INVALID' });
           else sendJson(response, 200, await lifecycleRequests.request(parsed));
         }
+        return true;
+      }
+      if (path === MINECRAFT_PLAN_PATH) {
+        await servePlan(request, response, principal);
         return true;
       }
       if (path === MINECRAFT_QUEUE_PATH) {
