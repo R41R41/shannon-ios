@@ -388,8 +388,9 @@ export class PlatformVoiceService {
       this.rooms.useFiller(request.conversationId, begun.id);
       return begun;
     }
-    // Words said with the key held are certainly answered (no filler is played for a decision not to answer): they get a short sound first even with the switch off.
-    const wanted = switchOn(this.environment, 'SHANNON_DC_VOICE_FILLER') || request.directed === true;
+    // The body plays a recorded sound only when its own SHANNON_DC_VOICE_FILLER is on (owner 2026-11-25: none at all, the key held included), so she names one,
+    // and shapes the start of her reply around one, only when this switch (the same name, on the head) is on too. A filler the body began (above) is really played.
+    const wanted = switchOn(this.environment, 'SHANNON_DC_VOICE_FILLER');
     const previous = this.rooms.lastFiller(request.conversationId);
     const filler = wanted ? selectVoiceFiller({ transcript: request.userMessage, reason: address.reason, previous }) : null;
     this.rooms.useFiller(request.conversationId, filler?.id);

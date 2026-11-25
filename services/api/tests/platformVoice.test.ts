@@ -308,6 +308,21 @@ describe('what the turn is told besides the words', () => {
     await close();
   });
 
+  it('names no filler and shapes no reply start for words said with the key held while the switch is off; on, it is as before (owner 2026-11-25)', async () => {
+    const words = 'マイクラのエンドラってどうやって倒すのがいいと思う？';
+    const off = harness({ SHANNON_DC_VOICE: 'on' });
+    const quiet = await off.say(words, { directed: true });
+    expect((quiet[0] as Extract<VoiceTurnLine, { type: 'decision' }>).filler).toBeNull();
+    expect(promptOf(off.model.requests[0]!)).not.toContain('と声に出している');
+    await off.close();
+    const on = harness({ SHANNON_DC_VOICE: 'on', SHANNON_DC_VOICE_FILLER: 'on' });
+    const loud = await on.say(words, { directed: true });
+    const decision = loud[0] as Extract<VoiceTurnLine, { type: 'decision' }>;
+    expect(decision.filler).not.toBeNull();
+    expect(promptOf(on.model.requests[0]!)).toContain(`「${decision.filler!.text}」と声に出している`);
+    await on.close();
+  });
+
   it('goes on from the filler the body began, and ignores one it does not know', async () => {
     const { say, model, close } = harness();
     const begun = await say('マイクラのエンドラってどうやって倒すのがいいと思う？', { fillerId: 'sou' });
