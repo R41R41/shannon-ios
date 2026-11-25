@@ -4,6 +4,7 @@ import { fcaMinecraftVoice, type FcaMinecraftVoiceParts } from '../src/wiring/fc
 import { fcaMinecraftQueue } from '../src/wiring/fcaMinecraftQueue.js';
 import { underWriteLock } from '../src/infra/sqlite/lockWaits.js';
 import type { TaskView } from '../src/mind/action/taskRuntime/taskRuntimePorts.js';
+import { planFromSeeds } from '@shannon/mind';
 import { spokenFor } from '../src/surfaces/minecraft/minecraftPeopleWords.js';
 
 const task = (id: string, goal: string): TaskView => ({
@@ -15,7 +16,7 @@ const databases: DatabaseSync[] = [];
 afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 
 /** The queue runs on a small fake of the task runtime (a task per start); the voice parts are as `fcaMinecraftRequests` gives them. */
-function fixture(options: { bodies?: string[]; running?: TaskView | null; visible?: boolean; finished?: boolean; resting?: Array<{ goal: string; how: string }> } = {}) {
+function fixture(options: { bodies?: string[]; running?: TaskView | null; visible?: boolean; finished?: boolean; resting?: Array<{ goal: string; how: string }>; checkpoint?: unknown } = {}) {
   const calls: string[] = [];
   const db = new DatabaseSync(':memory:');
   databases.push(db);
@@ -41,6 +42,7 @@ function fixture(options: { bodies?: string[]; running?: TaskView | null; visibl
   const parts: FcaMinecraftVoiceParts = {
     control: { available: () => options.bodies ?? ['minecraft:world'] } as never,
     runtime: {
+      ...(options.checkpoint === undefined ? {} : { snapshot: () => ({ checkpoint: options.checkpoint }) }),
       observeExternal: (_scope: string, id: string, event: { eventId: string; experienceIds: string[]; text: string }) => {
         if (options.finished && id === 't1') throw new Error('FCA_TARGET_FINISHED');
         calls.push(`observe ${id} ${event.eventId} ${event.experienceIds.join(',')} ${event.text}`);
@@ -196,5 +198,25 @@ describe('the words as spoken, when and where (a line without them reads as befo
     const f = fixture({ running: task('t1', 'エンドラを倒す') });
     await f.port.intent(input({ speaker: guest }));
     expect(f.calls).toEqual(['observe t1 dcv:r1 exp-1 Discordの通話でのミキの言葉（いまのタスクへ）: まず鉄の剣を作って']);
+  });
+});
+
+describe("the running request's plan, as the voice turn is shown it (advice that helps the request is told apart from a request of its own)", () => {
+  const running = task('t1', 'ケーキを1個作る');
+  const tree = { ...planFromSeeds([{ title: 'ケーキの材料を集める', children: [{ title: '小麦を育てる', state: 'wait' }, { title: '卵を取る' }, { title: '牛乳を汲む' }] }, { title: 'ケーキを焼く' }])!, goal: 'ケーキを1個作る' };
+
+  it("gives the goal, the node under way and the nodes left, from the plan tree in the task's checkpoint", () => {
+    const current = tree.nodes.find(node => node.title === '小麦を育てる')!;
+    const lines = fixture({ running, checkpoint: { fcaPlanTree: { ...tree, current: current.id } } }).port.state().planLines!;
+    expect(lines[0]).toBe('目的: ケーキを1個作る');
+    expect(lines[1]).toBe('いま: 小麦を育てる（待ち）');
+    expect(lines[2]).toContain('卵を取る');
+    expect(lines[2]).toContain('ケーキを焼く');
+  });
+
+  it('gives no plan lines when the task has no plan yet, when the checkpoint is unreadable or when the runtime cannot say', () => {
+    expect(fixture({ running }).port.state().planLines).toBeUndefined();
+    expect(fixture({ running, checkpoint: null }).port.state().planLines).toBeUndefined();
+    expect(fixture({ running, checkpoint: { fcaPlanTree: { schema: 'nope' } } }).port.state().planLines).toBeUndefined();
   });
 });

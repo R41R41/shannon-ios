@@ -168,7 +168,7 @@ export function voiceIntentInstructions(state: VoiceMinecraftState, who: string,
     ].join('\n');
   }
   return [
-    ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null, owner }),
+    ...minecraftQueueGuide({ queueLines: state.queue ?? [], who, running: state.running?.goal ?? null, owner, ...(state.planLines?.length ? { planLines: state.planLines } : {}) }),
     `体への頼みは、${who}が体でしてほしいことを言った時に受ける（助言・提案の形も含む。聞き間違いかもしれない言葉や、ほかの人どうしの話は kind=none）。`,
     '「待って」「ちょっと待って」は、ほかの人に向けた言葉のことも多い。シャノンに向けて止めてほしいと分かる時だけ kind=stop にする（理由: stop は体の仕事ぜんたいを止めるから）。',
   ].join('\n');

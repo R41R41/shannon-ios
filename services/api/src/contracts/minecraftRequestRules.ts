@@ -11,9 +11,21 @@
 export function adviceIsRequestRule(who: string, act: string): string {
   return `助言・提案・質問への答えの形（「〜した方がいいよ」「〜しようか」「〜してほしいな」「〜して」、ボクの質問への答え）でも、体でしてほしいことが入っていれば、はっきりした頼みと同じに${act}。聞き返さない・「ケーキを先にやってほしいって言ってたよね」のように相手の言っていないことを足さない。`
     + '例: 「夜が来る前に先にベッド作った方がいいよ」→ 頼む（placement=now、goal「夜が来る前にベッドを作る」）。'
-    + '「次の夜は寝ずにスケルトンを倒して骨粉を手に入れようか。その骨粉で種の成長を早めよう」→ 頼む（goal「次の夜は寝ずにスケルトンを倒して骨を取り、骨粉にして作物に使う」）。'
     + '「近くに適当に置いて寝て」（置き場所を聞いた質問への答え）→ 頼む（goal「ベッドを近くに適当に置いて寝る」）。'
     + `理由: 助言の形のまま聞き返したり、ただ受け答えするだけにすると、${who}はもう一度言い直すことになり、そのたびに20秒以上かかる。違っていたら、引き受けたあとで「やめて」「変えて」と言ってもらえば直せる。`;
+}
+
+/**
+ * While a request of hers is running: what is said to help it get done (a way, a material, a preparation) is words for that request, not a
+ * new one. Written because the voice turned "skeletons for bone meal to grow the wheat" into a separate request four times in a night, queued
+ * behind the cake it was meant for (2026-11-26 shoot). Only the intent field has this (the tool `minecraft.request` can only add a request).
+ * Words for her judgment: nothing reads the sentence for a phrase.
+ */
+export function adviceForRunningRule(who: string): string {
+  return `いま実行中の依頼（や [依頼の列] の待ち・保留の依頼）を成し遂げるための手段・準備・材料・やり方の提案（「〜で育てようよ」「〜を使うと早いよ」「待ってる間に〜も」のうち、[いまの依頼の計画] の目的や、いま待っていることを早める・足りない材料を手に入れることに役立つもの。「ついでに」「ちょっと」と付いていても同じ）は、助言の形でも新しい依頼にせず kind=message にし、goal に${who}が言った内容と、何のためか（目的）をそのまま書く。`
+    + '理由: task で足すと、別の仕事として列の最後に積まれ、元の依頼が終わるまで動かず、元の依頼の計画はそのまま進む（骨粉で育てようと言われたのに、ケーキは骨粉なしで進んでしまう）。message なら体がいまの計画に書き足し、足せない時は一番近い手に変えて進める。'
+    + `いまの依頼とは別にほしい物（別の物を作る・集める・建てる）、置く・渡す、「先に」と言われた時は、これまでどおり kind=task。迷う時は「言われたことを、いまの計画の中に書き足せるか」で選ぶ。違っていたら、${who}が「やめて」と言ってくれれば直せる。`
+    + 'message にした時の返事は「いまの作業に取り入れるね」の形にし、「あとでやるね」とは言わない（理由: 取り入れは、いますぐ計画に入る）。';
 }
 
 /** The conditions of the wish stay in the goal. */

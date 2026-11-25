@@ -300,7 +300,7 @@ function bodyLines(state: VoiceMinecraftState): string[] {
       '雑談には普通に答え、このことには触れない。',
     ];
   }
-  return minecraftQueueGuide({ queueLines: state.queue ?? [], who: SHANNON_OWNER_NAME, running: state.running?.goal ?? null });
+  return minecraftQueueGuide({ queueLines: state.queue ?? [], who: SHANNON_OWNER_NAME, running: state.running?.goal ?? null, ...(state.planLines?.length ? { planLines: state.planLines } : {}) });
 }
 
 const REQUEST_FIELDS = new Set(['platform', 'requestId', 'conversationId', 'conversationKind', 'sourceUserId', 'sourceDisplayName', 'participants', 'userMessage', 'observedAt']);

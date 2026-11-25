@@ -1,3 +1,4 @@
+import { orderedPlan, readPlanTree } from '@shannon/mind';
 import type { TaskRuntime, TaskView } from '../mind/action/taskRuntime/taskRuntimePorts.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import type {
@@ -88,6 +89,28 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
     return { delivered: true, as: outcome.as, ...(entry?.taskId ? { taskId: entry.taskId } : {}),
       ...(entry && outcome.as === 'task' ? { entryId: entry.id } : {}) };
   };
+  /**
+   * The running request's plan as the voice reads it (目的・いま・残り): from the plan tree its task keeps in its checkpoint. Only titles and
+   * the goal as last said, no ids: it is what tells words that help the request (a way to grow the wheat) from a request of their own.
+   * Nothing here may fail the turn; no plan (the task has not made one yet) gives no lines.
+   */
+  const planLinesOf = (taskId: string): string[] => {
+    try {
+      const tree = readPlanTree((parts.runtime.snapshot(parts.ownerScope, taskId)?.checkpoint as { fcaPlanTree?: unknown } | null)?.fcaPlanTree);
+      if (!tree || !tree.nodes.length) return [];
+      const cut = (text: string): string => text.replace(/\s+/gu, ' ').trim().slice(0, 60);
+      const order = orderedPlan(tree.nodes);
+      const now = tree.nodes.find(node => node.id === tree.current);
+      const left = order.filter(node => node.state !== 'done' && node.id !== now?.id && !order.some(other => other.parentId === node.id)).slice(0, 5);
+      const blocked = order.filter(node => node.state === 'blocked' && node.reason).slice(0, 2);
+      return [
+        ...(tree.goal ? [`目的: ${cut(tree.goal)}`] : []),
+        ...(now ? [`いま: ${cut(now.title)}${now.state === 'wait' ? '（待ち）' : ''}`] : []),
+        ...(left.length ? [`残り: ${left.map(node => cut(node.title)).join('、')}`] : []),
+        ...blocked.map(node => `止まっている: ${cut(node.title)}（${cut(node.reason ?? '')}）`),
+      ];
+    } catch { return []; }
+  };
   return {
     state() {
       const bodies = parts.control.available();
@@ -99,7 +122,8 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
       const open = parts.openRequest(bodies[0]!);
       const running = entry ? { id: entry.taskId ?? entry.id, goal: entry.goal } : open ? { id: open.id, goal: open.goal } : null;
       const resting = (parts.resting?.(bodies[0]!) ?? []).filter(item => item.goal !== running?.goal.replace(/\s+/gu, ' ').trim().slice(0, 40)).map(item => `「${item.goal}」（${item.how}）`);
-      return { connected: true, running, ...(queue.length ? { queue } : {}), ...(resting.length ? { resting } : {}) };
+      const planLines = running ? planLinesOf(running.id) : [];
+      return { connected: true, running, ...(queue.length ? { queue } : {}), ...(planLines.length ? { planLines } : {}), ...(resting.length ? { resting } : {}) };
     },
     async intent(input) {
       const { intent } = input;

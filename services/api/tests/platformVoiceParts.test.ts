@@ -284,7 +284,8 @@ describe('what a reply is told of where and how she is spoken to, and of request
     const guide = minecraftQueueGuide({ queueLines: [], running: null, who: 'ライ' }).join('\n');
     expect(guide).toContain('助言・提案・質問への答えの形');
     expect(guide).toContain('夜が来る前に先にベッド作った方がいいよ');
-    expect(guide).toContain('寝ずにスケルトンを倒して骨粉を手に入れようか');
+    // Not the bone-meal-for-the-wheat sentence: while a request runs, that is words for it (2026-11-26 shoot), so it is no longer taught as a task.
+    expect(guide).not.toContain('その骨粉で種の成長を早めよう');
     expect(guide).toContain('近くに適当に置いて寝て');
     expect(guide).toContain('条件（いつ・どうやって・何のため・場所');
     expect(guide).toContain('理由: 体の作業を進める側は、この goal と、渡される言葉の原文だけ');
@@ -296,5 +297,7 @@ describe('what a reply is told of where and how she is spoken to, and of request
     // While a request runs, a thing to put down or hand over is still a request of its own.
     const running = minecraftQueueGuide({ queueLines: ['#1 実行中 「ケーキを作る」'], running: 'ケーキを作る', who: 'ライ' }).join('\n');
     expect(running).toContain('message でなく kind=task にする');
+    expect(running).toContain('成し遂げるための手段・準備・材料・やり方の提案');
+    expect(guide).not.toContain('成し遂げるための手段');
   });
 });

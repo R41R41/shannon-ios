@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule, toolRequestGuide } from '../src/contracts/minecraftRequestRules.js';
+import { adviceForRunningRule, adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule, toolRequestGuide } from '../src/contracts/minecraftRequestRules.js';
 import { minecraftQueueGuide } from '../src/contracts/minecraftQueuePrompt.js';
 import { SHANNON_TOOLS } from '../src/mind/tools/shannonTools.js';
 
@@ -22,6 +22,27 @@ describe('rules for handing a wish to her Minecraft body', () => {
     expect(toolBlock).toContain(adviceIsRequestRule('ライ', '道具 minecraft.request で頼む'));
     expect(toolBlock).toContain('先にベッド作った方がいいよ');
     expect(toolBlock).toContain('寝ずに');
+  });
+
+  // 2026-11-26 shoot: "kill skeletons for bone meal to grow the wheat" was queued four times as a request of its own behind the cake it was for.
+  it('takes what helps the running request as words for it (message), not as a new request, and says why; only while something runs', () => {
+    const running = minecraftQueueGuide({ queueLines: ['#16 実行中 「ケーキを1個作る」'], running: 'ケーキを1個作る', who: 'ミナト',
+      planLines: ['目的: ケーキを1個作る', 'いま: 小麦を育てる（待ち）'] }).join('\n');
+    expect(running).toContain(adviceForRunningRule('ミナト'));
+    expect(running).toContain('[いまの依頼の計画]\n目的: ケーキを1個作る\nいま: 小麦を育てる（待ち）\n[依頼の列]');
+    expect(adviceForRunningRule('ミナト')).toContain('kind=message');
+    expect(adviceForRunningRule('ミナト')).toContain('理由:');
+    expect(adviceForRunningRule('ミナト')).toContain('別にほしい物');
+    const idle = minecraftQueueGuide({ queueLines: [], running: null, planLines: ['目的: x'] }).join('\n');
+    expect(idle).not.toContain('いまの依頼の計画');
+    expect(idle).not.toContain('成し遂げるための手段');
+    expect(guide).not.toContain('いまの依頼の計画]');
+  });
+
+  it('no longer teaches the bone-meal-for-the-crop sentence as a request of its own, on either way', () => {
+    expect(adviceIsRequestRule('ライ', 'kind=task にする')).not.toContain('骨粉');
+    expect(tool.description).not.toContain('その骨粉で種の成長を早めよう');
+    expect(toolBlock).not.toContain('その骨粉で種の成長を早めよう');
   });
 
   it('promises nothing when nothing is handed over, and says why', () => {
