@@ -1,6 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { MINECRAFT_QUEUE_LIMITS } from './minecraftQueueContract.js';
-import { adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule } from './minecraftRequestRules.js';
+import { adviceForRunningRule, adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule } from './minecraftRequestRules.js';
 
 /**
  * What she is told of the owner's list of requests for her Minecraft body (`minecraftIntent`): what each kind does to the list,
@@ -15,16 +15,22 @@ export interface QueueGuideOptions {
   /** The request that is running, in her words, or null. */
   running: string | null;
   /**
+   * The running request's plan in a few lines (`目的: …`, `いま: …`, `残り: …`), from its plan tree; empty or absent when it has none. It is what lets her tell
+   * words that help the running request (kind=message) from a request of their own (kind=task).
+   */
+  planLines?: readonly string[];
+  /**
    * Whether the one asking is the owner (default: yes). Kept for the callers that pass it; it no longer changes the words (whoever
    * asks in the channel decides the order of their own request, and the guide is the same for any speaker).
    */
   owner?: boolean;
 }
 
-const add = (who: string) => [
+const add = (who: string, idle: boolean) => [
   `${who}がマイクラでしてほしいこと（作る・集める・取ってくる・掘る・倒す・行く・建てるなど）をはっきり頼んだら、聞き返さずに引き受けて kind=task にし、`
     + `goal に何をどれだけするかを${MINECRAFT_QUEUE_LIMITS.goalCharacters}字以内で書く（例: 「ケーキを1個作る」「オークの原木を16個集める」）。`
-    + '数が言われていなければ、ほどよい数を自分で決める。いま別のことをしていても引き受けてよい。新しい依頼は列に積まれて順番に実行される。',
+    + '数が言われていなければ、ほどよい数を自分で決める。いま別のことをしていても引き受けてよい。新しい依頼は列に積まれて順番に実行される。'
+    + (idle ? '' : '（ただし、いま実行中の依頼を成し遂げるための手段・材料の頼みは、頼む形でも下の規則（いま実行中の依頼を成し遂げるための提案は message）が先で、task にしない。）'),
   adviceIsRequestRule(who, 'kind=task にする'),
   KEEP_CONDITIONS_RULE,
   'placement は、順番に触れた言葉があるかで選ぶ。順番に触れない新しい頼み（「ベッドを作って」）・「あとで」「ついでに」「それが終わったら」は end（理由: 走っている作業を勝手に止めない）。'
@@ -49,9 +55,10 @@ const others = (who: string, idle: boolean) => [
       + '直前に終わった依頼の成果物（作ったケーキなど）についての頼みも、終わった依頼は動かせないので新しい依頼（kind=task）。'
     : `いま実行中の依頼について${who}が言うこと（数や作り方を変えてほしい・続けてほしい・それでいい）は kind=message にし、`
       + 'goal に伝える言葉を書く。新しい依頼にはならず、いまの作業への伝言として渡る。'
-      + `作った物を「置いて」「ちょうだい」「渡して」と言われた時や、いまの作業とは別にしてほしいことを言われた時は、走っている依頼の最中でも message でなく kind=task にする（理由: message は走っている作業への言葉で、別の頼みは新しい依頼として列に積まないと体に届かない）。`
+      + `作った物を「置いて」「ちょうだい」「渡して」と言われた時や、いまの作業の目的のためではない、別にしてほしいことを言われた時は、走っている依頼の最中でも message でなく kind=task にする（理由: message は走っている作業への言葉で、別の頼みは新しい依頼として列に積まないと体に届かない）。`
       + `いまの作業に関わる事実を${who}が教えてくれた時（「持っている」「無い」「あっちにある」、間違いの指摘）も kind=message にし、goal に事実をそのまま書く。`
       + '理由: 体に届かないと、体が同じ間違いを繰り返し、人が何度も言い直すことになる。「お、いいね」のような相づちは none のまま。',
+  ...(idle ? [] : [adviceForRunningRule(who)]),
   '「全部止めて」「ちょっと待って」のように列ぜんたいを止めたい時は kind=stop。止めた列は、始めてと言われるまで次の依頼を動かさない。',
   '一つの依頼だけを扱う時は target に依頼の番号（[依頼の列] の #3 なら "#3"）を入れる。空ならいま実行中の依頼。'
     + 'もういい・やめて＝cancel、後回し・いったん保留＝hold（列は次へ進む）、保留や停止のものを戻す＝resume'
@@ -75,7 +82,8 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
     '体は一度に一つの依頼だけを動かす。頼みごとは「依頼の列」に積まれ、順番に実行される。言葉がどれにあたるかは、あなたが判断する。'];
   if (options.running) lines.push(`いま体は「${options.running}」をしている。`);
   const who = options.who ?? SHANNON_OWNER_NAME;
-  lines.push(...add(who), ...others(who, !options.running && options.queueLines.length === 0));
+  lines.push(...add(who, !options.running), ...others(who, !options.running && options.queueLines.length === 0));
+  if (options.running && options.planLines?.length) lines.push('[いまの依頼の計画]', ...options.planLines);
   if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
   else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');
