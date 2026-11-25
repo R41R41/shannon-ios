@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { normalizeDisclosure } from '@shannon/cognition';
+import { companionRoster, onRoster } from '../companionNames.js';
 import {
   IMPRESSION_KINDS, type ImpressionPerson, type ImpressionStore, type PersonImpression,
 } from '../impressions.js';
@@ -80,10 +81,14 @@ export class SQLiteImpressionStore implements ImpressionStore {
         confirmed = new Set((this.database.prepare(`SELECT DISTINCT person_id FROM person_platform_identities
           WHERE scope_key = ? AND verification_status = 'confirmed'`).all(scopeKey) as unknown as Array<{ person_id: string }>).map(row => row.person_id));
       } catch { /* the registry table is absent */ }
-      return Object.freeze(rows.map(row => Object.freeze({
-        id: row.person_id, displayName: row.display_name, aliases: Object.freeze(strings(row.aliases_json)), forgotten: Boolean(row.forgotten_at),
-        companion: confirmed.has(row.person_id),
-      })));
+      const roster = companionRoster();
+      return Object.freeze(rows.map(row => {
+        const aliases = strings(row.aliases_json);
+        return Object.freeze({
+          id: row.person_id, displayName: row.display_name, aliases: Object.freeze(aliases), forgotten: Boolean(row.forgotten_at),
+          companion: confirmed.has(row.person_id) || onRoster(roster, [row.display_name, ...aliases]),
+        });
+      }));
     } catch { return []; }
   }
 

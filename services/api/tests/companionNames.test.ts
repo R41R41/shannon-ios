@@ -2,14 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { plainCompanionNames, withHonorific } from '../src/mind/memory/companionNames.js';
+import { companionRoster, onRoster, plainCompanionNames, withHonorific } from '../src/mind/memory/companionNames.js';
 import { periodSummaryText } from '../src/mind/memory/peopleMemory.js';
 import { SQLitePeopleMemoryStore } from '../src/mind/memory/store/peopleMemoryStore.js';
 import { impressionSubject } from '../src/mind/recall/impressionRecall.js';
 
 // Names are made up for the test.
 const directories: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
 describe('one way of writing a remembered person in the fields she reads', () => {
   it('writes a friend by name alone and anyone else with さん', () => {
@@ -49,5 +49,54 @@ describe('one way of writing a remembered person in the fields she reads', () =>
     expect(store.confirmedPerson('owner', 'y')).toBe(false);
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toBe('Shannon companion lookup failed');
+  });
+
+  it('reads the list with half-width and full-width commas, trimmed, and never by a part of a name', () => {
+    expect(companionRoster(' アキ, ユウ、ミト，  ,')).toEqual(['アキ', 'ユウ', 'ミト']);
+    expect(companionRoster('')).toEqual([]);
+    expect(companionRoster(undefined)).toEqual([]);
+    expect(onRoster(['アキ'], [' アキ '])).toBe(true);
+    expect(onRoster(['アキ'], ['アキラ', 'ライアキ'])).toBe(false);
+    expect(onRoster([], ['アキ'])).toBe(false);
+  });
+
+  describe('a friend named in SHANNON_COMPANION_NAMES', () => {
+    const made = () => {
+      const directory = mkdtempSync(join(tmpdir(), 'shannon-companions-'));
+      directories.push(directory);
+      const store = new SQLitePeopleMemoryStore(join(directory, 'shannon.sqlite'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const at = '2026-01-01T00:00:00.000Z';
+      const listed = store.createPerson('owner', { displayName: 'アキ', howKnown: 'met' }, at);
+      const byAlias = store.createPerson('owner', { displayName: 'ミト', howKnown: 'met', aliases: ['ユウ'] }, at);
+      const other = store.createPerson('owner', { displayName: 'ユウキ', howKnown: 'met' }, at);
+      const auto = store.createPerson('owner', { displayName: 'ノア', howKnown: 'met' }, at);
+      return { store, listed, byAlias, other, auto };
+    };
+
+    it('is called by name alone, by name or by alias; anyone else, the automatically made included, keeps さん', () => {
+      const { store, listed, byAlias, other, auto } = made();
+      vi.stubEnv('SHANNON_COMPANION_NAMES', 'アキ，ユウ,');
+      expect(store.confirmedPerson('owner', listed.id)).toBe(true);
+      expect(store.confirmedPerson('owner', byAlias.id)).toBe(true);
+      expect(store.confirmedPerson('owner', other.id)).toBe(false);
+      expect(store.confirmedPerson('owner', auto.id)).toBe(false);
+      expect(withHonorific(listed.displayName, store.confirmedPerson('owner', listed.id))).toBe('アキ');
+      expect(withHonorific(auto.displayName, store.confirmedPerson('owner', auto.id))).toBe('ノアさん');
+    });
+
+    it('does not match a part of a name', () => {
+      const { store, other } = made();
+      vi.stubEnv('SHANNON_COMPANION_NAMES', 'ユウ');
+      expect(store.confirmedPerson('owner', other.id)).toBe(false);
+    });
+
+    it('changes nothing while the list is empty or unset', () => {
+      const { store, listed } = made();
+      vi.stubEnv('SHANNON_COMPANION_NAMES', '');
+      expect(store.confirmedPerson('owner', listed.id)).toBe(false);
+      vi.stubEnv('SHANNON_COMPANION_NAMES', ' , ');
+      expect(store.confirmedPerson('owner', listed.id)).toBe(false);
+    });
   });
 });

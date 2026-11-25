@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { normalizeDisclosure, type MemoryDisclosure } from '@shannon/cognition';
 import { scrubOutboxFor } from './outboxScrub.js';
 import { closedPersonItemIds } from './closedFacts.js';
+import { companionRoster, onRoster } from '../companionNames.js';
 import type { RememberedPerson, PersonCallStatus, PersonCall, PersonMemoryKind, PersonMemoryItem, PeopleMemoryStore, PlatformPersonLink, PlatformTurnReceipt } from '../peopleMemoryContract.js';
 export { type RememberedPerson, type PersonCallStatus, type PersonCall, type PersonMemoryKind, type PersonMemoryItem, type PeopleMemoryStore, type PlatformPersonLink, type PlatformTurnReceipt } from '../peopleMemoryContract.js';
 
@@ -253,15 +254,19 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     } catch { return null; }
   }
 
+  /** A friend: confirmed in the registry, or named in the owner's list (`SHANNON_COMPANION_NAMES`) by the person's name or an alias. */
   confirmedPerson(scopeKey: string, personId: string): boolean {
     try {
-      return this.database.prepare(`SELECT 1 AS found FROM person_platform_identities
-        WHERE scope_key = ? AND person_id = ? AND verification_status = 'confirmed' LIMIT 1`).get(scopeKey, personId) !== undefined;
+      if (this.database.prepare(`SELECT 1 AS found FROM person_platform_identities
+        WHERE scope_key = ? AND person_id = ? AND verification_status = 'confirmed' LIMIT 1`).get(scopeKey, personId) !== undefined) return true;
     } catch (error) {
-      // Everyone is then called with さん; say so once, so a missing registry table is not silent.
+      // Without the registry only the list can name a friend; say so once, so a missing registry table is not silent.
       if (!this.companionLookupFailed) { this.companionLookupFailed = true; console.error('Shannon companion lookup failed', error instanceof Error ? error.name : 'unknown'); }
-      return false;
     }
+    const roster = companionRoster();
+    if (!roster.length) return false;
+    const person = this.person(scopeKey, personId);
+    return person !== null && onRoster(roster, [person.displayName, ...person.aliases]);
   }
 
   private companionLookupFailed = false;

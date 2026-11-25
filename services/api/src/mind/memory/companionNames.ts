@@ -18,3 +18,15 @@ export function plainCompanionNames(text: string, companions: readonly string[])
   }
   return shown;
 }
+
+/** The names `SHANNON_COMPANION_NAMES` lists (comma-separated, 、 and ， too), trimmed and without blanks. Empty or unset: no list. */
+export function companionRoster(raw: string | undefined = process.env.SHANNON_COMPANION_NAMES): readonly string[] {
+  return (raw ?? '').split(/[,、，]/u).map(name => name.trim()).filter(name => name.length > 0);
+}
+
+/** Whether one of the person's names or aliases is a listed name, as a whole (trimmed, never a part: 「ライ」 is not 「ライブ」). */
+export function onRoster(roster: readonly string[], names: readonly string[]): boolean {
+  if (!roster.length) return false;
+  const listed = new Set(roster);
+  return names.some(name => listed.has(name.trim()));
+}
