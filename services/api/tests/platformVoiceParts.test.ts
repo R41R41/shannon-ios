@@ -201,13 +201,15 @@ describe('the voice prompt blocks', () => {
     expect(friend).toContain('3人いる');
     expect(friend).toContain('「ユウ」');
     expect(friend).toContain('「えっと、」と声に出している');
-    // Introduced to people who are there: she answers with her name and a short line, with the reason, and keeps what is private out of it.
-    expect(friend).toContain('紹介への返事として');
+    // Introduced to people who are there: she greets them by name first, then says who she is, with the reason, and keeps what is private out of it.
+    expect(friend).toContain('ボクが挨拶する番');
+    expect(friend).toContain('名前で呼ぶところから始める');
+    expect(friend).toContain('名乗りと一言だけで済ませない');
     expect(friend).toContain('理由: 初めての人がいる場で紹介されたのに黙ると');
-    // Introduced while on air: the greeting of that block (names and the viewers) comes first and is up to 50 characters; off air she greets the people there.
-    expect(friend).toContain('その欄の「最初に口を開く時」の決まりが先');
+    // Introduced while on air: the greeting of that block (names and the viewers) is followed and is up to 50 characters; off air she greets the people there.
+    expect(friend).toContain('その欄の「最初に口を開く時」の決まりに従い');
     expect(friend).toContain('初めの挨拶は50字まで');
-    expect(friend).toContain('収録中でなければ、その場にいる人に名乗る');
+    expect(friend).toContain('収録中でなければ、その場にいる人を呼んで名乗る');
     // A call does not offer the tags that come out 9 dB quieter, and says why; a whisper only on request.
     expect(friend).toContain('[laughs] [giggles] [sighs] [gasps] [excited] [happy] [curious] [pouting]');
     expect(friend).toContain('never use [whispers], [softly], [sleepy], [yawns], [crying] or [tearfully]');
