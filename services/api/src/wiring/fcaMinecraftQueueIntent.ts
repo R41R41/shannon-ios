@@ -6,7 +6,7 @@ import { answerPlanOp } from './fcaMinecraftPlanOp.js';
 import type { MinecraftPlanOp } from '../contracts/minecraftPlanOpContract.js';
 
 /** Why her words about the list were not carried out: fixed reasons with fixed words (`MINECRAFT_INTENT_REFUSALS`, `VOICE_MINECRAFT_REFUSALS`). */
-export type QueueIntentRefusal = 'nothing_running' | 'no_such_request' | 'queue_full' | 'no_such_node' | 'node_unchanged';
+export type QueueIntentRefusal = 'nothing_running' | 'no_such_request' | 'queue_full' | 'no_such_node' | 'node_unchanged' | 'no_plan';
 export type QueueIntentOutcome =
   | { delivered: true; as: 'task' | 'queue' | 'stop'; entry: QueueRecord | null }
   | { delivered: false; reason: QueueIntentRefusal };
@@ -49,7 +49,7 @@ async function nodeOp(queue: MinecraftQueue, intent: MinecraftIntent, context: Q
   if (!entry) return refused('no_such_request');
   const answer = await answerPlanOp(queue, { op: intent.kind as MinecraftPlanOp, node: intent.node ?? '', task: entry.taskId ?? entry.id }, context);
   if (answer.ok) return { delivered: true, as: 'queue', entry };
-  return refused(answer.code === 'no_task' || answer.code === 'no_plan' ? 'nothing_running'
+  return refused(answer.code === 'no_task' ? 'nothing_running' : answer.code === 'no_plan' ? 'no_plan'
     : answer.code === 'unchanged' || answer.code === 'not_blocked' || answer.code === 'node_done' ? 'node_unchanged' : 'no_such_node');
 }
 

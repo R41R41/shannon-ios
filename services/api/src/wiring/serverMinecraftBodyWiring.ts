@@ -151,7 +151,7 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
         : Promise.resolve({ kind: 'none' as const, goal: '', rejected: 'queue_unavailable' as const, reason: 'body_unavailable' as const });
       // Without the common runtime there is no body to hand anything to; said after her reply (a stop is answered there too).
       const fcaAdmission: MinecraftBodyDependencies['fcaAdmission'] = input => common ? common.admission?.(input) ?? null : 'body_unavailable';
-      const fcaQueueLines = () => common?.queue?.promptLines() ?? [];
+      const fcaQueueLines = () => common?.queue?.promptLinesWithPlan() ?? [];
       route = createMinecraftBodyRoute(environment, databasePath, { ...dependencies, fcaIntent, fcaAdmission, fcaQueueLines });
     },
     /** The operations console authenticates on its own: her Minecraft body's token is refused there before it is read. */

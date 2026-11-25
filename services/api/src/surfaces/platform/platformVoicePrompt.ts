@@ -154,6 +154,7 @@ export const VOICE_MINECRAFT_REFUSALS: Readonly<Record<VoiceMinecraftRefusal, st
   no_such_request: 'ごめん、その番号の依頼が列に見つからなかった。もう一回言ってくれる？',
   queue_full: 'ごめん、依頼の列がいっぱいで、新しい依頼を足せなかった。どれかが終わってからまた頼んでね。',
   no_such_node: 'ごめん、計画にその段が見つからなかった。段の名前をもう一回言ってくれる？',
+  no_plan: 'ごめん、依頼は動いてるけど、計画がまだ見えなくて。ちょっと待って、もう一回言ってくれる？',
   node_unchanged: 'その段はもう済んでるか、すでにそうなってるか、止まってないから、何も変えなかったよ。',
 });
 

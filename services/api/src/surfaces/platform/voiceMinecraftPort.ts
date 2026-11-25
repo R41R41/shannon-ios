@@ -23,7 +23,7 @@ export interface VoiceMinecraftState {
 }
 
 export type VoiceMinecraftRefusal = 'not_owner_scope' | 'body_unavailable' | 'no_turn' | 'turn_not_visible'
-  | 'nothing_running' | 'no_such_request' | 'queue_full' | 'no_such_node' | 'node_unchanged';
+  | 'nothing_running' | 'no_such_request' | 'queue_full' | 'no_such_node' | 'node_unchanged' | 'no_plan';
 
 /** Who spoke: a member of the channel (shown name); `owner` when it is the verified owner. */
 export interface VoiceSpeaker {

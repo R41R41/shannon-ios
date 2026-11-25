@@ -91,7 +91,7 @@ export function fcaMinecraftVoice(parts: FcaMinecraftVoiceParts): VoiceMinecraft
   return {
     state() {
       const bodies = parts.control.available();
-      const queue = parts.queue.promptLines();
+      const queue = parts.queue.promptLinesWithPlan?.() ?? parts.queue.promptLines();
       if (bodies.length !== 1) return { connected: false, running: null, ...(queue.length ? { queue } : {}) };
       // The list says which request runs: right after a swap the task of the one put aside may not have stopped yet (or the new one's not
       // started), and her reply must not name the old one as the work under way.

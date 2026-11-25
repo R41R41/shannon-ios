@@ -162,6 +162,33 @@ export function registerOwnerPlan(taskId: string, plan: OwnerPlan): void {
 }
 export const ownerPlanOf = (taskId: string): OwnerPlan | null => plans.get(taskId) ?? null;
 
+const NODE_LINES_MAX = 6;
+const nodeLine = (node: PlanNode, tag: string, extra = ''): string => `${tag} ${node.id} ${node.title.slice(0, 30)}${extra}`;
+
+/**
+ * The plan of the request that runs, as lines of the guide for her turn (`[計画の段]`): the current node, the ones that come next, the ones that stand
+ * blocked, each with its id and title, so that the model can name the node the owner means by the node's own words (「骨集め」 for 「骨粉を作る」), not by
+ * a part of the title he happened to say. Only leaves are listed (a parent's work is its children's). Empty when the task has no plan the head can reach.
+ */
+export function ownerPlanPromptLines(taskId: string | null | undefined, seq?: number): string[] {
+  const plan = taskId ? ownerPlanOf(taskId) : null;
+  if (!plan) return [];
+  let tree: PlanTree;
+  try { tree = plan.tree(); } catch { return []; }
+  const order = orderedPlan(tree.nodes);
+  const leaf = (node: PlanNode) => !tree.nodes.some(kid => kid.parentId === node.id);
+  const open = order.filter(node => leaf(node) && node.state !== 'done' && node.state !== 'blocked');
+  const now = (tree.current ? open.find(node => node.id === tree.current) : null) ?? open[0];
+  const after = now ? open.filter(node => node !== now && order.indexOf(node) > order.indexOf(now)).slice(0, 2) : [];
+  const stopped = order.filter(node => node.state === 'blocked').slice(0, 3);
+  const lines = [
+    ...(now ? [nodeLine(now, '今')] : []),
+    ...after.map(node => nodeLine(node, '次')),
+    ...stopped.map(node => nodeLine(node, '止まった', node.reason ? `（${node.reason.slice(0, 24)}）` : '')),
+  ].slice(0, NODE_LINES_MAX);
+  return lines.length ? [`[走っている依頼${seq ? ` #${seq}` : ''}の計画の段]（kind=skip・hold・resume の node は、ここの段の id を入れる）`, ...lines] : [];
+}
+
 /** For tests. */
 export function forgetOwnerNodeOps(): void {
   waiting.clear();

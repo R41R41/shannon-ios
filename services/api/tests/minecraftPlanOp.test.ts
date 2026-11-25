@@ -3,7 +3,7 @@ import { applyPlanUpdate, emptyPlanTree, orderedPlan, type PlanTree } from '@sha
 import { createFcaPlanTools } from '../src/mind/action/fca/fcaPlanTools.js';
 import {
   applyOwnerNodeChange, findOwnerNode, forgetOwnerNodeOps, OWNER_HOLD_REASON, OWNER_SKIP_REASON, ownerNodeChange, ownerPlanOf, putOwnerNodeOp,
-  registerOwnerPlan, withOwnerNodeInbox,
+  registerOwnerPlan, withOwnerNodeInbox, ownerPlanPromptLines,
 } from '../src/surfaces/minecraft/minecraftPlanOp.js';
 import { MINECRAFT_PLAN_PATH, parsedMinecraftPlanRequest } from '../src/contracts/minecraftPlanOpContract.js';
 import { applyQueueIntent } from '../src/wiring/fcaMinecraftQueueIntent.js';
@@ -172,6 +172,33 @@ describe('the intent of a voice or a game chat turn', () => {
     expect(await applyQueueIntent({ locate: () => null, current: () => null } as never, { kind: 'skip', goal: '', node: '種' }, { origin: 'voice' }))
       .toEqual({ delivered: false, reason: 'nothing_running' });
     expect(ownerPlanOf('task-9')).not.toBeNull();
+  });
+
+  it('says a request that runs with no plan yet is not "nothing running" (no_plan), and a request that is not running is', async () => {
+    const running = { id: 'e2', seq: 2, taskId: 'task-new', goal: 'ケーキ', state: 'running' };
+    const queue = { locate: () => null, current: () => running } as never;
+    expect(await applyQueueIntent(queue, { kind: 'skip', goal: '', node: '種' }, { origin: 'voice' })).toEqual({ delivered: false, reason: 'no_plan' });
+    expect(await applyQueueIntent({ locate: () => null, current: () => null } as never, { kind: 'skip', goal: '', node: '種' }, { origin: 'voice' }))
+      .toEqual({ delivered: false, reason: 'nothing_running' });
+  });
+});
+
+describe('the nodes of the plan that run, as lines of her guide', () => {
+  it('lists the current node, the next ones and the blocked ones with their ids, and nothing for a task with no plan', () => {
+    const tree = cakePlan();
+    expect(ownerPlanPromptLines('task-none')).toEqual([]);
+    registerOwnerPlan('task-7', { tree: () => tree, cut: async () => '' });
+    const lines = ownerPlanPromptLines('task-7', 3);
+    expect(lines[0]).toContain('#3');
+    expect(lines[1]).toBe(`今 ${idOf(tree, '種を集める')} 種を集める`);
+    expect(lines).toContain(`次 ${idOf(tree, '畑に植える')} 畑に植える`);
+    expect(lines.join(' ')).toContain('骨粉を作る');
+    const change = ownerNodeChange(tree, '骨粉を作る', 'hold');
+    if (!change.ok) throw new Error('hold refused');
+    const held = applyOwnerNodeChange(tree, change, AT)!;
+    registerOwnerPlan('task-7', { tree: () => held, cut: async () => '' });
+    expect(ownerPlanPromptLines('task-7').some(line => line.startsWith('止まった') && line.includes('骨粉を作る') && line.includes('owner_hold'))).toBe(true);
+    expect(ownerPlanPromptLines('task-7').length).toBeLessThanOrEqual(7);
   });
 });
 

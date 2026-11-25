@@ -8,6 +8,7 @@ import {
   addToQueue, cancelInQueue, claimFromQueue, deleteFromQueue, holdInQueue, linkQueueTask, locateQueueEntry, moveInQueue, queuePromptLines,
   queueEnded, queueView, resumeInQueue, startQueue, stopQueue, syncQueue, unclaimInQueue, type QueueChange, type QueueRecord, type QueueSnapshot,
 } from '../surfaces/minecraft/minecraftRequestQueue.js';
+import { ownerPlanPromptLines } from '../surfaces/minecraft/minecraftPlanOp.js';
 import { MinecraftRequestQueueStore } from '../surfaces/minecraft/store/minecraftRequestQueueStore.js';
 
 /** How long an operation's answer waits for the body to acknowledge a stop (the stop itself goes on). */
@@ -275,6 +276,12 @@ export function fcaMinecraftQueue(parts: QueueParts) {
     current: (): QueueRecord | null => store.read(parts.scopeKey).entries.find(entry => entry.state === 'running') ?? null,
     /** The lines of `[依頼の列]` for her turn. */
     promptLines: (): string[] => queuePromptLines(store.read(parts.scopeKey), parts.now()),
+    /** `[依頼の列]` and, under it, the nodes of the plan of the request that runs (what the owner's words about a node are read against). */
+    promptLinesWithPlan(): string[] {
+      const lines = queuePromptLines(store.read(parts.scopeKey), parts.now());
+      const entry = store.read(parts.scopeKey).entries.find(item => item.state === 'running');
+      return lines.length && entry?.taskId ? [...lines, ...ownerPlanPromptLines(entry.taskId, entry.seq)] : lines;
+    },
     /** Called from the one-second wake: a pass that never throws and never overlaps itself. */
     tick(): void { void pump(); },
     /** What to call after a task was put back to work, so that the runtime looks at it now. */
