@@ -13,6 +13,7 @@ import { DisclosureGate } from '../inhibition/disclosurePorts.js';
 import { localDayKey } from '../memory/memoryPorts.js';
 import { MemoryWithholding, decayedUsable } from '../memory/memoryPorts.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { plainCompanionNames, withHonorific } from '../memory/companionNames.js';
 
 export const IMPRESSION_HEADER = '[人についての印象 — ボクがやりとりを重ねて気づいてきたこと]';
 /** The one fixed line. The impressions themselves are data she accumulated, not rules. */
@@ -40,7 +41,7 @@ export interface UsableImpression {
 export const impressionSubject = (row: Pick<PersonImpression, 'personKey'>, people: readonly ImpressionPerson[]): string => {
   if (row.personKey === OWNER_PERSON_KEY) return OWNER_NAME;
   const person = people.find(candidate => candidate.id === row.personKey);
-  return person?.companion ? person.displayName : `${person?.displayName ?? ''}さん`;
+  return withHonorific(person?.displayName ?? '', Boolean(person?.companion));
 };
 
 /** The text the owner sees and may rewrite. */
@@ -102,8 +103,10 @@ export function usableImpression(
   const kept = support.filter(item => check.visible(item.id));
   if (!kept.length) return null;
   const subject = impressionSubject(row, people);
-  const statement = corrected ? shown : `${subject}は、${row.pattern}`;
-  const feeling = corrected ? '' : row.herFeeling;
+  // The pattern is her own earlier wording, which may say a friend with さん: shown as the friends' names alone.
+  const friends = people.flatMap(person => person.companion ? [person.displayName] : []);
+  const statement = plainCompanionNames(corrected ? shown : `${subject}は、${row.pattern}`, friends);
+  const feeling = corrected ? '' : plainCompanionNames(row.herFeeling, friends);
   // A forgotten turn of its own evidence is taken out of the count above. Anything else the owner forgot,
   // rejected or corrected withholds an impression whose wording restates it. Another impression's control is
   // not such a rule: its terms are everyday words, and a like impression is kept from being learned instead.

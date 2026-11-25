@@ -19,6 +19,7 @@ import type { GuestCallTurn } from '../../surfaces/voice/voiceGuestCall.js';
 import { establishedGuestName, personNameKey } from '../perception/guestNamesPorts.js';
 import { ownerPeoplePrompt, type VisiblePersonItem } from './peopleMemoryPrompts.js';
 import type { MemoryCommands, MemoryProposals } from './memoryWriter.js';
+import { withHonorific } from './companionNames.js';
 
 /** Recall and memory-control identifier of a person memory item. */
 export const personMemoryId = (itemId: string) => `person:${itemId}`;
@@ -29,11 +30,11 @@ export const platformSummaryId = (callId: string) => `ps-${createHash('sha256').
  * The summary of one conversation period as code writes it (the deterministic one, or the written `text`): its item id, its
  * text as stored (one line) and as labelled. Null when the period is not known.
  */
-export function periodSummaryText(store: Pick<PeopleMemoryStore, 'call' | 'person' | 'items'>, scopeKey: string, callId: string, label: string, text?: string):
+export function periodSummaryText(store: Pick<PeopleMemoryStore, 'call' | 'person' | 'items' | 'confirmedPerson'>, scopeKey: string, callId: string, label: string, text?: string):
   { id: string; text: string; labelled: string } | null {
   const call = store.call(scopeKey, callId);
   if (!call) return null;
-  const names = call.personIds.flatMap(id => store.person(scopeKey, id)?.displayName ?? []).map(name => `${name}さん`);
+  const names = call.personIds.flatMap(id => { const person = store.person(scopeKey, id); return person ? [withHonorific(person.displayName, store.confirmedPerson(scopeKey, id))] : []; });
   const turns = store.items(scopeKey).filter(item => item.callId === callId && item.kind === 'turn');
   const opening = Array.from((turns.at(-1)?.evidence ?? '').replace(/\s+/gu, ' ').trim()).slice(0, 40).join('');
   const summary = text ?? `相手: ${names.join('・') || '名前を聞いていない方'}\n話したこと: ${label}で${turns.length}件のやり取り。「${opening}」から始まった。`;

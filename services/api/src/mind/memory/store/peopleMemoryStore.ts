@@ -257,8 +257,14 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
     try {
       return this.database.prepare(`SELECT 1 AS found FROM person_platform_identities
         WHERE scope_key = ? AND person_id = ? AND verification_status = 'confirmed' LIMIT 1`).get(scopeKey, personId) !== undefined;
-    } catch { return false; }
+    } catch (error) {
+      // Everyone is then called with さん; say so once, so a missing registry table is not silent.
+      if (!this.companionLookupFailed) { this.companionLookupFailed = true; console.error('Shannon companion lookup failed', error instanceof Error ? error.name : 'unknown'); }
+      return false;
+    }
   }
+
+  private companionLookupFailed = false;
 
   recordRegistryCandidate(scopeKey: string, platform: string, userId: string, personId: string, at: string): void {
     // Unconfirmed until the owner confirms it in the registry. The registry accepts Discord only; others keep the link alone.

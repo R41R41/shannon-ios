@@ -5,6 +5,7 @@ import { estimatedOpenAICostUsd, configuredBackgroundBudgetUsd, responseUsage, u
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from '../../infra/models/chatModelSupport.js';
 import type { PeopleMemoryStore } from '../../mind/memory/memoryPorts.js';
 import { platformSummaryId, type PlatformPeople } from '../../mind/memory/platformPeople.js';
+import { withHonorific } from '../../mind/memory/companionNames.js';
 
 /** Writes what one platform conversation period was about, from the stored exchanges only. */
 export interface PlatformSummaryWriter {
@@ -50,7 +51,7 @@ export class PlatformConversationSummarizer {
       const turns = items.filter(item => item.kind === 'turn' && sourcesVisible([`person:${item.id}`])).reverse().slice(-MAXIMUM_LINES);
       const people = call.personIds.map(id => this.store.person(scopeKey, id));
       if (!turns.length || people.some(person => !person || person.forgottenAt)) return null;
-      return { call, summary, turns, names: people.map(person => person!.displayName) };
+      return { call, summary, turns, names: people.map(person => person!.displayName), shown: people.map(person => withHonorific(person!.displayName, this.store.confirmedPerson(scopeKey, person!.id))) };
     };
     const prepared = read();
     if (!prepared) return () => 'skipped';
@@ -69,7 +70,7 @@ export class PlatformConversationSummarizer {
       applied = true;
       if (!accepted) return 'skipped';
       this.people.writeSummary(scopeKey, callId, prepared.call.label ?? '', prepared.summary.disclosure.audience!, prepared.summary.observedAt,
-        `相手: ${prepared.names.map(name => `${name}さん`).join('・')}\n話したこと: ${accepted}`, sources);
+        `相手: ${prepared.shown.join('・')}\n話したこと: ${accepted}`, sources);
       return 'written';
     };
   }
@@ -87,11 +88,12 @@ export class PlatformConversationSummarizer {
       const summary = items.find(item => item.id === platformSummaryId(call.callId));
       if (!turns.length || !summary?.disclosure.audience) continue;
       const names = call.personIds.flatMap(id => this.store.person(scopeKey, id)?.displayName ?? []);
+      const shown = call.personIds.flatMap(id => { const person = this.store.person(scopeKey, id); return person ? [withHonorific(person.displayName, this.store.confirmedPerson(scopeKey, id))] : []; });
       const text = await this.writer.summarize(scopeKey, { place: call.label ?? call.source ?? '', names, lines: turns.map(turn => turn.text) }).catch(() => null);
       const accepted = text ? acceptedPlatformSummary(text, turns.map(turn => turn.evidence ?? '')) : null;
       if (!accepted) continue;
       this.people.writeSummary(scopeKey, call.callId, call.label ?? '', summary.disclosure.audience, summary.observedAt,
-        `相手: ${names.map(name => `${name}さん`).join('・')}\n話したこと: ${accepted}`);
+        `相手: ${shown.join('・')}\n話したこと: ${accepted}`);
       written += 1;
     }
     return { status: 'applied', written };

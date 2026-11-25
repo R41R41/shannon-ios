@@ -22,6 +22,7 @@ import { localDayKey } from './memoryProjection.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import type { PeopleMemoryStore } from './store/peopleMemoryStore.js';
 import { personMemoryId, platformSummaryId } from './peopleMemory.js';
+import { withHonorific } from './companionNames.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
 
 /** What the background model is shown for one person and one turn. */
@@ -175,7 +176,7 @@ export class ImpressionUpdater {
     const period = usable();
     if (!period) return null;
     return {
-          lane: 'platform' as const, personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, sourceIds: [summaryId, ...period.turns.map(turn => personMemoryId(turn.id))], at: call.updatedAt,
+          lane: 'platform' as const, personKey: personId, person: withHonorific(period.person.displayName, people.confirmedPerson(scopeKey, personId)), sourceId: summaryId, sourceIds: [summaryId, ...period.turns.map(turn => personMemoryId(turn.id))], at: call.updatedAt,
           said: period.turns.map(turn => turn.evidence ?? '').join('\n'), audience: period.audience,
           lines: period.turns.map(turn => clip(turn.text, PLATFORM_LINE_CHARACTERS)),
           label: platformImpressionLabel(period.audience),
