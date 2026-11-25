@@ -38,7 +38,7 @@ export interface MinecraftConversation {
  * `queue_unavailable`, a reply about "the selected model" that matched none of them, and no line).
  */
 export type MinecraftIntentRefusal = 'not_owner_scope' | 'others_present' | 'body_unavailable' | 'no_turn' | 'turn_not_visible'
-  | 'nothing_running' | 'no_such_request' | 'queue_full';
+  | 'nothing_running' | 'no_such_request' | 'queue_full' | 'no_such_node' | 'node_unchanged';
 /** What she says for each, fixed words: never the model or a connection when neither was the cause. */
 export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, string>> = Object.freeze({
   not_owner_scope: 'この頼みは、いまはマイクラの体に渡せない。',
@@ -49,6 +49,8 @@ export const MINECRAFT_INTENT_REFUSALS: Readonly<Record<MinecraftIntentRefusal, 
   nothing_running: 'いま体が動かしている依頼がないので、それは渡せなかった。どの依頼か番号で言ってくれたら、そのとおりにする。',
   no_such_request: 'その番号の依頼が列に見つからなかった。いまの列を見て、もう一度言ってほしい。',
   queue_full: '依頼の列がいっぱいで、新しい依頼を足せなかった。どれかが終わってから、もう一度頼んでほしい。',
+  no_such_node: '計画にその段が見つからなかった（まだ計画が無いか、名前が合わなかった）。段の名前を、タスクの画面にある言葉で言ってほしい。',
+  node_unchanged: 'その段は、もう済んでいるか、すでにそうなっているか、止まっていないので、何も変えなかった。',
 });
 /** The prompt line for a refusal known before her reply: she says it herself, so what she keeps is what she said. */
 const intentBlocked = (reason: MinecraftIntentRefusal) => `[マイクラの体への頼みごと: いまは渡せない]\n${MINECRAFT_INTENT_REFUSALS[reason]}`

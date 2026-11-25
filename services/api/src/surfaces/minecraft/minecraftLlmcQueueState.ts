@@ -239,7 +239,7 @@ export interface LlmcQueue extends FcaBodyQueue {
   noteReflexCapped(): void;
   /** The items still open (their marks and labels): the ones a hold is about to take off (chapter 8's 再開: the
    * record of a hold that came again). */
-  openItems(): { item: string; why: string; input?: ActInput }[];
+  openItems(): { item: string; why: string; input?: ActInput; node?: string | null }[];
   stop(): void;
   /**
    * The plan's checkpoint was taken (the step is about to save it): the receipts the ledger has taken so far are

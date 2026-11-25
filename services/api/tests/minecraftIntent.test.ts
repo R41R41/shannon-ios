@@ -6,7 +6,7 @@ import { materialsOf, recipeOf } from '../src/surfaces/minecraft/minecraftLlmcRe
 
 describe('the intent field of her reply', () => {
   it('has every field required and every kind of the list in the enum', () => {
-    expect(MINECRAFT_INTENT_SCHEMA.required).toEqual(['kind', 'goal', 'placement', 'target', 'speechMode', 'speechRate']);
+    expect(MINECRAFT_INTENT_SCHEMA.required).toEqual(['kind', 'goal', 'placement', 'target', 'node', 'speechMode', 'speechRate']);
     expect(MINECRAFT_INTENT_SCHEMA.properties.kind.enum).toEqual([...MINECRAFT_INTENT_KINDS]);
     expect(MINECRAFT_INTENT_SCHEMA.properties.placement.enum).toEqual(['end', 'next', 'now', '']);
     expect(Object.keys(MINECRAFT_INTENT_SCHEMA.properties)).toEqual(MINECRAFT_INTENT_SCHEMA.required);
@@ -119,5 +119,13 @@ describe('the cake in the table of recipes', () => {
     expect(recipeOf('cake')).toEqual({ yields: 1, needs: [{ item: 'milk_bucket', count: 3 }, { item: 'sugar', count: 2 }, { item: 'egg', count: 1 }, { item: 'wheat', count: 3 }] });
     expect(recipeOf('minecraft:sugar')).toEqual({ yields: 1, needs: [{ item: 'sugar_cane', count: 1 }] });
     expect(materialsOf('cake', 1, { chain: false })).toEqual({ spends: expect.arrayContaining([{ item: 'egg', count: 1 }]), uncounted: false });
+  });
+});
+
+describe('the intent of one node of the plan', () => {
+  it('has skip in the kinds, and reads the node for skip, hold and resume only', () => {
+    expect(MINECRAFT_INTENT_KINDS).toContain('skip');
+    expect(parsedMinecraftIntent({ kind: 'skip', goal: 'x', placement: 'now', target: '#2', node: ' 小麦集め ' })).toEqual({ kind: 'skip', goal: '', target: '#2', node: '小麦集め' });
+    expect(parsedMinecraftIntent({ kind: 'cancel', goal: '', target: '#2', node: '小麦集め' })).toEqual({ kind: 'cancel', goal: '', target: '#2' });
   });
 });

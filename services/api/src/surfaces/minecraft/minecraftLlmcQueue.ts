@@ -363,7 +363,7 @@ void restoreReceipts();
       try { deps.control.store.markProcessed(ids); } catch (cause) { log(
         `Shannon Minecraft receipt mark failed task=${deps.taskId} ${String(cause).slice(0, 120)}`); }
     },
-    openItems: () => open().map(item => ({ item: item.item, why: itemLabel(item), input: item.input })),
+    openItems: () => open().map(item => ({ item: item.item, why: itemLabel(item), input: item.input, node: item.node })),
     mark: markNow,
     stale: () => version !== marked,
     // E2: a decision that was being thought while the queue changed is not thrown away. Its acts are judged one by one when the answer is in: an
