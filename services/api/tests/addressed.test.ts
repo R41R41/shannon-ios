@@ -116,6 +116,7 @@ describe('when Jev is asked at all', () => {
     expect(questions.addressed_to_shannon!.instructions).toContain('It is not an introduction, and not to her, when the speaker is only talking about her');
     expect(questions.addressed_to_shannon!.instructions).toContain('A request that begins by calling her by name is to her');
     expect(questions.reply_needed!.instructions).toContain('is itself the invitation');
+    expect(questions.reply_needed!.instructions).toContain('is now asking her');
     expect(questions.reply_needed!.instructions).toContain('A reason or an occasion written in front of the request is not an announcement');
     expect(questions.target!.criteria.about_shannon).toContain('that one is to her');
     expect(questions.introduces_her!.instructions).toContain('presenting, showing or announcing Shannon to the people who are there');

@@ -101,7 +101,7 @@ type Target = typeof ADDRESSED_TARGETS[number];
 
 interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason; introduced?: boolean }
 
-/** 固定した6問（addressed.v12。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
+/** 固定した6問（addressed.v13。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -202,7 +202,7 @@ export function addressedQuestions(): Record<string, JevQuestion> {
         + 'the speaker answers or retracts, and acknowledgements that close an exchange without inviting a response. '
         + 'A clear question or request TO her can need an answer without her name. A request or instruction to her by name (do something, make something, come, go, bring, stop) needs her answer '
         + 'whatever else the sentence says, even when it comes with a long reason or an occasion, and even when she is not yet in the game: she says she will, or what stops her, '
-        + 'because the one who asked is waiting to hear that she took it, and nothing starts until she has. A reason or an occasion written in front of the request is not an announcement. While she is working on a job in the game '
+        + 'because the one who asked is waiting to hear that she took it, and nothing starts until she has. A reason or an occasion written in front of the request is not an announcement, and neither is the talk that came before it: a speaker who has just been announcing or showing her to an audience and then turns to her with "シャノン、…を作って" is now asking her, and the request needs her answer however many times her name or her things come up in it, so score such a plain request high, not middling. While she is working on a job in the game '
         + '(state.shannon_is_working_in_minecraft), a request, suggestion or question about the job needs an answer even without her name. '
         + 'Presenting her to the people who are there so that they meet is itself the invitation, in whatever words (it needs no question mark: whoever is introduced is expected '
         + 'to greet them and say who she is, so she answers it; for example 紹介しよう、こちらが新しいシャノンだ, みんなに紹介するね、新しいシャノンです, こちらがシャノンです, この子が新しいシャノンです, 新しいシャノンだよ、よろしく). Pointing at her and presenting her by name to the people in the room counts, with or without a greeting, and so does a short exclamation that brings her on (じゃーん、新しいシャノンだよ, 今日のゲストはシャノン！, ほら、シャノンが来たよ). If she stays quiet, the people who were just shown her wait for her and the moment stops, so a presentation always needs her greeting. '
