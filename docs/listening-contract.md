@@ -41,7 +41,7 @@ Windows（耳: 聞く）                                   Discord（VC にい�
 - `POST /v1/voice/listen`（端末の認証）: `{ audio: base64 WAV(16 kHz mono, ≤30 s), shannonSpokeMsAgo?, lastLine?, guest?, speaking? }` → `{ heard, respond, reason?, text?(respond の時だけ), sttMs, judgeMs?, usage, limited?, degraded? }`。503 `LISTEN_NOT_CONFIGURED`（鍵なし）。`services/api/src/surfaces/voice/listenRoute.ts`。
 - `POST /v1/platform/voice/transcribe`（プラットフォームの認証）: `{ audio, durationMs, speakerId? }` → `{ status: ok|empty|hallucination|limited|error, text?, sttMs }`。`platformVoiceRoute.ts`。
 - 上限（`listenUsage.ts`、Windows と Discord で共有、UTC の日、`listen-usage.json` に件数だけ）: 1 分 18 回・1 日 1,800 回・1 時間 6,600 秒・1 日 25,000 秒（Groq Developer プランの基本 20 / 2,000 / 7,200 / 28,800 の少し下。アカウントの画面が正）。上限で `limited` を返し、Windows は次の UTC の日まで手元の名前の待ち受けに戻る。別の有料の文字起こしへは切り替えない。
-- 判定（`addressed.ts`）: 名前なし・20 秒の外で、持ち主が一人なら Jev に聞く（`unnamed`）。`target = shannon`、宛先の確信0.8以上、今返事が必要という確信0.8以上を要する（`addressed.v10`）。Jevが答えない時は返事をしない。会話モードでも毎回判定し、自動開始したWindowsの会話は返事不要で聴き流しへ戻す。
+- 判定（`addressed.ts`）: 名前なし・20 秒の外で、持ち主が一人なら Jev に聞く（`unnamed`）。`target = shannon`、宛先の確信0.8以上、今返事が必要という確信0.8以上を要する（`addressed.v11`）。Jevが答えない時は返事をしない。会話モードでも毎回判定し、自動開始したWindowsの会話は返事不要で聴き流しへ戻す。
 - 設定: `GROQ_API_KEY`、`SHANNON_VOICE_LISTEN_MAX_*`、`SHANNON_VOICE_CALL_LIVE_MODEL`（既定 gpt-live-transcribe、`none` で使わない）、`SHANNON_VOICE_CALL_LIVE_USD_PER_MINUTE`（0.017）。新しいスイッチは無い。
 
 ## 確かめたこと（2026-10-26）

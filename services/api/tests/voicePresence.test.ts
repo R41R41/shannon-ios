@@ -6,7 +6,8 @@ import { lifecyclePlayerNames, validLifecycleState } from '../src/contracts/mine
 import { ON_AIR_LIMITS, validatedOnAirRequest } from '../src/contracts/onAirContract.js';
 import { SQLiteOnAirStore } from '../src/infra/onAir/onAirStore.js';
 import { createOnAirRoute } from '../src/infra/http/serverOnAirRoute.js';
-import { onAirBlock, presenceBlock, presenceFactsOf } from '../src/surfaces/platform/voicePresencePrompt.js';
+import { greetNamesOf, introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from '../src/surfaces/platform/voicePresencePrompt.js';
+import { AddressedJudge } from '../src/mind/perception/addressed.js';
 import { createLocalApiKernel } from '../src/wiring/apiKernelWiring.js';
 import { BackgroundUpdateCoordinator } from '../src/mind/sleep/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/infra/models/chatModel.js';
@@ -91,6 +92,27 @@ describe('the blocks (voicePresencePrompt.ts)', () => {
   });
 });
 
+describe('the block for being introduced (introducedBlock)', () => {
+  const group = (names: string[], unnamed = 0) => ({ names, unnamed });
+
+  it('calls the people there but the speaker, once each, and the viewers only on air', () => {
+    const facts = { call: group(['ライ氏', 'アキ', 'ミナ']), server: { running: 'running' as const, bodyIn: false, people: group(['ライ氏', 'アキ', 'ユウ']) }, onAir: null };
+    expect(greetNamesOf(facts, 'ライ氏')).toEqual(['アキさん', 'ミナさん', 'ユウさん']);
+    const off = introducedBlock(facts, 'ライ氏', 'こちらがシャノンです');
+    expect(off).toContain('アキさん、ミナさん、ユウさんを名前で呼ぶところから始める');
+    expect(off).toContain('「こちらがシャノンです」と言って');
+    expect(off).toContain('「こちらが」「この子が」「新しい」と言われているのは、ボク自身のこと');
+    expect(off).toContain('理由: 名前を呼ばれない人は');
+    expect(off).not.toContain('視聴者');
+    expect(introducedBlock({ ...facts, onAir: { note: '' } }, 'ライ氏', 'こちらがシャノンです')).toContain('続けて「視聴者の皆さん」にも呼びかけてから');
+  });
+
+  it('calls nobody by name when none is written', () => {
+    const text = introducedBlock({ call: group(['ライ氏'], 2), server: null, onAir: null }, 'ライ氏', 'こちらがシャノンです');
+    expect(text).toContain('名前の書かれた人がいないので、名前は呼ばない');
+  });
+});
+
 describe('the player names of a lifecycle frame', () => {
   it('reads only what a player name can be, once each, and nothing from a body that sends none', () => {
     expect(lifecyclePlayerNames({})).toBeNull();
@@ -151,7 +173,7 @@ class Model implements ShannonChatModel {
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
-function harness(options: { onAir?: { note: string } | null; server?: ReturnType<VoiceLifecyclePort['state']> } = {}) {
+function harness(options: { onAir?: { note: string } | null; server?: ReturnType<VoiceLifecyclePort['state']>; addressed?: AddressedJudge } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-voice-presence-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -167,7 +189,8 @@ function harness(options: { onAir?: { note: string } | null; server?: ReturnType
   const service = new PlatformVoiceService({
     scopeKey: 'owner', bridge, conversationStore: store, conversation: api, turns, now, chatModel: model, lifecycle: () => lifecycle,
     ...(options.onAir !== undefined ? { onAir: () => options.onAir ?? null } : {}),
-    sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), environment: () => ({ SHANNON_DC_VOICE: 'on' }), log: () => undefined,
+    ...(options.addressed ? { addressed: options.addressed } : {}),
+    sentences: text => splitChatSentences(text, VOICE_SENTENCE_CUT), environment: () => ({ SHANNON_DC_VOICE: 'on', ...(options.addressed ? { SHANNON_ADDRESSED: 'on' } : {}) }), log: () => undefined,
   });
   // Her records: two people known by a game name and one of them by a Discord account too; the third account in the call is nobody she knows.
   const aki = peopleStore.createPerson('owner', { displayName: 'アキ', howKnown: 'テスト' }, START);
@@ -210,6 +233,29 @@ describe("the spoken reply's prompt", () => {
     expect(prompt).toContain('場面のメモ（持ち主が書いたもの）: テスト用のメモ');
     expect(prompt).not.toContain('見ている人がいるとは書かれていない');
     await close();
+  });
+
+  // The judge's answers stand in for Jev: the words are a presentation (or a plain question to her) and she is to answer.
+  const judging = (presenting: number) => new AddressedJudge({ chooser: { decide: async (request: any) => ({ value: request.parse({
+    addressed_to_shannon: { type: 'noul', noul: 0.95 }, target: { type: 'choice', choice: 'shannon' }, introduces_her: { type: 'noul', noul: presenting }, reply_needed: { type: 'noul', noul: 0.95 },
+  }), source: 'jev' }) } as any });
+
+  it('tells the reply it was just introduced, and whom to greet, when the judge read the words as a presentation', async () => {
+    const { say, close } = harness({ server: home, addressed: judging(0.95) });
+    const prompt = await say('こちらがシャノンです');
+    expect(prompt).toContain('[いま、ボクはそこにいる人たちに紹介された]');
+    expect(prompt).toContain('アキさん、ミナさんを名前で呼ぶところから始める');
+    expect(prompt).not.toContain('視聴者の皆さん');
+    await close();
+  });
+
+  it('adds the viewers to the greeting while on air, and says nothing of a presentation for words that are not one', async () => {
+    const on = harness({ server: home, onAir: { note: 'テスト用のメモ' }, addressed: judging(0.95) });
+    expect(await on.say('シャノン、紹介するね')).toContain('「視聴者の皆さん」にも呼びかけてから');
+    await on.close();
+    const plain = harness({ server: home, addressed: judging(0.05) });
+    expect(await plain.say('シャノン、いまの天気は？')).not.toContain('[いま、ボクはそこにいる人たちに紹介された]');
+    await plain.close();
   });
 
   it('leaves the server out while its state is not known', async () => {

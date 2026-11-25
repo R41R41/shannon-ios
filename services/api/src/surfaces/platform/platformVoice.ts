@@ -29,7 +29,7 @@ import {
   speakerPositionLine, speechInstructions, voiceIntentInstructions,
 } from './platformVoicePrompt.js';
 import { VoiceWords } from './platformVoiceWords.js';
-import { onAirBlock, presenceBlock, presenceFactsOf } from './voicePresencePrompt.js';
+import { introducedBlock, onAirBlock, presenceBlock, presenceFactsOf } from './voicePresencePrompt.js';
 import { warmedAudiences, type VoiceWarmAsk, type WarmAudience } from '../voice/voiceWarm.js';
 import { selectVoiceFiller, voiceFillerById, type VoiceFiller } from './voiceFillers.js';
 import { VoiceRooms } from './voiceRoom.js';
@@ -328,7 +328,7 @@ export class PlatformVoiceService {
     if (waiting && verdict.addressed) this.rooms.closeQuestion(room);
     this.rooms.noteExchange(room, { role: 'person', userId: request.sourceUserId, name: request.sourceDisplayName, text: request.userMessage, at: request.observedAt });
     this.log(`Shannon platform voice addressed=${verdict.addressed} reason=${verdict.reason} source=${verdict.source} ms=${verdict.ms} humans=${humans}`);
-    return { respond: verdict.addressed, reason: verdict.reason };
+    return { respond: verdict.addressed, reason: verdict.reason, ...(verdict.introduced ? { introduced: true } : {}) };
   }
 
   /** What the body heard of the others and did not send as a turn belongs to the talk the judgement reads. */
@@ -489,7 +489,7 @@ export class PlatformVoiceService {
         viaMod: request.directed === true && request.speakerMinecraftName !== undefined, modOnly: this.modOnly(request),
         speakerPosition: speakerPositionLine(request.speakerPosition),
       }),
-      this.presenceFor(seat, request),
+      this.presenceFor(seat, request, address),
       situationBlock(situation, running, body?.state.resting ?? [], body ? this.rooms.unhanded(roomKey) : []),
       answersAsk(address) ? askedBackBlock(this.rooms.lastShannon(roomKey)?.text ?? null) : '',
       heardBlock(this.rooms.heard(roomKey, request.userMessage)),
@@ -498,7 +498,7 @@ export class PlatformVoiceService {
   }
 
   /** Who is in the call and in the Minecraft server, and 「収録中」, as the two blocks of the prompt (`voicePresencePrompt.ts`). Never throws: what is not known is left out. */
-  private presenceFor(seat: ChannelSeat, request: VoiceTurnRequest): string {
+  private presenceFor(seat: ChannelSeat, request: VoiceTurnRequest, address: VoiceAddress): string {
     try {
       let server: ReturnType<VoiceLifecyclePort['state']> = null;
       try { server = this.dependencies.lifecycle?.()?.state() ?? null; } catch { server = null; }
@@ -509,7 +509,8 @@ export class PlatformVoiceService {
         ownerAccount: seat.binding.ownerUserId, modOnly: this.modOnly(request), server, onAir,
         speaker: { account: request.sourceUserId, displayName: request.sourceDisplayName, owner: seat.owner, minecraftName: request.speakerMinecraftName },
       });
-      return [presenceBlock(facts), onAirBlock(facts.onAir)].filter(Boolean).join('\n\n');
+      const introduced = address.introduced === true ? introducedBlock(facts, seat.owner ? SHANNON_OWNER_NAME : request.sourceDisplayName, request.userMessage) : '';
+      return [presenceBlock(facts), onAirBlock(facts.onAir), introduced].filter(Boolean).join('\n\n');
     } catch {
       return '';
     }

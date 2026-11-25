@@ -121,3 +121,39 @@ export function presenceFactsOf(input: VoicePresenceInput): VoicePresenceFacts {
   }
   return { call, server, onAir: input.onAir };
 }
+
+/** The names she calls in a greeting: everyone the facts place, in the call and in the server (once each), except the one who is speaking. */
+export function greetNamesOf(facts: VoicePresenceFacts, speakerName: string): string[] {
+  const speaker = speakerName.replace(/\s+/gu, ' ').trim();
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const group of [facts.call, facts.server?.people ?? null]) {
+    for (const name of group?.names.slice(0, MOST_NAMES) ?? []) {
+      if (name === speaker || seen.has(name)) continue;
+      seen.add(name);
+      names.push(called(name));
+    }
+  }
+  return names;
+}
+
+/**
+ * The words just heard were her being presented to the people there (the addressed judge's `introduces_her`). The reply is written by a model that
+ * sees only the words, which name her in the third person; this says what they are, so that what it writes is the greeting and not a thank-you.
+ * Facts and reasons; the words are hers.
+ */
+export function introducedBlock(facts: VoicePresenceFacts, speakerName: string, utterance: string): string {
+  const speaker = speakerName.replace(/\s+/gu, ' ').trim().slice(0, 40) || '話している人';
+  const names = greetNamesOf(facts, speaker);
+  const said = Array.from(utterance.replace(/s+/gu, ' ').trim()).slice(0, 60).join('');
+  const viewers = facts.onAir !== null;
+  const callList = names.length ? names.join('、') : '';
+  return [
+    '[いま、ボクはそこにいる人たちに紹介された]',
+    `いま、${speaker}が「${said}」と言って、ボクを、そこにいる人たちに紹介した。「こちらが」「この子が」「新しい」と言われているのは、ボク自身のこと。紹介された人は、紹介してくれた人にお礼を言うより先に、紹介された相手に挨拶する。いまのボクの返事は、その挨拶。「挨拶して」と頼まれた時と同じ番。`,
+    ...(callList
+      ? [`- 挨拶は、${callList}を名前で呼ぶところから始める${viewers ? '。続けて「視聴者の皆さん」にも呼びかけてから' : '。そのあとで'}、名乗って、明るい一言を添える。`]
+      : [`- 挨拶は、そこにいる人たちへの呼びかけ${viewers ? '（視聴者の皆さんにも）' : ''}から始めて、名乗って、明るい一言を添える（名前の書かれた人がいないので、名前は呼ばない）。`]),
+    '- 「ありがとう、よろしくね」「ボクがシャノンだよ」だけで返さない。理由: 名前を呼ばれない人は、自分たちが挨拶されたとは感じず、紹介した人も、場も、そこで止まってしまうから。',
+  ].join('\n');
+}

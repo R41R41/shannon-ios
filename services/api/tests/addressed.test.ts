@@ -109,13 +109,14 @@ describe('when Jev is asked at all', () => {
     expect(state.recent_talk).toEqual([{ who: 'ミキ', text: 'さっきのボスやばかった', seconds_ago: 30 }, { who: 'シャノン', text: '次はネザーだね。', seconds_ago: 7 }]);
     expect(JSON.stringify(state)).not.toContain('u1');
     const questions = addressedQuestions();
-    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'answers_her_question', 'reply_needed']);
+    expect(Object.keys(questions)).toEqual(['addressed_to_shannon', 'target', 'about_the_job', 'answers_her_question', 'introduces_her', 'reply_needed']);
     expect(Object.keys(questions.target!.criteria)).toEqual(['shannon', 'about_shannon', 'other_person', 'self', 'unclear']);
     // Being introduced to the people present is to her (she greets them back); an announcement or a remark about her is not.
     expect(questions.addressed_to_shannon!.instructions).toContain('presenting Shannon to the people who are there');
     expect(questions.addressed_to_shannon!.instructions).toContain('It is not an introduction, and not to her, when the speaker is only talking about her');
     expect(questions.reply_needed!.instructions).toContain('is itself the invitation');
     expect(questions.target!.criteria.about_shannon).toContain('that one is to her');
+    expect(questions.introduces_her!.instructions).toContain('presenting, showing or announcing Shannon to the people who are there');
   });
 });
 
@@ -152,7 +153,7 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
     expect(body.model).toBe('jev-latest');
     expect(body.state).toMatchObject({ utterance: item.transcript, alone_with_shannon: true, shannon_spoke_seconds_ago: 5, follows_her_last_words: true });
     expect(Object.fromEntries(Object.entries(body.questions).map(([key, question]) => [key, question.type])))
-      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', about_the_job: 'noul', answers_her_question: 'noul', reply_needed: 'noul' });
+      .toEqual({ addressed_to_shannon: 'noul', target: 'choice', about_the_job: 'noul', answers_her_question: 'noul', introduces_her: 'noul', reply_needed: 'noul' });
   });
 
   it('needs both answers to agree for a yes: the choice says her and the probability backs it', async () => {
@@ -170,6 +171,26 @@ describe('the judgement over the cases (Jev stood in for by the label)', () => {
     expect(await judgeWith(answer(0.95, 'shannon', 0.2)).judge(inputOf(item)))
       .toMatchObject({ addressed: false, reason: 'no_reply_needed' });
     expect((await judgeWith(answer(0.6, 'shannon')).judge(inputOf(item))).addressed).toBe(false);
+  });
+
+  it('reads a presentation said in front of the others as to her, and marks it for the reply (an answer about her is never turned)', async () => {
+    const answer = (choice: string, presenting: number | null, noul = 0.9, needsReply = 0.9) => (async () => new Response(JSON.stringify({ answers: {
+      addressed_to_shannon: { type: 'noul', noul }, target: { type: 'choice', choice },
+      ...(presenting === null ? {} : { introduces_her: { type: 'noul', noul: presenting } }), reply_needed: { type: 'noul', noul: needsReply },
+    } }))) as unknown as typeof fetch;
+    const item = ADDRESSED_CASES.find(candidate => candidate.id === 'call-weather')!;
+    expect(await judgeWith(answer('shannon', 0.95)).judge(inputOf(item))).toMatchObject({ addressed: true, introduced: true });
+    expect(await judgeWith(answer('other_person', 0.92)).judge(inputOf(item))).toMatchObject({ addressed: true, reason: 'named', introduced: true });
+    expect((await judgeWith(answer('other_person', 0.5)).judge(inputOf(item))).addressed).toBe(false);
+    expect((await judgeWith(answer('other_person', null)).judge(inputOf(item))).addressed).toBe(false);
+    expect((await judgeWith(answer('about_shannon', 0.99)).judge(inputOf(item))).addressed).toBe(false);
+    expect((await judgeWith(answer('self', 0.99)).judge(inputOf(item))).addressed).toBe(false);
+    expect((await judgeWith(answer('other_person', 0.95, 0.4)).judge(inputOf(item))).addressed).toBe(false);
+    // Answered, but not a presentation (a question to her): no mark; a missing answer is no mark and no failure.
+    expect(await judgeWith(answer('shannon', 0.1)).judge(inputOf(item))).toMatchObject({ addressed: true });
+    expect((await judgeWith(answer('shannon', 0.1)).judge(inputOf(item))).introduced).toBeUndefined();
+    expect(await judgeWith(answer('shannon', null)).judge(inputOf(item))).toMatchObject({ addressed: true });
+    expect((await judgeWith(answer('shannon', null)).judge(inputOf(item))).introduced).toBeUndefined();
   });
 
   it('名前なしの質問も残し、返事不要・不明な相手・弱い確信では会話中も黙る', async () => {

@@ -86,15 +86,17 @@ export interface AddressedVerdict {
   source: AddressedSource;
   /** Whether Jev was asked. */
   asked: boolean;
+  /** She was answered as one who has just been presented to the people who are there (`introduces_her`): the reply is told so, as what she is answering. */
+  introduced?: boolean;
   ms: number;
 }
 
 export const ADDRESSED_TARGETS = ['shannon', 'about_shannon', 'other_person', 'self', 'unclear'] as const;
 type Target = typeof ADDRESSED_TARGETS[number];
 
-interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason }
+interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason; introduced?: boolean }
 
-/** 固定した5問（addressed.v9。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
+/** 固定した6問（addressed.v11。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -131,7 +133,7 @@ export function addressedQuestions(): Record<string, JevQuestion> {
       type: 'choice',
       instructions: 'Who is the latest utterance (state.utterance) spoken to?',
       criteria: {
-        shannon: 'To Shannon herself, or the person being presented, shown or announced to the people who are there so that they meet (she is in the room and the speaker is bringing her on: "this child is the new Shannon", "look, Shannon is here", "the guest today is Shannon"), or, while state.shannon_is_working_in_minecraft is true, a request, suggestion or question about her job said to the room.',
+        shannon: 'To Shannon herself, or the person being presented, shown or announced to the people who are there so that they meet. Such words are spoken in front of the others, but the one they are for is she, who is expected to say hello (she is in the room and the speaker is bringing her on, in whatever words: "this is Shannon" / こちらがシャノンです, "this child is the new Shannon", "look, Shannon is here", "the guest today is Shannon"), or, while state.shannon_is_working_in_minecraft is true, a request, suggestion or question about her job said to the room.',
         about_shannon: 'About Shannon, said to another person: news, what she can do, a remark or an opinion about her, or a demo about her (not presenting, showing or announcing her to the people who are there so that they meet: that one is to her).',
         other_person: 'To another person in the room, or to someone on the other end of a call.',
         self: 'To oneself: muttering, thinking aloud, reading aloud.',
@@ -171,6 +173,19 @@ export function addressedQuestions(): Record<string, JevQuestion> {
       criteria: {
         true: 'The utterance answers, or asks back about, the question Shannon just asked.',
         false: 'It is about something else, said to another person, to oneself, or background talk.',
+      },
+    },
+    // The reply is written by another model that sees only the words: this answer is what tells it the words were a presentation (and that its reply is the greeting).
+    introduces_her: {
+      type: 'noul',
+      instructions: 'Decide whether the latest utterance (state.utterance) is the speaker presenting, showing or announcing Shannon to the people who are there, so that they meet her '
+        + 'and she is expected to say hello to them: an introduction, in whatever words, long or only a short exclamation that brings her on '
+        + '(for example "this is Shannon", "meet the new Shannon", こちらがシャノンです, 紹介します、シャノン！, じゃーん、新しいシャノンだよ, 今日のゲストはシャノン！, ほら、シャノンが来たよ). '
+        + 'It is NOT an introduction when it only talks about her (news, what she can do, a remark or an opinion about her, a video or a demo about her), '
+        + 'when it asks her a question or asks her to do something, or when it is anything else.',
+      criteria: {
+        true: 'The speaker is presenting Shannon to the people who are there so that they meet.',
+        false: 'It is anything else: talk about her, a question or a request to her, or other talk.',
       },
     },
     reply_needed: {
@@ -291,8 +306,17 @@ export function fallbackAddressed(_input: AddressedInput, _name: NameMatch | nul
 export const ADDRESSED_DECISION = Object.freeze({ shannon: 0.7, unnamed: 0.8, replyNeeded: 0.8,
   /** While she works (`about_the_job`): the real Jev scored what people said about the job 0.3 to 0.99 (a remark on how much the job needs, "牛乳はバケツが 3 つあれば足りるよ", 0.28 to 0.36) and the chat between them 0.01 to 0.20 (2026-11-22), so the bar sits at 0.3. */
   job: 0.3,
+  /** A presentation (`introduces_her`), read only for words she answers anyway: it changes what the reply is told, not whether she answers. */
+  introduced: 0.7,
+  /** The same answer turning a `target` of "another person" into her (a presentation is said in front of the others). */
+  presentingRescue: 0.8,
   /** Inside the window of a question she asked (`answers_her_question`): low, since a real answer can be three words and a missed one costs more than a late chat line. Not yet read against the real Jev. */
   answer: 0.4 });
+
+/** A `noul` answer, 0 when it is missing or unusable (the answer only adds to what is read, it never fails the decision). */
+function jevNoulOr(answers: Readonly<Record<string, unknown>>, key: string): number {
+  try { return jevNoul(answers, key); } catch { return 0; }
+}
 
 export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name: NameMatch | null, unnamed: boolean | 'alone' | 'working' | 'answering' = false, working = false): Parsed {
   if (unnamed === 'working') {
@@ -311,7 +335,11 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   }
   const noul = jevNoul(answers, 'addressed_to_shannon');
   const target = jevChoice(answers, 'target', ADDRESSED_TARGETS);
-  const directed = target === 'shannon' && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);
+  const presenting = jevNoulOr(answers, 'introduces_her');
+  // A presentation is spoken in front of the others, so `target` may read it as said to "another person" (it did for plain words like こちらがシャノンです): the question that asks for
+  // the act itself settles it. `about_shannon` and `self` are never turned.
+  const toHer = target === 'shannon' || (target === 'other_person' && presenting >= ADDRESSED_DECISION.presentingRescue);
+  const directed = toHer && noul >= (unnamed ? ADDRESSED_DECISION.unnamed : ADDRESSED_DECISION.shannon);
   const addressed = directed && jevNoul(answers, 'reply_needed') >= ADDRESSED_DECISION.replyNeeded;
   if (!addressed && working && !name && !unnamed) {
     const job = jevNoul(answers, 'about_the_job');
@@ -319,7 +347,9 @@ export function parsedAddressed(answers: Readonly<Record<string, unknown>>, name
   }
   const reason: AddressedReason = addressed ? (unnamed ? 'asked_alone' : name ? 'named' : 'continuation')
     : directed ? 'no_reply_needed' : target === 'about_shannon' ? 'about_her' : unnamed ? 'no_name' : 'not_to_her';
-  return { addressed, target, noul, reason };
+  // Whether it was a presentation: only read once she is to answer it (a missing answer reads as no).
+  const introduced = addressed && presenting >= ADDRESSED_DECISION.introduced;
+  return { addressed, target, noul, reason, ...(introduced ? { introduced } : {}) };
 }
 
 export interface AddressedJudgeOptions {
@@ -377,7 +407,8 @@ export class AddressedJudge {
         }),
         signal: timeout.signal,
       });
-      return done({ addressed: decision.value.addressed, reason: decision.value.reason, source: decision.source === 'jev' ? 'jev' : 'fallback', asked: true });
+      return done({ addressed: decision.value.addressed, reason: decision.value.reason, source: decision.source === 'jev' ? 'jev' : 'fallback', asked: true,
+        ...(decision.source === 'jev' && decision.value.introduced ? { introduced: true } : {}) });
     } catch {
       return done({ ...local(), source: 'fallback', asked: true });
     } finally {

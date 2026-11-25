@@ -18,6 +18,8 @@ export interface VoiceAddress {
   reason: VoiceAddressReason;
   /** `directed` words that answer a question of hers that was still waiting. */
   answersQuestion?: boolean;
+  /** The judged words were her being presented to the people there (`introduces_her`): the reply is told that what it answers is an introduction. */
+  introduced?: boolean;
 }
 
 /** Sounds a speech recogniser makes of breath, a cough or a key press; and a lone acknowledgement nobody waits on. */
