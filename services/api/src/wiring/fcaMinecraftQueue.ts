@@ -5,7 +5,7 @@ import {
   type MinecraftQueueView,
 } from '../contracts/minecraftQueueContract.js';
 import {
-  addToQueue, cancelInQueue, claimFromQueue, deleteFromQueue, holdInQueue, linkQueueTask, locateQueueEntry, moveInQueue, queuePromptLines,
+  addToQueue, cancelInQueue, claimFromQueue, deleteFromQueue, holdInQueue, linkQueueTask, locateQueueEntry, markNewWorld, moveInQueue, queuePromptLines,
   queueEnded, queueView, resumeInQueue, startQueue, stopQueue, syncQueue, unclaimInQueue, type QueueChange, type QueueRecord, type QueueSnapshot,
 } from '../surfaces/minecraft/minecraftRequestQueue.js';
 import { ownerPlanPromptLines } from '../surfaces/minecraft/minecraftPlanOp.js';
@@ -281,6 +281,16 @@ export function fcaMinecraftQueue(parts: QueueParts) {
       const lines = queuePromptLines(store.read(parts.scopeKey), parts.now());
       const entry = store.read(parts.scopeKey).entries.find(item => item.state === 'running');
       return lines.length && entry?.taskId ? [...lines, ...ownerPlanPromptLines(entry.taskId, entry.seq)] : lines;
+    },
+    /**
+     * The world was made new (a start that kept the old one and began another): the held and stopped requests that ran before it become
+     * requests of the world before (`queueStaleness`). Never throws: it is a note on the list, not a change of what runs.
+     */
+    worldChanged(at?: string): void {
+      try {
+        transact(snapshot => markNewWorld(snapshot, at ?? parts.now()));
+        parts.log('Shannon Minecraft queue op=world_changed code=ok');
+      } catch (error) { parts.log(`Shannon Minecraft queue op=world_changed code=failed reason=${error instanceof Error ? error.message.slice(0, 40) : 'error'}`); }
     },
     /** Called from the one-second wake: a pass that never throws and never overlaps itself. */
     tick(): void { void pump(); },

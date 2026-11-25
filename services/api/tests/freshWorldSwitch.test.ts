@@ -620,6 +620,36 @@ describe('the lifecycle service and the new-world command', () => {
   });
 });
 
+describe('the list of requests is told when a world was really made new (2026-11-26)', () => {
+  const at = '2026-11-26T00:00:00.000Z';
+  const OPS = () => `ops-lifecycle:${randomUUID()}`;
+  const ports = (changed: string[], fail = false) => ({ policy: { freshWorld: () => true }, activity: { append: (() => {}) as never },
+    config: { timeZone: 'Asia/Tokyo' } as never, bodyTasksOpen: () => false, worldChanged: (when: string) => { changed.push(when); if (fail) throw new Error('queue unavailable'); } });
+  const command = (options?: { freshWorld: true }) => ({ id: OPS(), serverId: SERVER, action: 'start', ...(options ? { options } : {}) }) as MinecraftLifecycleCommand;
+  const receipt = (patch: Partial<MinecraftLifecycleReceipt>) => ({ action: 'start', outcome: 'completed', ...patch }) as MinecraftLifecycleReceipt;
+
+  it('tells it for a start that made a world (completed, or moved while the start was not confirmed), once, with the time', () => {
+    const changed: string[] = [];
+    const hooks = freshWorldIssuance(ports(changed), { scopeKey: 'owner', now: () => at })!;
+    hooks.settled(command({ freshWorld: true }), receipt({ worldId: 'shannon-home-20261126T0000', movedTo: 'shannon_home.before' }));
+    hooks.settled(command({ freshWorld: true }), receipt({ outcome: 'unknown', worldId: 'shannon-home-20261126T0010', movedTo: null }));
+    expect(changed).toEqual([at, at]);
+  });
+
+  it('does not tell it for a start that kept the world, a refused one, or a command that never asked, and a failing list never fails the receipt', () => {
+    const changed: string[] = [];
+    const hooks = freshWorldIssuance(ports(changed), { scopeKey: 'owner', now: () => at })!;
+    hooks.settled(command({ freshWorld: true }), receipt({}));
+    hooks.settled(command({ freshWorld: true }), receipt({ outcome: 'refused', worldId: 'shannon-home-x' }));
+    hooks.settled(command(), receipt({ worldId: 'shannon-home-y' }));
+    expect(changed).toEqual([]);
+    const failing: string[] = [];
+    const again = freshWorldIssuance(ports(failing, true), { scopeKey: 'owner', now: () => at })!;
+    expect(() => again.settled(command({ freshWorld: true }), receipt({ worldId: 'shannon-home-z' }))).not.toThrow();
+    expect(failing).toEqual([at]);
+  });
+});
+
 describe('the lifecycle command, from each way of asking', () => {
   function fixture() {
     const directory = mkdtempSync(join(tmpdir(), 'fresh-world-')), path = join(directory, 'store.sqlite');

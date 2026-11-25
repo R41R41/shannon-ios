@@ -315,6 +315,7 @@ const PINNED: Readonly<Record<string, string>> = {
   'execution/013_fca_provenance_sets': '628187523990f2531313993c8788fdba8f041441225a1aa61838349decc7aa55',
   'execution/014_minecraft_request_queue': '1d5bd8a8fec986d3d4201fe774d6ad38e4ff43a87c46d07c38a02a89915f9097',
   'execution/015_minecraft_queue_resume_after': 'b5fa8e49fa80beffc444715cb04cc3ef4ead7da6f17fb31e498aac34ffb25c9c',
+  'execution/016_minecraft_queue_world_epoch': '9e235a47a664606dee1b60ee9a0744c2b4987e952384ef3af8882a1f7850c10b',
 };
 
 function reindented(step: SchemaStep): SchemaStep {

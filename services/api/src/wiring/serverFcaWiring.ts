@@ -390,6 +390,8 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       // Whether a Minecraft-bound task is running, stopping or unknown (the phases that are not final); null when that cannot be read.
       // 「新しいワールドで始める」 (`freshWorldWiring.ts`) makes a new world only when this is exactly false.
       minecraftTasksOpen: (): boolean | null => { try { return requests ? requests.operator.open().length > 0 : null; } catch { return null; } },
+      // The world was made new (`freshWorldWiring.ts`): what the list holds from before it is no longer taken up by itself.
+      minecraftWorldChanged: (at: string): void => { requests?.queue.worldChanged(at); },
       async stopActions(target: string | null) {
       if (target === null) { await runtime.stop(runtime.runtime.ensureRoot(parts.ownerScope).id, 'owner_stop_all');
         return; }

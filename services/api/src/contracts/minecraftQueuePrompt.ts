@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
-import { MINECRAFT_QUEUE_LIMITS } from './minecraftQueueContract.js';
+import { MINECRAFT_QUEUE_LIMITS, MINECRAFT_QUEUE_PREV_WORLD_NOTE as PREV_WORLD_WORDS } from './minecraftQueueContract.js';
 import { adviceForRunningRule, adviceIsRequestRule, KEEP_CONDITIONS_RULE, noPromiseRule } from './minecraftRequestRules.js';
 
 /**
@@ -77,6 +77,15 @@ const others = (who: string, idle: boolean) => [
   '雑談・質問・何をしてほしいか本当に分からない時は kind=none で、goal・placement・target は空にする。',
 ];
 
+/**
+ * A request of the world before (the world was made new after it was held or stopped; the list marks it) keeps its old plan and old places,
+ * so putting it back would send her body to a map that is gone (2026-11-26 shoot: two such requests ran by themselves in the middle of a take).
+ */
+const prevWorldRule = (who: string): string => `[依頼の列] で「${PREV_WORLD_WORDS}」と付いたものは、ワールドが作り直される前の保留・停止の依頼で、古い計画と古い場所のまま残っている。`
+  + '新しい世界ではそのまま使えないので、同じ頼みに見えても move・resume では戻さず、頼まれたら kind=task で新しく足す（理由: 戻すと前の世界の計画で体が動き出す）。'
+  + `番号を付けない resume（「再開して」「続けて」）は、これらを動かさない。${who}が番号を指して戻してと言った時だけ、その番号を target に入れる（新しい依頼として始まる）。`
+  + 'これらのことを聞かれたら、前の世界の依頼で動いていないと答える。';
+
 /** The guide for her turn as lines (the heading first). */
 export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
   const lines = ['[マイクラの体への頼みごと]（返答の minecraftIntent）',
@@ -85,8 +94,10 @@ export function minecraftQueueGuide(options: QueueGuideOptions): string[] {
   const who = options.who ?? SHANNON_OWNER_NAME;
   lines.push(...add(who, !options.running), ...others(who, !options.running && options.queueLines.length === 0));
   if (options.running && options.planLines?.length) lines.push('[いまの依頼の計画]', ...options.planLines);
-  if (options.queueLines.length) lines.push('[依頼の列]', ...options.queueLines);
-  else lines.push('[依頼の列] いまは空');
+  if (options.queueLines.length) {
+    lines.push('[依頼の列]', ...options.queueLines);
+    if (options.queueLines.some(line => line.includes(PREV_WORLD_WORDS))) lines.push(prevWorldRule(who));
+  } else lines.push('[依頼の列] いまは空');
   lines.push('task にした時の返事は、引き受ける短い一言にとどめ、もう終わったとは言わない。');
   lines.push(noPromiseRule('kind=none にする時'));
   lines.push('返事の言葉は、minecraftIntent でした順番と合わせる。now なら「先に（いま頼まれた物）を作るね。（いま体がしている作業）は止めておくよ、終わったら続ける」、end なら「（いま体がしている作業）のあとでやるね」の形。'

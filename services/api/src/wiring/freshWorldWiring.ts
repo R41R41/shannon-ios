@@ -92,6 +92,8 @@ export interface FreshWorldPorts {
   activity: Pick<AutonomyActivityRecord, 'append'>;
   config: Pick<AutonomyConfig, 'timeZone'>;
   bodyTasksOpen: () => boolean | null;
+  /** A world that the body really prepared (the start's receipt says so): the list of requests marks what it holds from before. */
+  worldChanged?: (at: string) => void;
 }
 
 export interface FreshWorldParts {
@@ -341,6 +343,7 @@ export function freshWorldIssuance(ports: FreshWorldPorts | undefined, own: { sc
       const { via, ...rest } = base(command);
       if (!via || receipt.action !== 'start') return;
       const made = preparedWorldOfReceipt(receipt, command);
+      if (made) { try { ports.worldChanged?.(own.now()); } catch { /* a note on the list never fails a receipt */ } }
       const kind: FreshWorldResult = made ? made.started ? 'started' : 'moved_unconfirmed'
         : receipt.outcome === 'refused' ? 'refused' : receipt.outcome === 'cancelled' ? 'cancelled' : 'unknown';
       result({ ...rest, via, result: kind, ...(made ? { ...(made.worldId !== undefined ? { worldId: made.worldId } : {}),

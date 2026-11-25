@@ -1,5 +1,5 @@
 import {
-  MINECRAFT_QUEUE_LIMITS, type MinecraftQueueCode, type MinecraftQueueEntry, type MinecraftQueueOrigin, type MinecraftQueuePlacement,
+  MINECRAFT_QUEUE_LIMITS, MINECRAFT_QUEUE_PREV_WORLD_NOTE as PREV_WORLD_NOTE, type MinecraftQueueCode, type MinecraftQueueEntry, type MinecraftQueueOrigin, type MinecraftQueuePlacement,
   type MinecraftQueueState, type MinecraftQueueView,
 } from '../../contracts/minecraftQueueContract.js';
 
@@ -41,6 +41,25 @@ export interface QueueSnapshot {
   autoRun: boolean;
   nextSeq: number;
   entries: readonly QueueRecord[];
+  /**
+   * When the world was last made new (ISO; null: not known). A held or stopped request that last changed before it was made for the
+   * world before: its plan and places are of a map that is gone (`queueStaleness`). Absent reads as null.
+   */
+  worldEpoch?: string | null;
+}
+
+/** How long a request waits for another's sake before it is no longer taken back by itself (`returnInterrupted`): no one meant it after so long. */
+export const QUEUE_CHAIN_QUIET_MS = 18 * 60 * 60_000;
+
+/**
+ * `prev_world`: a request that ran (it has a task and a plan) and was held or stopped before the world was made new. It is kept and shown,
+ * but nothing takes it up by itself (not the list's starts, not a chain's return); only the owner naming it starts it, and then as a
+ * new task from its words (the old plan and places are dropped). Null for every other entry.
+ */
+export type QueueStaleness = 'prev_world' | null;
+export function queueStaleness(entry: QueueRecord, worldEpoch: string | null | undefined): QueueStaleness {
+  if (!worldEpoch || !entry.taskId || (entry.state !== 'paused' && entry.state !== 'stopped')) return null;
+  return entry.updatedAt < worldEpoch ? 'prev_world' : null;
 }
 
 /** A task the caller must stop: the entry that was running and let go. `taskId` is null while its task was still being made. */
@@ -73,6 +92,7 @@ interface Draft {
   ended: QueueRecord[];
   autoRun: boolean;
   nextSeq: number;
+  worldEpoch: string | null;
   stops: QueueStop[];
   at: string;
 }
@@ -80,7 +100,7 @@ interface Draft {
 function draftOf(snapshot: QueueSnapshot, at: string): Draft {
   const copies = snapshot.entries.map(entry => ({ ...entry }));
   return { order: copies.filter(entry => !queueEnded(entry.state)).sort((a, b) => a.pos - b.pos),
-    ended: copies.filter(entry => queueEnded(entry.state)), autoRun: snapshot.autoRun, nextSeq: snapshot.nextSeq, stops: [], at };
+    ended: copies.filter(entry => queueEnded(entry.state)), autoRun: snapshot.autoRun, nextSeq: snapshot.nextSeq, worldEpoch: snapshot.worldEpoch ?? null, stops: [], at };
 }
 
 function changed(draft: Draft, entry: QueueRecord | null, duplicate = false): QueueChange {
@@ -88,7 +108,7 @@ function changed(draft: Draft, entry: QueueRecord | null, duplicate = false): Qu
   for (const item of draft.ended) item.pos = -1;
   const ended = [...draft.ended].sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? '') || b.seq - a.seq)
     .slice(0, MINECRAFT_QUEUE_LIMITS.ended);
-  return { ok: true, snapshot: { autoRun: draft.autoRun, nextSeq: draft.nextSeq, entries: [...draft.order, ...ended] },
+  return { ok: true, snapshot: { autoRun: draft.autoRun, nextSeq: draft.nextSeq, worldEpoch: draft.worldEpoch, entries: [...draft.order, ...ended] },
     stops: draft.stops, entry, ...(duplicate ? { duplicate: true as const } : {}) };
 }
 
@@ -215,7 +235,7 @@ export function startQueue(snapshot: QueueSnapshot, target: string | null, at: s
   const draft = draftOf(snapshot, at);
   draft.autoRun = true;
   if (target === null) {
-    for (const entry of draft.order) if (entry.state === 'stopped') settle(draft, entry, 'queued', 'queue_start');
+    for (const entry of draft.order) if (entry.state === 'stopped' && !prevWorld(draft, entry)) settle(draft, entry, 'queued', 'queue_start');
     return changed(draft, null);
   }
   const entry = find(draft, target);
@@ -223,10 +243,30 @@ export function startQueue(snapshot: QueueSnapshot, target: string | null, at: s
   if (queueEnded(entry.state)) return failed('bad_state');
   const current = running(draft);
   if (current === entry) return changed(draft, entry);
+  const old = prevWorld(draft, entry);
   settle(draft, entry, 'queued', 'queue_start');
+  if (old) startAnew(entry);
   if (current) interrupt(draft, current, entry, 'queue_start_other');
   place(draft, entry, 0);
   return changed(draft, entry);
+}
+
+const prevWorld = (draft: Draft, entry: QueueRecord): boolean => queueStaleness(entry, draft.worldEpoch) === 'prev_world';
+
+/** A request of the world before, named by the owner: it goes on as a new task from its words (the old task, its plan and places, is let go). */
+function startAnew(entry: QueueRecord): void {
+  entry.taskId = null;
+  entry.note = null;
+}
+
+/**
+ * The world was made new (`at`). Every held or stopped request that ran before it becomes a request of the world before
+ * (`queueStaleness`): it is not touched, only no longer taken up by itself.
+ */
+export function markNewWorld(snapshot: QueueSnapshot, at: string): QueueChange {
+  const draft = draftOf(snapshot, at);
+  draft.worldEpoch = at;
+  return changed(draft, null);
 }
 
 /** Stops the whole list: the one running is stopped and nothing new is started until the list is started again. The list is kept. */
@@ -270,13 +310,19 @@ export function resumeInQueue(snapshot: QueueSnapshot, target: string | null, at
   const draft = draftOf(snapshot, at);
   draft.autoRun = true;
   if (target === null) {
-    for (const entry of draft.order) if (entry.state === 'paused' || entry.state === 'stopped') settle(draft, entry, 'queued', 'queue_resume');
+    for (const entry of draft.order) {
+      if ((entry.state === 'paused' || entry.state === 'stopped') && !prevWorld(draft, entry)) settle(draft, entry, 'queued', 'queue_resume');
+    }
     return changed(draft, null);
   }
   const entry = find(draft, target);
   if (!entry) return failed('not_found');
   if (queueEnded(entry.state)) return failed('bad_state');
-  if (entry.state === 'paused' || entry.state === 'stopped') settle(draft, entry, 'queued', 'queue_resume');
+  if (entry.state === 'paused' || entry.state === 'stopped') {
+    const old = prevWorld(draft, entry);
+    settle(draft, entry, 'queued', 'queue_resume');
+    if (old) startAnew(entry);
+  }
   return changed(draft, entry);
 }
 
@@ -365,7 +411,13 @@ export function syncQueue(snapshot: QueueSnapshot, facts: QueueFacts, at: string
  * A request the owner held has no mark and is never taken back here.
  */
 function returnInterrupted(draft: Draft): void {
-  const back = draft.order.filter(entry => entry.state === 'paused' && entry.resumeAfter !== null && interrupterDone(draft, entry.resumeAfter));
+  for (const entry of draft.order) {
+    // A wait that went on for most of a day (a stop of the whole list, a world made new in between) is no one's wish any more: the request
+    // stays held, as if the owner had held it, and is taken up only when he says so.
+    if (entry.state === 'paused' && entry.resumeAfter !== null && Date.parse(draft.at) - Date.parse(entry.updatedAt) > QUEUE_CHAIN_QUIET_MS) entry.resumeAfter = null;
+  }
+  const back = draft.order.filter(entry => entry.state === 'paused' && entry.resumeAfter !== null && !prevWorld(draft, entry)
+    && interrupterDone(draft, entry.resumeAfter));
   const first = running(draft) ? 1 : 0;
   back.forEach((entry, index) => {
     settle(draft, entry, 'queued', 'queue_resume_after');
@@ -414,18 +466,21 @@ function sameList(a: QueueSnapshot, b: QueueSnapshot): boolean {
   return a.autoRun === b.autoRun && a.nextSeq === b.nextSeq && JSON.stringify(a.entries) === JSON.stringify(b.entries);
 }
 
-export const queueWire = (entry: QueueRecord): MinecraftQueueEntry => ({
-  id: entry.id, seq: entry.seq, goal: entry.goal, state: entry.state, pos: entry.pos, origin: entry.origin,
-  ...(entry.askedBy ? { askedBy: entry.askedBy } : {}),
-  ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(entry.note ? { note: entry.note } : {}),
-});
+export const queueWire = (entry: QueueRecord, worldEpoch?: string | null): MinecraftQueueEntry => {
+  const note = queueStaleness(entry, worldEpoch) ? PREV_WORLD_NOTE : entry.note;
+  return {
+    id: entry.id, seq: entry.seq, goal: entry.goal, state: entry.state, pos: entry.pos, origin: entry.origin,
+    ...(entry.askedBy ? { askedBy: entry.askedBy } : {}),
+    ...(entry.taskId ? { taskId: entry.taskId } : {}), createdAt: entry.createdAt, ...(note ? { note } : {}),
+  };
+};
 
 /** The list as the game side reads it. */
 export function queueView(snapshot: QueueSnapshot, rev: number): MinecraftQueueView {
   const live = snapshot.entries.filter(entry => !queueEnded(entry.state)).sort((a, b) => a.pos - b.pos);
   const recent = snapshot.entries.filter(entry => queueEnded(entry.state))
     .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? '') || b.seq - a.seq).slice(0, MINECRAFT_QUEUE_LIMITS.shown);
-  return { rev, autoRun: snapshot.autoRun, entries: live.map(queueWire), recent: recent.map(queueWire) };
+  return { rev, autoRun: snapshot.autoRun, entries: live.map(entry => queueWire(entry, snapshot.worldEpoch)), recent: recent.map(entry => queueWire(entry)) };
 }
 
 const LABELS: Readonly<Record<MinecraftQueueState, string>> = Object.freeze({
@@ -453,6 +508,7 @@ export function queuePromptLines(snapshot: QueueSnapshot, at?: string): string[]
     const changed = at && Date.parse(at) - Date.parse(entry.updatedAt) < CHANGED_MS && Date.parse(at) >= Date.parse(entry.updatedAt)
       ? clockFormat.format(new Date(entry.updatedAt)) : null;
     if (entry.state === 'running') return changed ? `${LABELS.running}（変わった: ${changed} に始まった。いまの話はこれ）` : LABELS.running;
+    if (queueStaleness(entry, snapshot.worldEpoch)) return `${LABELS[entry.state]}（${PREV_WORLD_NOTE}。いまの世界では使えない。自動では動かない）`;
     if (entry.state !== 'paused') return LABELS[entry.state];
     const since = changed ? `変わった: ${changed} に保留。` : '';
     return by ? `${LABELS.paused}（${since}いまはしていない。#${by.seq} のあとで戻る）` : `${LABELS.paused}（${since}いまはしていない）`;

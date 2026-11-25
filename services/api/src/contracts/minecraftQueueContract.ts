@@ -28,6 +28,9 @@ export type MinecraftQueueOp = typeof MINECRAFT_QUEUE_OPS[number];
 export const MINECRAFT_QUEUE_CODES = ['ok', 'not_found', 'bad_state', 'running', 'queue_full', 'invalid'] as const;
 export type MinecraftQueueCode = typeof MINECRAFT_QUEUE_CODES[number];
 
+/** The words beside a request of the world before (a held or stopped one that ran before the world was made new): the list's screen and her turn both say it. */
+export const MINECRAFT_QUEUE_PREV_WORLD_NOTE = '前の世界の依頼';
+
 export const MINECRAFT_QUEUE_LIMITS = Object.freeze({
   goalCharacters: 120,
   noteCharacters: 80,
