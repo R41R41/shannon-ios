@@ -335,7 +335,7 @@ const valuesRoute = createValuesRoute({
 });
 const lifecycle = configuredMinecraftLifecycle(process.env, { path: configuredDatabasePath(), autonomy, actions: mind?.actions ?? null, now,
    freshWorld: { policy: opsStore.worldPolicy, activity: autonomyStore.activity, config: autonomyConfig, bodyTasksOpen: (
-     ) => fca?.minecraftTasksOpen() ?? null },...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? {
+     ) => fca?.minecraftTasksOpen() ?? null, worldChanged: at => fca?.minecraftWorldChanged(at) },...(operationOutcomes.tell ? { told: operationOutcomes.tell } : {}), ops: mind?.actions ? {
         commands: opsStore.commands, actions: mind.actions, enabled: () => opsCommandsEnabled(process.env) } : undefined, ownerAlone: (
           ) => kernel.ownerAloneForFeedback(shannonNowOwnerScope(process.env)), taskAllowed: executionId => fca?.lifecycleTaskAllowed(
             executionId) ?? false, taskSources: executionId => fca?.lifecycleTaskSources(executionId) ?? null });

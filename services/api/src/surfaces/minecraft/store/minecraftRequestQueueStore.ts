@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { applySchemaSteps } from '../../../infra/sqlite/migrations/schemaSteps.js';
 import { MINECRAFT_REQUEST_QUEUE_STEP } from '../../../infra/sqlite/migrations/execution/014_minecraft_request_queue.js';
 import { MINECRAFT_QUEUE_RESUME_AFTER_STEP } from '../../../infra/sqlite/migrations/execution/015_minecraft_queue_resume_after.js';
+import { MINECRAFT_QUEUE_WORLD_EPOCH_STEP } from '../../../infra/sqlite/migrations/execution/016_minecraft_queue_world_epoch.js';
 import { underWriteLock } from '../../../infra/sqlite/lockWaits.js';
 import { EMPTY_QUEUE, type QueueRecord, type QueueSnapshot } from '../minecraftRequestQueue.js';
 import type { MinecraftQueueOrigin, MinecraftQueueState } from '../../../contracts/minecraftQueueContract.js';
@@ -17,27 +18,28 @@ function recordOf(row: Record<string, unknown>): QueueRecord {
 }
 
 /**
- * The stored list of requests (`execution/014_minecraft_request_queue`, and `015_minecraft_queue_resume_after` for the column of which
- * request a held one waits for). The list is small (a few dozen rows at most), so a write replaces the owner's rows as a whole,
+ * The stored list of requests (`execution/014_minecraft_request_queue`, `015_minecraft_queue_resume_after` for the column of which
+ * request a held one waits for, and `016_minecraft_queue_world_epoch` for when the world was last made new). The list is small (a few dozen rows at most), so a write replaces the owner's rows as a whole,
  * inside the caller's write lock (a savepoint when it already holds one); the revision rises only when what is stored differs.
  */
 export class MinecraftRequestQueueStore {
   constructor(private readonly db: DatabaseSync) {
-    applySchemaSteps(db, [MINECRAFT_REQUEST_QUEUE_STEP, MINECRAFT_QUEUE_RESUME_AFTER_STEP]);
+    applySchemaSteps(db, [MINECRAFT_REQUEST_QUEUE_STEP, MINECRAFT_QUEUE_RESUME_AFTER_STEP, MINECRAFT_QUEUE_WORLD_EPOCH_STEP]);
   }
 
   read(scopeKey: string): QueueSnapshot & { rev: number } {
-    const state = this.db.prepare('SELECT auto_run, rev, next_seq FROM minecraft_request_queue_state WHERE scope_key = ?').get(scopeKey);
+    const state = this.db.prepare('SELECT auto_run, rev, next_seq, world_epoch FROM minecraft_request_queue_state WHERE scope_key = ?').get(scopeKey);
     if (!state) return { ...EMPTY_QUEUE, rev: 0 };
     const rows = this.db.prepare('SELECT * FROM minecraft_request_queue WHERE scope_key = ? ORDER BY seq').all(scopeKey);
-    return { autoRun: Number(state.auto_run) === 1, nextSeq: Number(state.next_seq), rev: Number(state.rev), entries: rows.map(recordOf) };
+    return { autoRun: Number(state.auto_run) === 1, nextSeq: Number(state.next_seq), worldEpoch: text(state.world_epoch), rev: Number(state.rev),
+      entries: rows.map(recordOf) };
   }
 
   /** Stores the list; the revision it has now. */
   write(scopeKey: string, snapshot: QueueSnapshot): number {
     return underWriteLock(this.db, null, '', () => {
       const before = this.read(scopeKey);
-      const same = before.autoRun === snapshot.autoRun && before.nextSeq === snapshot.nextSeq
+      const same = before.autoRun === snapshot.autoRun && before.nextSeq === snapshot.nextSeq && (before.worldEpoch ?? null) === (snapshot.worldEpoch ?? null)
         && JSON.stringify(before.entries) === JSON.stringify([...snapshot.entries].sort((a, b) => a.seq - b.seq));
       if (same && before.rev > 0) return before.rev;
       const rev = before.rev + 1;
@@ -48,9 +50,10 @@ export class MinecraftRequestQueueStore {
         insert.run(e.id, scopeKey, e.seq, e.goal, e.state, e.pos, e.origin, e.requestId, e.experienceId, e.observedAt, e.askedBy, e.taskId,
           e.createdAt, e.updatedAt, e.endedAt, e.note, e.resumeAfter);
       }
-      this.db.prepare(`INSERT INTO minecraft_request_queue_state(scope_key, auto_run, rev, next_seq) VALUES (?, ?, ?, ?)
-        ON CONFLICT(scope_key) DO UPDATE SET auto_run = excluded.auto_run, rev = excluded.rev, next_seq = excluded.next_seq`)
-        .run(scopeKey, snapshot.autoRun ? 1 : 0, rev, snapshot.nextSeq);
+      this.db.prepare(`INSERT INTO minecraft_request_queue_state(scope_key, auto_run, rev, next_seq, world_epoch) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key) DO UPDATE SET auto_run = excluded.auto_run, rev = excluded.rev, next_seq = excluded.next_seq,
+          world_epoch = excluded.world_epoch`)
+        .run(scopeKey, snapshot.autoRun ? 1 : 0, rev, snapshot.nextSeq, snapshot.worldEpoch ?? null);
       return rev;
     }, 'minecraft_queue_write');
   }
