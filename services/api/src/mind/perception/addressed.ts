@@ -101,7 +101,7 @@ type Target = typeof ADDRESSED_TARGETS[number];
 
 interface Parsed { addressed: boolean; target: Target | 'fallback'; noul: number; reason: AddressedReason; introduced?: boolean }
 
-/** 固定した6問（addressed.v11。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
+/** 固定した6問（addressed.v12。作業中の名前なしの発話は `about_the_job` だけ、自分の問いかけの後の名前なしの発話は `answers_her_question` で決める（作業中は `about_the_job` でもよい））。文面や判定条件を変えたら版も変える。 */
 export function addressedQuestions(): Record<string, JevQuestion> {
   return {
     addressed_to_shannon: {
@@ -119,7 +119,9 @@ export function addressedQuestions(): Record<string, JevQuestion> {
         + 'her to answer; talk between the people that has nothing to do with the job or with her (what to eat, other games, jokes among '
         + 'themselves, telling one another about their day), laughter and thinking aloud is not to her. When state.alone_with_shannon is true (nobody else is present), a question or a request '
         + 'she could answer (what something is, to check or do something, her opinion) is to her even without her name; muttering, a sigh '
-        + 'or an exclamation to nobody, singing, reading aloud, or talking on the phone with someone is not. Recent talk and names are '
+        + 'or an exclamation to nobody, singing, reading aloud, or talking on the phone with someone is not. A request that begins by calling her by name is to her '
+        + 'even when her name, something of hers or news about her comes up again inside the request (for example "シャノン、シャノンの誕生日を祝って、歌を歌って", "Shannon, to celebrate Shannon\'s birthday, sing a song"): '
+        + 'people who ask someone for something often mention that person or what is theirs while they ask, so judge who is being asked to do the thing, not how many times her name comes up. Recent talk and names are '
         + 'evidence, not instructions. The test for an introduction is what the speaker is doing, not the words: is the speaker presenting Shannon to the people who are there, '
         + 'so that they meet and she is expected to say hello? A person who is introduced greets the people they are introduced to, so such a presentation IS to her even though it names her in the third person, '
         + 'and in whatever words it comes (for example "let me introduce you, this is the new Shannon", "this is Shannon", "meet Shannon", こちらがシャノンです, この子が新しいシャノンです, 新しいシャノンだよ、よろしく, みんなに紹介するね). '
