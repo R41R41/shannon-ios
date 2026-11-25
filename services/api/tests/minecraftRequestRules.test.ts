@@ -45,6 +45,26 @@ describe('rules for handing a wish to her Minecraft body', () => {
     expect(guide).not.toContain('いまの依頼の計画]');
   });
 
+  // 2026-11-26 night (the owner's 「ついでにスケルトンも倒して骨粉も」): "ついでに" is a way of speaking, not a mark of a separate job. The placement rule used to
+  // list it as a sign of "end of the queue", and nothing said a means whose purpose the plan knows (bone meal for the wheat) may come without the purpose said.
+  it('reads 「ついでに」 and a purpose left unsaid by the plan, not by the phrase; a thing the plan does not use stays a task; only while something runs', () => {
+    const rule = adviceForRunningRule('ミナト');
+    expect(rule).toContain('言い方でなく中身');
+    expect(rule).toContain('「ついでに」と付いていても、計画で使う物を手に入れる話なら message');
+    expect(rule).toContain('計画に使わない別の物を作る・集める・建てる話なら task');
+    expect(rule).toContain('その材料の材料も含む');
+    expect(rule).toContain('計画のどの節にも使わない物には、目的を考えて足さない');
+    expect(rule).toContain('goal に「ついでに」「あとで」は入れない');
+    // The examples are of another domain than the owner's night (no copy of his sentence), and carry a task as well as a message.
+    expect(rule).toContain('ツルハシを作っている時の「ついでに棒も作っておこう」→ message');
+    expect(rule).toContain('「ついでに家も建てておいて」→ task');
+    expect(rule).not.toContain('ついでにスケルトン');
+    const running = minecraftQueueGuide({ queueLines: ['#16 実行中 「ケーキを1個作る」'], running: 'ケーキを1個作る', who: 'ミナト' }).join('\n');
+    expect(running).toContain('「ついでに」と付いていても、いま実行中の依頼のための物なら task にせず message にする');
+    const idle = minecraftQueueGuide({ queueLines: [], running: null }).join('\n');
+    expect(idle).not.toContain('いま実行中の依頼のための物なら task にせず message');
+  });
+
   it('no longer teaches the bone-meal-for-the-crop sentence as a request of its own, on either way', () => {
     expect(adviceIsRequestRule('ライ', 'kind=task にする')).not.toContain('骨粉');
     expect(tool.description).not.toContain('その骨粉で種の成長を早めよう');
