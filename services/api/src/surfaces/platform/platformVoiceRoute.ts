@@ -7,6 +7,7 @@ import { ElevenSpeechError, validatedElevenTags } from '../../infra/models/eleve
 import { GeminiSpeechError, normalizedSpeechText, type GeminiSpeechRequest, type GeminiSpeechStreamResult } from '../../infra/models/geminiSpeech.js';
 import type { CallVoiceCastPort } from '../../infra/models/callVoiceSpeech.js';
 import { serverEnvironment } from '../../infra/config/serverEnvironment.js';
+import { validatedOnAirControlRequest, type OnAirControl } from '../../contracts/onAirContract.js';
 import { switchOn, type SwitchValues } from '@shannon/switches';
 import { SHANNON_PLATFORM_VOICE_PREFIX, platformVoiceEnabled, type VoiceTurnLine } from './platformVoiceRequest.js';
 import type { PlatformVoiceService } from './platformVoice.js';
@@ -24,6 +25,8 @@ import { decodedAudio, LISTEN_MAXIMUM_MS, type Listening } from '../../infra/mod
  *   named voice made it; a 502/503 answer carries `voice` and `noSubstitute: true` when the settings choose the call voice (the body
  *   then drops the line instead of saying it in VOICEPEAK).
  * - `POST cast`: `{}` reads the call voice (`current`, `default`, `items`); `{name}` changes it (memory only; 404 `UNKNOWN_VOICE`).
+ * - `POST on-air`: the owner's 「収録中」 button in the game mod, asked by the body once it knows the speaker is the owner: `{read:true}`, `{off:true}` or
+ *   `{minutes}`; the answer is `{ onAir: { until } | null }` (the note is never sent back; docs/on-air-contract.md).
  * - `GET fillers`: the short sounds a `decision` line may name, for the body to keep as audio.
  * - `POST say` / `POST mouth/poll` / `POST mouth/result`: her mouth (`voiceMouth.ts`, `dc-speak-interface.md`).
  * - `POST wording`: event facts put into her words. `POST said`: what she said by herself, or was heard saying before being talked over.
@@ -43,6 +46,8 @@ export interface PlatformVoiceRoutes {
   environment?: () => SwitchValues;
   /** Listening transcription (`listening.ts`); null without `GROQ_API_KEY` (transcribe answers 503). */
   listening?: Listening | null;
+  /** 「収録中」 as the owner's button in the game mod turns it on and off (`on-air` answers 503 without it). */
+  onAir?: OnAirControl | null;
 }
 
 /** What a call's voice is: ElevenLabs, or the Gemini call voice (`callVoiceSpeech.ts`); both stream raw 24 kHz PCM. */
@@ -106,6 +111,7 @@ async function dispatch(name: string, request: IncomingMessage, response: Server
   if (name === 'transcribe') return transcribe(request, response, routes);
   if (name === 'speech') return speech(request, response, routes);
   if (name === 'cast') return cast(request, response, routes);
+  if (name === 'on-air') return onAir(request, response, routes);
   if (name === 'fillers') return sendJson(response, 200, { items: VOICE_FILLERS.map(({ id, text, style }) => ({ id, text, style })) });
   if (name === 'warm') return sendJson(response, 200, await routes.service.warm(await readJson(request, 1024)));
   if (name === 'wording') return sendJson(response, 200, await routes.service.wording(await readJson(request, 8 * 1024)));
@@ -206,6 +212,17 @@ async function cast(request: IncomingMessage, response: ServerResponse, routes: 
     console.warn('Shannon call voice changed', { voice: port.current() });
   }
   sendJson(response, 200, castState(port));
+}
+
+async function onAir(request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {
+  const requested = validatedOnAirControlRequest(await readJson(request, 1024));
+  if ('error' in requested) return sendJson(response, requested.status, { error: requested.error, message: requested.message });
+  const port = routes.onAir;
+  if (!port) return sendJson(response, 503, { error: 'ON_AIR_NOT_CONFIGURED', message: '収録中の入り切りは、いま使えません。' });
+  if ('off' in requested) port.stop();
+  else if ('minutes' in requested) port.start(requested.minutes);
+  const until = port.until();
+  sendJson(response, 200, { onAir: until ? { until } : null });
 }
 
 async function speech(request: IncomingMessage, response: ServerResponse, routes: PlatformVoiceRoutes): Promise<void> {

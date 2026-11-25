@@ -82,7 +82,7 @@ import { SQLiteShannonNowReader } from './mind/self/store/shannonNowReader.js';
 import { createShannonNowRoute } from './infra/http/serverShannonNowRoute.js';
 import { moodHistoryEnabled } from './contracts/moodHistoryContract.js';
 import { SQLiteMoodHistoryReader } from './mind/emotion/store/moodHistoryReader.js';
-import { SQLiteOnAirStore } from './infra/onAir/onAirStore.js';
+import { SQLiteOnAirStore, onAirControlOf } from './infra/onAir/onAirStore.js';
 import { createOnAirRoute } from './infra/http/serverOnAirRoute.js';
 import { createMoodHistoryRoute } from './infra/http/serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './wiring/serverPrivateListeningRoute.js';
@@ -272,12 +272,14 @@ const kernel = createLocalApiKernel(now, {
 });
 stage5.attach({reportVisible:taskId => fca?.reportCardVisible(taskId) ?? false,ownerAlone:scope => kernel.ownerAloneForFeedback(scope),
   presence:scope => kernel.ownerPresenceForFeedback(scope),actions:mind?.actions ?? null,autonomy,autonomyStore,config:autonomyConfig});
+// 「収録中」's store comes first: the spoken reply reads it and the owner's button in the game mod turns it on and off through the platform bridge.
+const onAirStore = new SQLiteOnAirStore(configuredDatabasePath());
 const listening = configuredListening(process.env, configuredDatabasePath()), bodyRunning = () => (fca?.minecraft?.voice?.state(
   ).running ?? null) !== null, addressed = configuredAddressedVoice(process.env, { trace: persistentStore.decisionTraces()?.writer ?? null,
      salt: traceSalt, bodyRunning }), platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore,
         backgroundDispatcher, now, haiku, peopleMemoryStore, { conversation: { textTurn: input => kernel.textTurn(input), seatedVoiceTurn: (
           turn, observer) => kernel.seatedVoiceTurn(turn, observer), warmVoiceReply: ask => kernel.warmVoiceReply(ask) }, databasePath: configuredDatabasePath(), voiceMinecraft: (
-            ) => fca?.minecraft?.voice ?? null, voiceLifecycle: () => lifecycleRequests?.voicePort() ?? null, voiceOnAir: () => onAirStore.active(shannonNowOwnerScope(process.env), now()), listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge, persistentStore), serveListen =
+            ) => fca?.minecraft?.voice ?? null, voiceLifecycle: () => lifecycleRequests?.voicePort() ?? null, voiceOnAir: () => onAirStore.active(shannonNowOwnerScope(process.env), now()), onAirControl: onAirControlOf(onAirStore, shannonNowOwnerScope(process.env), now), listening }, memoryPorts?.proposals ?? null, peopleFacts, addressed.judge, persistentStore), serveListen =
                configuredListenRoute(listening, addressed.judge, bodyRunning);
 // The mini Shannon's pictures (owner 2026-10-28): `/v1/mini/*` for the residents.
 const miniPoses = configuredMiniPoses(process.env, { databasePath: configuredDatabasePath(), ownerScope: shannonNowOwnerScope(process.env),
@@ -315,7 +317,6 @@ const shannonNowRoute = createShannonNowRoute({
   enabled: () => shannonNowEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
 // 「収録中」 (docs/on-air-contract.md): its own store, read by the spoken reply's prompt and written by the owner's paired device.
-const onAirStore = new SQLiteOnAirStore(configuredDatabasePath());
 const onAirRoute = createOnAirRoute({ store: onAirStore, ownerScopeKey: shannonNowOwnerScope(process.env), now });
 const moodHistoryReader = new SQLiteMoodHistoryReader(configuredDatabasePath());
 const moodHistoryRoute = createMoodHistoryRoute({

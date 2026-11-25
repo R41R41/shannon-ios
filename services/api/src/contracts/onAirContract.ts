@@ -42,3 +42,32 @@ export function validatedOnAirRequest(value: unknown): OnAirRequest | OnAirRefus
   if (typeof note !== 'string' || [...note].length > ON_AIR_LIMITS.noteCharacters) return refusal(`note must be text of at most ${ON_AIR_LIMITS.noteCharacters} characters`);
   return { off: false, minutes, note: note.trim() };
 }
+
+/**
+ * What the body asks on the owner's behalf when the owner presses 「収録中」 in the game mod (`POST /v1/platform/voice/on-air`, the bridge's token).
+ * Who the owner is was decided by the body before it asked. A button turns it on for a time and off again without touching the note the owner
+ * wrote; the note itself is never sent back.
+ */
+export interface OnAirControl {
+  /** When it lapses (ISO time), or null when it is not on air. */
+  until(): string | null;
+  /** On for this many minutes, keeping the note written last. */
+  start(minutes: number): void;
+  /** Off now, keeping the note. */
+  stop(): void;
+}
+
+/** What the body may ask: `{ "read": true }`, `{ "off": true }` or `{ "minutes": whole number }`. Anything else is refused. */
+export type OnAirControlRequest = { read: true } | { off: true } | { minutes: number };
+
+export function validatedOnAirControlRequest(value: unknown): OnAirControlRequest | OnAirRefusal {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return refusal('JSON object body is required');
+  const body = value as Record<string, unknown>;
+  const keys = Object.keys(body);
+  if (keys.length !== 1) return refusal('exactly one of read, off and minutes is required');
+  if (body.read === true) return { read: true };
+  if (body.off === true) return { off: true };
+  const minutes = body.minutes;
+  if (typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= 1 && minutes <= ON_AIR_LIMITS.maximumMinutes) return { minutes };
+  return refusal(`read, off or minutes (a whole number from 1 to ${ON_AIR_LIMITS.maximumMinutes}) is required`);
+}

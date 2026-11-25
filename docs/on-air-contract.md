@@ -13,6 +13,14 @@ The same block family has a second part that does not depend on this state: 「�
 - `GET`: `200 { "onAir": { "until": ISO time, "note": string } | null }`. `null` when it was never set, has lapsed, or cannot be read (every doubt is "not on air").
 - `POST`: `{ "off": true }` clears it. Otherwise `{ "minutes"?: whole number 1–720 (default 240), "note"?: text up to 600 characters }` sets it until that many minutes from now. The answer is the same as `GET`. Another field, a wrong type or a non-JSON body is `400 INVALID_REQUEST`; over 4 KiB is `413 REQUEST_TOO_LARGE`; any other method is `405 METHOD_NOT_ALLOWED`; too many requests `429 RATE_LIMITED`.
 
+## The owner's button in the game mod (`POST /v1/platform/voice/on-air`)
+
+The body, not a paired device, asks for it when the owner presses 「収録中」 in the game mod: the bridge's token (like the rest of `/v1/platform/voice/*`; 503 while `SHANNON_DC_VOICE` is off). The body has already decided that the speaker is the owner by the game name the mod server gave; a guest never reaches this route. The scope is the owner's, never taken from the request.
+
+- Body: exactly one of `{ "read": true }`, `{ "off": true }`, `{ "minutes": whole number 1–720 }` (anything else `400 INVALID_REQUEST`). The answer is `200 { "onAir": { "until": ISO time } | null }`; the note is never sent back.
+- On from the button keeps the note written last (the row's note, even after it lapsed or was turned off), so the scene the owner wrote through `/v1/on-air` is not lost by pressing the button; there is no note when none was ever written. Off from the button ends it now and keeps the note (`/v1/on-air` with `{ "off": true }` still deletes the row). It lapses by itself like any other.
+- `503 ON_AIR_NOT_CONFIGURED` when the head has no store for it.
+
 ## Record
 
 `on_air` (`scope_key` primary key, `until_at` text not null, `note` text not null, `changed_at` text not null): one row per scope, created with `CREATE TABLE IF NOT EXISTS` by `SQLiteOnAirStore` on a connection of its own, outside the numbered migrations. The operations console's store is not used, because that one is kept out of every prompt. A row past `until_at`, with an unreadable end, or in a table that cannot be read is not on air.

@@ -37,6 +37,7 @@ import { oneHeadEnabled } from '../contracts/oneHeadContract.js';
 import type { AddressedJudge } from '../mind/perception/addressed.js';
 export { configuredAddressedVoice } from './addressedWiring.js';
 export { configuredListening, configuredListenRoute } from './listenWiring.js';
+import type { OnAirControl } from '../contracts/onAirContract.js';
 import type { Listening } from '../infra/models/listening.js';
 
 export function createConfiguredPlatformBridgeRoute(
@@ -57,6 +58,8 @@ export function createConfiguredPlatformBridgeRoute(
     voiceLifecycle?: () => VoiceLifecyclePort | null;
     /** 「収録中」 for the spoken reply (`onAirContract.ts`), read at each turn; null when it is not on air. */
     voiceOnAir?: () => { note: string } | null;
+    /** The owner's 「収録中」 button in the game mod, asked through `POST /v1/platform/voice/on-air` (the body has decided the speaker is the owner). */
+    onAirControl?: OnAirControl | null;
     /** Listening transcription for the voice channel (`POST /v1/platform/voice/transcribe`); null without `GROQ_API_KEY`. */
     listening?: Listening | null;
   } | null = null,
@@ -89,7 +92,7 @@ export function createConfiguredPlatformBridgeRoute(
       ...(replies.voiceOnAir ? { onAir: replies.voiceOnAir } : {}),
     }),
     mouth: voiceMouth, ...callVoices(environment, usageStore), scopeKey: configuration.scopeKey, environment: () => environment,
-    listening: replies.listening ?? null,
+    listening: replies.listening ?? null, onAir: replies.onAirControl ?? null,
   } : null;
   return { configuration, chatModel, service, reply, reactions, voice, environment: () => environment, close: () => {
     typed?.close();
