@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { OnAir } from '../../contracts/onAirContract.js';
+import type { OnAir, OnAirControl } from '../../contracts/onAirContract.js';
 import { secureDatabaseFiles } from '../sqlite/sqliteStoreContext.js';
 
 /**
@@ -45,6 +45,21 @@ export class SQLiteOnAirStore {
     `).run(scopeKey, state.until, state.note, at);
   }
 
+  /** Ends it now but keeps the note the owner wrote, so that turning it on again from a button does not lose the scene. */
+  end(scopeKey: string, at: string): void {
+    this.database.prepare('UPDATE on_air SET until_at = ?, changed_at = ? WHERE scope_key = ?').run(at, at, scopeKey);
+  }
+
+  /** The note last written for this scope, whether or not it is on air now; '' when there is none or it cannot be read. */
+  lastNote(scopeKey: string): string {
+    try {
+      const row = this.database.prepare('SELECT note FROM on_air WHERE scope_key = ?').get(scopeKey) as { note?: unknown } | undefined;
+      return typeof row?.note === 'string' ? row.note : '';
+    } catch {
+      return '';
+    }
+  }
+
   clear(scopeKey: string): void {
     this.database.prepare('DELETE FROM on_air WHERE scope_key = ?').run(scopeKey);
   }
@@ -52,4 +67,14 @@ export class SQLiteOnAirStore {
   close(): void {
     this.database.close();
   }
+}
+
+/** The button's way into the store (`OnAirControl`): the scope is the owner's and the clock is the server's; the note written last is kept. */
+export function onAirControlOf(store: Pick<SQLiteOnAirStore, 'active' | 'set' | 'end' | 'lastNote'>, scopeKey: string, now: () => string): OnAirControl {
+  const at = (): string => new Date(Date.parse(now())).toISOString();
+  return {
+    until: () => store.active(scopeKey, at())?.until ?? null,
+    start: minutes => store.set(scopeKey, { until: new Date(Date.parse(at()) + minutes * 60_000).toISOString(), note: store.lastNote(scopeKey) }, at()),
+    stop: () => store.end(scopeKey, at()),
+  };
 }
