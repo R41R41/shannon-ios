@@ -152,6 +152,7 @@ describe('the greeting, who speaks and the words heard', () => {
     const text = presenceBlock({ call: group([SHANNON_OWNER_NAME, 'アキ']), server: null, onAir: null, speakerName: SHANNON_OWNER_NAME });
     expect(text).toContain('そこにいる全員への合図');
     expect(onAirBlock({ note: '' })).toContain('そこにいる全員と見ている人への合図');
+    expect(onAirBlock({ note: '' })).toContain('この通話でまだ挨拶していない時だけ');
     expect(onAirBlock({ note: '' })).toContain('冗談・説明・前置きは足さない');
   });
 });
