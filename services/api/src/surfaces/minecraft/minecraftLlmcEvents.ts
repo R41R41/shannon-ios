@@ -9,6 +9,7 @@ import { reflexLines } from './minecraftLlmcReflexHold.js';
 import { FACT_WINDOW_MS } from './minecraftLlmcHealth.js';
 import { typedFailureAttemptsOf, typedFailureLines, type TypedFailureAttempt } from './minecraftLlmcTypedFailure.js';
 import { fillWords, shieldRushWords } from './minecraftLlmcResultWords.js';
+import { stopCodesOf, STOP_CODES_KEPT, type StopCode } from './minecraftLlmcRepeat.js';
 
 export interface TaskEvents {
   lines: Array<{ seq: number; line: string }>;
@@ -35,6 +36,8 @@ export interface TaskEvents {
   typedFailureCount: number;
   /** Latest rush/fill outcomes, including success and cuts, also shown in compressed decisions. */
   structuredHandFacts: string[];
+  /** The codes the head read in the stopped hands of the acts that ended (`stopCodeOf`), newest last, for the codes beside the body's stop lines (`withStopCodes`). */
+  stopCodes: StopCode[];
 }
 
 export const tasks = new Map<string, TaskEvents>();
@@ -58,6 +61,7 @@ export function eventsOf(taskId: string): TaskEvents {
       typedFailures: [],
       typedFailureCount: 0,
       structuredHandFacts: [],
+      stopCodes: [],
     };
     tasks.set(taskId, state);
     if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
@@ -283,7 +287,10 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
     noteStops(resultJson: string | undefined) {
       for (const line of stopFactLines(resultJson, (at) => sameSpotStops(taskId, at))) state.stops.push(line);
       if (state.stops.length > 4) state.stops.splice(0, state.stops.length - 4);
+      state.stopCodes = [...state.stopCodes, ...stopCodesOf(resultJson)].slice(-STOP_CODES_KEPT);
     },
+    /** The codes of the stopped hands read so far (newest last): the live state puts them beside the body's stop lines. */
+    stopCodes: (): readonly StopCode[] => state.stopCodes,
     /** A known act result, once at queue settlement. A success/other outcome breaks a consecutive failure run. */
     noteFailures(resultJson: string | undefined, observation: BodyObservation | null, input: unknown) {
       state.structuredHandFacts = (readActResult(resultJson)?.lines ?? [])

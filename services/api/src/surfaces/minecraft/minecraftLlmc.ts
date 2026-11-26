@@ -15,7 +15,7 @@ import { LLMC_PROBE, PROBE_WIRE_SCHEMA, prepareProbeInput, probeAnswerText, type
 import { validSkillInput } from './minecraftControlValidation.js';
 import { isShooter } from './minecraftLlmcThreat.js';
 import { urgentRange } from './minecraftLlmcUrgent.js';
-import { actFacts, fillWords, handFacts, shieldRushWords } from './minecraftLlmcResultWords.js';
+import { actFacts, clippedLineWords, fightTimeWords, fillWords, handFacts, shieldRushWords } from './minecraftLlmcResultWords.js';
 
 /**
  * The head's side of the LLM-centric body (design mb-llm-centric 2.3; contract `minecraftActContract.ts`): the
@@ -143,7 +143,7 @@ export function actResultText(result: ActResult): string {
   const lines = result.lines.flatMap(line => {
     const structured = line.do === 'fill' ? fillWords(line) : shieldRushWords(line);
     const words = structured.length ? structured.map((fact, index) => `${index === 0 ? line.i : ''}  事実: ${fact}`)
-      : [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`, ...handFacts(line)];
+      : [`${line.i} ${line.do} ${mark[line.status] ?? '未'} ${line.line}`, ...clippedLineWords(line), ...fightTimeWords(result, line), ...handFacts(line)];
     return [...words, ...((line.status === 'stopped' || line.status === 'failed') && line.around
       ? [`${AROUND_PREFIX}${line.around.slice(0, 160)}`] : [])];
   });

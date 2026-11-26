@@ -130,6 +130,17 @@ export function unknownResult(item: Pick<QueueWordsItem, 'item' | 'node' | 'why'
 }
 
 const DEPEND_WORDS: Readonly<Record<DependState, string>> = { succeeded: '済んだ', failed: '止まった', pending: 'まだ', unknown: '結果不明' };
+/**
+ * The time the queue says an item has left counts a fight at half its `seconds` (`minecraftActTime.ts`: a fight that kills ends early). A fight that waits for its
+ * target (nothing in sight, or none that sees her) does not: run of 11/26, `fight target=enderman seconds=90` was shown 「残り 約 7 秒」 and ended at 90 s with its result
+ * only then. The running item's line says the ceiling next to the estimate, as a fact; the estimate itself stays what it is.
+ */
+export function fightLongWords(input: ActInput, running: number | null): string {
+  const hand = running !== null ? (input.hands[running - 1]?.do === 'fight' ? input.hands[running - 1] : undefined) : input.hands.find(item => item.do === 'fight');
+  if (!hand) return '';
+  const seconds = hand.seconds ?? 20;
+  return `（この fight の見積もりは ${seconds} 秒の半分。倒せない間・個体が来ない間は ${seconds} 秒まで続くことがあり、結果はその時まで来ない）`;
+}
 /** One line of the live state for an item: the running one with its hand and time left, a waiting one with its pre. */
 function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number }): string {
@@ -141,7 +152,7 @@ function itemLine(item: QueueWordsItem, index: number, frame: BodyObservation | 
     index > 0 && item.pre ? `前提 ${conditionText(item.pre)}（前の項目の後で体が確かめる）` : '',
     item.dependsOn !== undefined ? `頼る: ${item.dependsOn.length ? (item.dependStates ?? item.dependsOn.map(ref => [ref,
        null] as const)).map(([ref, state]) => `${ref}${state ? `（${DEPEND_WORDS[state]}）` : ''}`).join('・') : 'なし'}` : '',
-    index === 0 ? `残り約 ${Math.max(1, Math.round(running.leftMs / 1000))} 秒` : '',
+    index === 0 ? `残り約 ${Math.max(1, Math.round(running.leftMs / 1000))} 秒${fightLongWords(item.input, mine?.hand ?? null)}` : '',
   ].filter(Boolean));
   const parts = itemDetails();
   return `${index === 0 ? '▶' : '・'} ${itemLabel(item)} ${index === 0 ? '実行中' : '待ち'}${parts.length ? `: ${parts.join('・')}` : ''}`;

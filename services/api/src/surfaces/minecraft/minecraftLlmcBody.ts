@@ -61,7 +61,7 @@ export function llmcTransient(llmc: LlmcBodyParts, events: LlmcEvents, observati
   const once = taskId ? onceFor(taskId, 'normal').map(fact => fact.text) : [];
   const live = minecraftLlmcLive({ observation, elapsedMinutes: activeMinutes(elapsedMinutes, seen.heldMs), trend: events.trend, events:
      events.shown(), ...(jobs ? { jobs } : {}),
-    lastResults: events.results(), urgent, healthLost: events.healthLost(),
+    lastResults: events.results(), stopCodes: events.stopCodes(), urgent, healthLost: events.healthLost(),
     ...(seen.investigation?.length ? { investigation: seen.investigation } : {}), ...(seen.scan?.length ? { scan: seen.scan } : {}),
     ...(seen.unreachable?.length ? { unreachable: seen.unreachable } : {}), ...(seen.footing ? { footing: seen.footing } : {}),
     ...(seen.queue?.length ? { queue: seen.queue } : {}),
