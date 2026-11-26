@@ -1,4 +1,5 @@
 import { detourLines, noteGoes } from './minecraftLlmcDetour.js';
+import { fightRepeatLines, noteFights } from './minecraftLlmcFightRepeat.js';
 import { factsContext,withPlanFacts,planTreeOf,readinessParts,currentNodeOf,withRecoveryFact,roadParts } from './minecraftLlmcBodyFacts.js';
 import type { LlmcBodyParts,JudgeParts } from './minecraftLlmcBodyFacts.js';
 import { tasks,urgentDecisions,noteUrgentDecision,urgentReasons,urgentMeters,urgentFacts,createLlmcEvents } from './minecraftLlmcEvents.js';
@@ -153,7 +154,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     hitWatch.note(frame);
     return frame; };
   const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops(),
-    detour: detourLines(parts.taskId, currentNodeOf(parts.llmc)?.id, now()), failures: events.failureFacts(observation) });
+    detour: detourLines(parts.taskId, currentNodeOf(parts.llmc)?.id, now()), failures: [...events.failureFacts(observation), ...fightRepeatLines(parts.taskId, observation, now())] });
   const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
   // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from
 // the receipt's result and not from its words.
@@ -161,6 +162,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     events.noteStops(receipt?.result);
     events.noteFailures(receipt?.result, parts.observe(), item.input);
     noteGoes(parts.taskId, currentNodeOf(parts.llmc)?.id, item.input, receipt?.result, now());
+    noteFights(parts.taskId, item.input, receipt?.result, parts.observe(), now());
   });
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */

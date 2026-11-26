@@ -479,6 +479,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '（end1109p07b: 囲まれた窪みから maxDig 4〜8・canDig netherrack だけの go を続け、limit_dig 11 回・dead_end 3 回で約 20 分出られず、真珠 0。maxDig 60・maxPlace 30 の go 1 回で出て、その後の約 5 分で 4 個）。',
     '- 怒った個体が 15 秒近づかない時は enderman_did_not_arrive で、居場所が文に出る。'
       + 'そちら側に屋根を作り直すか、別の個体を選ぶ手がある。その個体は 5 分の間、近くまで来ない限り fight target=enderman の選びから外れ、近くに居ても次の項目を止める危険には数えない。',
+    '- live の「〜 への fight が N 回続けて止まった」の行は、同じ相手に同じ呼び方を重ねた回数と時間・パールの増え方・近くの別の個体・金の交換の数を並べた事実。同じ個体は、自分の屋根と相手の位置（高さ・間の壁）が変わらない限り、呼び直しても届かないので、回数が増えてパールが増えない時は、屋根の場所・対象の個体・手（交換・屋根なしの戦い）のどれかを変える。位置が変わる手（別の地面へ go・別の個体）を挟んだ後なら、同じ個体へ戻ってよい。',
     '- 48m 内に 1 体もいない時の lost は、見えている遠くの個体を最大 3 体、id・距離・方角・マスで添える。'
       + 'その方角への go が、別の個体へ近づく手がかりになる。',
     // S5's rig of 11/5: 「make blaze_powder 6」 made the powder of 3 rods and the eyes stopped at missing; the counts are written out.
