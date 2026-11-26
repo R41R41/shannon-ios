@@ -3,7 +3,7 @@ export { FIRST_PLAN, CHECK_FORBID, CHECK_FORBID_NOW } from './minecraftFirstPlan
 import { FIRST_PLAN,CHECK_FORBID_NOW } from './minecraftFirstPlanPrompts.js';
 import { FIRST_PLAN_SYSTEM,FIRST_PLAN_SYSTEM_R4 } from './minecraftFirstPlanPrompts.js';
 import { applyPlanUpdate,orderedPlan,planFromSeeds,PLAN_LIMITS,promiseItemFits,type PlanCondition,type PlanOp,type PlanSeed,
-  type PlanTree } from '@shannon/mind';
+  type PlanNode,type PlanTree } from '@shannon/mind';
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import { scanForPlan } from './minecraftLlmcProbe.js';
 import { carriedItemCounts } from './minecraftItems.js';
@@ -380,7 +380,9 @@ export const EYES_FOR_STRONGHOLD = 10;
 const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
   (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
   '投げて落ちたアイは拾う。' +
-  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く（防具の足りない部位・食料・原木を足す節も同じ位置）';
+  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く。' +
+  '防具の欠け・食料・掘る道具の欠けは別で、道中と要塞の中の危険に備える物なので、要塞へ発つ前の短い節にしてよい（鉄の防具が欠けているなら発つ前にそろえるのは正しい）。置くのは、ベッド・黒曜石・足場・弓矢（エンドの点検物）だけ後ろ。' +
+  '節は削らず順だけ後ろへ置く（黒曜石・ベッドの節、枠を埋めてポータルを開く節、12 個目の目の作り方の注意も節に残す）。理由: 枠は 12 個で目は今の数より多く要り、置かれていない時の手立ての節が計画に無いと、要塞に着いた後に次の手が決まらない';
 /**
  * Run 7 (11/27): a task begun in the Nether with 13 eyes. With the overworld-only rule in the system, Haiku weighed whether it applied (its thinking filled the 9,000 output tokens in 2 of 4 asks with the
  * new system; with the old system 4 of 4 took 2.8 to 4.2 thousand): the Nether's case is said as a fact of its own, with the same reason.
@@ -416,8 +418,13 @@ export function strongholdFirst(answer: unknown, eyes: number | null, say?: (lin
   const rows = Array.isArray(record(answer)?.nodes) ? record(answer)!.nodes as unknown[] : null;
   if (eyes === null || !rows) return answer;
   const dropped = new Set<string>();
-  const makesEyes = (item: Record<string, unknown>) =>
-    EYE_MAKING_KINDS.has(text(item.kind, 64)) || EYE_MAKING_ITEMS.test(text(record(item.target)?.item, 64).replace(/^minecraft:/u, ''));
+  // Run 9 of 11/27: 「黒曜石を5個足す」 (kind obsidian, have:obsidian>=12, for the dragon) and 「枠を12にしてポータルを開く」 (kind portal, see:end_portal) were dropped with the Nether's
+  // gate, and with them the step after the stronghold (fitting the eyes, the 12th eye). The End's side is kept by what it is for: the End's portal or the End itself in its condition, or
+  // an obsidian node for 12 or more (the dragon's) with no word of the Nether or the gate.
+  const endSide = (item: Record<string, unknown>) => /see:end_portal|dim:the_end/u.test(text(item.doneWhen, 200))
+    || (text(item.kind, 64) === 'obsidian' && /have:obsidian>=(?:1[2-9]|[2-9]\d)/u.test(text(item.doneWhen, 200)) && !/dim:the_nether|ネザー|ゲート|火打|flint/u.test(`${text(item.title, 80)} ${text(item.doneWhen, 200)}`));
+  const makesEyes = (item: Record<string, unknown>) => !endSide(item)
+    && (EYE_MAKING_KINDS.has(text(item.kind, 64)) || EYE_MAKING_ITEMS.test(text(record(item.target)?.item, 64).replace(/^minecraft:/u, '')));
   let kept = rows.filter(row => {
     const item = record(row), id = text(item?.id, 32), parent = text(item?.parent, 32);
     if (!item || !(makesEyes(item) || (parent && dropped.has(parent)))) return true;
@@ -556,7 +563,7 @@ export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
 }
 
 /** The plans handed to tasks from outside their decisions: a seed at the first read, the strong model's answer when it comes. */
-interface Slot { seed: PlanTree | null; answer: PlanTree | null; asked: boolean }
+interface Slot { seed: PlanTree | null; answer: PlanTree | null; asked: boolean; pending?: boolean }
 const slots = new Map<string, Slot>();
 function slotOf(taskId: string): Slot {
   let slot = slots.get(taskId);
@@ -567,24 +574,43 @@ function slotOf(taskId: string): Slot {
   }
   return slot;
 }
-export const firstPlanInbox: FcaPlanInbox = {
-  take(taskId, held) {
-    const slot = slots.get(taskId);
-    if (!slot) return null;
-    if (slot.answer) {
-      const answer = slot.answer;
-      slot.answer = null;
-      slot.seed = null;
-      return { tree: held.nodes.length ? carryDone(held, answer) : answer, note: '最初の計画（強いモデル）が届いた。済んだ節は引き継いだ。合わなければ plan.update で直す' };
-    }
-    if (slot.seed && !held.nodes.length) {
-      const seed = slot.seed;
-      slot.seed = null;
-      return { tree: seed, note: '既定の最初の計画。この世界に合わせた計画が後で届く' };
-    }
-    return null;
-  },
-};
+/** What the inbox says beside the plan it hands over, from the task's step (all optional: the open items of the queue, how far the point the eyes give is). */
+export interface FirstPlanWords { running?(): readonly string[]; crossing?(node: PlanNode, nodes: readonly PlanNode[]): string | null }
+/**
+ * Run 9 of 11/27: the first plan came in with the now on 「p1.1」 while an item of the default plan (q1) was running, and the note said only that the plan came; the decision read 「今の計画は q1 が走っている」
+ * and went on with it. The note says the now changed, which node it is (with how far, when it is the walk to the point), and that the items running are the old default plan's (to be replaced when they are not wanted).
+ */
+export function firstPlanInboxWith(words: FirstPlanWords = {}): FcaPlanInbox {
+  return {
+    take(taskId, held) {
+      const slot = slots.get(taskId);
+      if (!slot) return null;
+      if (slot.answer) {
+        const answer = slot.answer;
+        slot.answer = null;
+        slot.seed = null;
+        const tree = held.nodes.length ? carryDone(held, answer) : answer;
+        const now = tree.nodes.find(node => node.id === tree.current);
+        const running = (words.running?.() ?? []).slice(0, 4);
+        const reach = now ? words.crossing?.(now, tree.nodes) ?? null : null;
+        const changed = now ? `。計画が替わった。今の節は [${now.id}] ${now.title.slice(0, 24)}${reach ? `（${reach}）` : ''}` : '';
+        const old = running.length ? `。走っている ${running.join('・')} は旧の既定計画の物（要るなら replace で入れ替えてよい）` : '';
+        return { tree, note: `最初の計画（強いモデル）が届いた。済んだ節は引き継いだ${changed}${old}。合わなければ plan.update で直す` };
+      }
+      if (slot.seed && !held.nodes.length) {
+        const seed = slot.seed;
+        slot.seed = null;
+        // Run 9: the default plan's order is the old preparation order (the first item walked 53 s north, away from the stronghold).
+        return { tree: seed, note: slot.pending
+          ? '既定の最初の計画。この世界に合わせた計画が約 1 分以内に届く。それまでは長い act（歩きが 30 秒を超える物）を出さず、probe・短い手で待つ。'
+            + '理由: 既定計画は旧の準備順で、9 回目はこれで要塞と逆の北へ 53 秒歩いた'
+          : '既定の最初の計画。この世界に合わせた計画が後で届く' };
+      }
+      return null;
+    },
+  };
+}
+export const firstPlanInbox: FcaPlanInbox = firstPlanInboxWith();
 
 /**
  * At a task's first decision with no plan: its seed is put in the inbox and the strong model asked once (in the
@@ -611,6 +637,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
   const dimension = typeof parts.world?.dimension === 'string' ? parts.world.dimension : null;
   if (!parts.held.nodes.length) slot.seed = seedPlan(parts.goal, dimension);
   if (!parts.planner) return;
+  slot.pending = true;
   const planner = parts.planner;
   const abort = new AbortController(), began = Date.now();
   const timer = setTimeout(() => abort.abort(), FIRST_PLAN.giveUpMs);

@@ -286,6 +286,26 @@ export function eyeLedgerFact(rawThrows: unknown, feet: { x: number; z: number }
   return [`${count}。交点 ${place(fix.x, fix.z)}（見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${weak}${again}`.trim()];
 }
 
+/** The point the eyes give, as the plan's node shows it (11/27, run 9: the node of the walk to it said nothing of how far it was). */
+export interface Crossing { x: number; z: number; errorBlocks: number; meters: number | null }
+/**
+ * The point the lines give from the eyes the body keeps (`world.eyeThrows`, the same throws, the same `honestFix` and `directPoint` as the ledger's lines and the first plan's fact), and how far it is from
+ * her feet. Null: not in the overworld, no throw, or no point.
+ */
+export function crossingOfWorld(world: Rec | null, now: number): Crossing | null {
+  if (!world || String(world.dimension ?? '').replace(/^minecraft:/u, '') !== 'overworld') return null;
+  const throws = alive(throwsFromBody(world.eyeThrows), now);
+  if (!throws.length) return null;
+  const direct = directPoint(throws);
+  const fix = direct ? null : honestFix(throws);
+  const at = direct ?? fix;
+  if (!at) return null;
+  const feet = xz(world.position);
+  return { x: at.x, z: at.z, errorBlocks: at.errorBlocks, meters: feet ? Math.hypot(at.x - feet.x, at.z - feet.z) : null };
+}
+/** 「交点まで 1,625m（地上で約 406〜813 秒）」: the distance and the walk's seconds on land (`WALK_FAST`, `WALK_SLOW`), as `walkWords` says them. */
+export const crossingWords = (meters: number): string => `交点まで ${grouped(meters)}m（地上で約 ${seconds(meters, WALK_FAST)}〜${seconds(meters, WALK_SLOW)} 秒）`;
+
 /** The ledger of one task. `saved` is what the checkpoint held (`checkpoint()`), read with care: a malformed one is a fresh ledger. */
 export function createEyeLedger(saved: unknown) {
   const raw = saved && typeof saved === 'object' ? (saved as { v?: unknown; throws?: unknown }) : null;

@@ -22,7 +22,7 @@ import { createFcaPlanTools } from '../mind/action/fca/fcaPlanTools.js';
 import type { PlanTree } from '@shannon/mind';
 import { type ToolResult } from '../mind/tools/shannonTools.js';
 import { redecideParts } from './minecraftLlmcRedecideWiring.js';
-import { firstPlanInbox,planGoal,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
+import { firstPlanInboxWith,planGoal,startFirstPlan } from '../surfaces/minecraft/minecraftFirstPlan.js';
 import { heardLines, noteHeard } from '../surfaces/minecraft/minecraftPeopleWords.js';
 import type { MinecraftControl } from '../surfaces/minecraft/minecraftControl.js';
 import { createLlmcEvents,urgentDecision,withLlmcBody } from '../surfaces/minecraft/minecraftLlmcBody.js';
@@ -41,7 +41,7 @@ import { lostDoneUpdate } from '../surfaces/minecraft/minecraftPlanLost.js';
 import { doneFacts,seenDoneUpdate,undergroundInOverworld,withChestsDone } from '../surfaces/minecraft/minecraftPlanDone.js';
 import { preparationCompletionProblem } from '../surfaces/minecraft/minecraftPlanCompletion.js';
 import { targetUpdateProblem } from '../surfaces/minecraft/minecraftPlanRequirements.js';
-import { chestNodesDone,followBelow,followNode,lackBefore,noteChestsOpened,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
+import { chestNodesDone,followBelow,followNode,lackBefore,noteChestsOpened,reachWords,withNodeView,workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
 import { followBack, followDimensionHeld, followHeld } from '../surfaces/minecraft/minecraftLlmcHeldStreak.js';
 import { minecraftTaskContext } from './fcaMinecraftTools.js';
 import { minecraftBodyVersion } from '../surfaces/minecraft/minecraftBodyVersion.js';
@@ -92,7 +92,8 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
   const validate = (before: PlanTree, after: PlanTree) =>
     targetUpdateProblem(before, after, observe()) ?? preparationCompletionProblem(before, after, observe());
   const adopted = (before: PlanTree, after: PlanTree) => adoptProblem({ validate, observe }, before, after);
-  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withOwnerNodeInbox(withReplanInbox(firstPlanInbox, log, adopted), log), log,
+  const plan = createFcaPlanTools({ taskId: step.taskId, checkpoint: step.snapshot.checkpoint, inbox: withOwnerNodeInbox(withReplanInbox(firstPlanInboxWith({ running: () => queue.openItems().map(item => item.item),
+      crossing: (node, nodes) => reachWords(node, nodes, decided()) }), log, adopted), log), log,
     validateUpdate: validate,
     lost: tree => lostDoneUpdate(step.taskId, tree, observe()),
     rules: true, compact: true, onCheckpoint: () => queue.checkpointed(), onCommitted: () => queue.committed(), seen:
@@ -101,7 +102,11 @@ export function llmcStepParts(llmc: LlmcWiring, step: TaskStep, control: Minecra
       ?? followBelow(tree, doneFacts(observe()))
       ?? followHeld(step.taskId, tree, doneFacts(observe()))
       ?? followNode(step.taskId, tree, (facts => !!facts && undergroundInOverworld(facts))(
-      doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf)) });
+      doneFacts(observe())), leaf => lackBefore(observe(), tree, leaf), node => reachWords(node, tree.nodes, observe())) });
+  // Run 9 of 11/27: the open node the now left is the first line of `plan.next`, and the reason of the plan's order (a later node's caution) is in `plan.rules` (`withNodeView`).
+  const liveBase = plan.port.liveView?.bind(plan.port);
+  if (liveBase) plan.port.liveView = () => withNodeView(liveBase(), plan.port.tree(), doneFacts(decided())?.dimension ?? null,
+    node => reachWords(node, plan.port.tree().nodes, decided()));
   const worldOf = () => {
     const world = decided()?.state.world;
     return world && typeof world === 'object' && !Array.isArray(world) ? world as Record<string, unknown> : null;
