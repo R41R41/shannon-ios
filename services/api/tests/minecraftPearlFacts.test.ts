@@ -69,6 +69,8 @@ describe('the search for a warped forest (run 9: 0 scans after the rods, then th
     const lines = pearlSearchLines(world, pack({ blaze_powder: 14 }), 'the_nether', none).join(' ');
     expect(lines).toContain('歪んだ森: warped_forest 東 150m');
     expect(lines).toContain('fight target=enderman');
+    expect(lines).toContain('怒った個体が近くに居る間の dig は stopIf に hostileWithin 4 を付ける');
+    expect(lines).toContain('体力の止め値 hpBelow 12 では間に合わない');
     expect(lines).not.toContain('次の手: mc_probe kind=scan');
     expect(lines).not.toContain('歪んだ森の控え');
     const placed = pearlSearchLines({ ...world, rememberedPlaces: { warped_forest: '150m 東 (9,9,9)' } }, pack({ blaze_powder: 14 }), 'the_nether', none).join(' ');

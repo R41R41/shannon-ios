@@ -80,7 +80,7 @@ export function pearlSearchLines(world: Record<string, unknown>, counts: Readonl
   // The body's place row for a warped forest is a stand cell read from a far column (round 12): its y is a rough guide, not a height to trust.
   if (place) lines.push('歪んだ森の控え: y は目安。控えの座標は方角として使い、go の行き先は scan の幹（warped_stem）の位置から選ぶ');
   lines.push(forest
-    ? `歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）。着けない・狩りが進まない時: ${LAST_WAY}`
+    ? `歪んだ森が見えている: 90m ごとの go で寄り、屋根の場所を読んで fight target=enderman。怒った個体が近くに居る間の dig は stopIf に hostileWithin 4 を付ける（エンダーマンは 1 打で 3.5〜7 を失い、体力の止め値 hpBelow 12 では間に合わない。この実走の dig 4 か所は 4 秒で体力 20→6 に落ちた。死ぬとロッドとパールを落とす）。パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）。着けない・狩りが進まない時: ${LAST_WAY}`
     : search.goes >= SEARCHES_BEFORE_LAST_WAY
       ? `探した回数 ${search.goes}。1 回は約 ${SEARCH_GO_BLOCKS} 秒。現世の夜は 9 回目で約 1,100 秒・0 個。歪んだ森はまだ見えない: ネザーで探し続けるか、${LAST_WAY} か、選ぶのは頭`
       : '次の手: mc_probe kind=scan → 見えていない向きへ 90m の go → 走査。ネザーに居たまま集め、パールとアイがそろってから現世へ戻る（黒曜石 12 はピグリンとの交換でも出る）');

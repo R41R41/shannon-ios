@@ -112,16 +112,22 @@ export type EnderHunt = ReturnType<typeof createEnderHunt>;
 
 export interface HuntNumbers { near: number; nearest: number; elapsedMs: number; kills: number; gained: number; have: number }
 
-/** The line from the numbers (pure): null before two minutes, and once the pearls are enough. */
+/**
+ * 11/26 (Haiku, the Nether pearl stage): the body's reflex (floor melee) killed two of the three endermen of the stage and its words carry no kill into the
+ * results the head sees (the ledger line says "1 体倒した" in the body's own log only), so the line said 撃破 0 and "about 66 minutes" for a stage that went at
+ * a third of that. The kills are not countable from what reaches the head; the line says so, and the estimate says it is a high one.
+ *
+ * The line from the numbers (pure): null before two minutes, and once the pearls are enough. */
 export function huntLine(n: HuntNumbers): string | null {
   if (n.have >= PEARL_TARGET || n.elapsedMs < SHOW_AFTER_MS) return null;
   const minutes = Math.max(1, Math.round(n.elapsedMs / 60_000));
   const missing = PEARL_TARGET - n.have;
   const base = `エンダーマン狩り ${minutes} 分: いま近くに ${n.near} 体（最寄り ${Math.round(n.nearest)}m）・撃破 ${n.kills} 体`
     + `・パール +${n.gained}（${n.have}/${PEARL_TARGET}）。`
+    + `撃破は fight の結果に出た分だけ（体の反射が倒した分は結果に載らず、入っていない）。`
     + `1 体の落とし物は平均 ${PEARLS_PER_KILL} 個（0〜1）`;
   if (n.kills === 0) return base;
   const perMinute = n.kills / (n.elapsedMs / 60_000) * PEARLS_PER_KILL;
   const rate = (n.kills / (n.elapsedMs / 60_000)).toFixed(1);
-  return `${base}。この速さ（撃破 ${rate} 体/分）ならあと ${missing} 個に約 ${Math.ceil(missing / perMinute)} 分`;
+  return `${base}。この速さ（撃破 ${rate} 体/分）ならあと ${missing} 個に約 ${Math.ceil(missing / perMinute)} 分（反射の撃破を含まないので、実際はこれより速いことがある）`;
 }
