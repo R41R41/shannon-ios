@@ -156,14 +156,14 @@ describe('iron wanted through the buckets of a cake: the iron line and its ledge
   const pack = (extra: Record<string, number> = {}) => new Map<string, number>([['stone_pickaxe', 1], ['raw_iron', 2], ...Object.entries(extra)]);
   it('3 buckets lacking and 2 raw iron: the ledger (7 raw iron to dig and smelt), the scan row, the hand of the near ore and the form of mine', () => {
     const line = ironSearchLine(world, pack(), 'overworld', cake, T0 + 60_000)!;
-    expect(line).toContain('鉄の勘定: インゴット 9 要る（今 インゴット 0・生の鉄 2');
+    expect(line).toContain('鉄の勘定: バケツに要るインゴットは 9 本（今 インゴット 0・生の鉄 2');
     expect(line).toContain('あと生の鉄 7 を掘って焼く');
     expect(line).toContain('make は材料不足で止まる');
     expect(line).toContain('mine iron_ore -129,66,-151 count=3');
     expect(line).toContain('契約（skill_read）を読まずにそのまま出せる');
   });
   it('a milk bucket held counts as a bucket made: 2 lacking is 6 ingots; the buckets all held, the line is not said', () => {
-    expect(ironSearchLine(world, pack({ milk_bucket: 1 }), 'overworld', cake, T0 + 60_000)).toContain('インゴット 6 要る');
+    expect(ironSearchLine(world, pack({ milk_bucket: 1 }), 'overworld', cake, T0 + 60_000)).toContain('バケツに要るインゴットは 6 本');
     expect(ironSearchLine(world, pack({ milk_bucket: 3 }), 'overworld', cake, T0 + 60_000)).toBeNull();
   });
   it('enough ingots and raw iron for them: say to smelt, not to dig; a node with no iron in it and no cake says nothing', () => {

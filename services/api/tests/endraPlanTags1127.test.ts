@@ -107,7 +107,7 @@ describe('(d) the End shortage as one line of numbers', () => {
       { name: 'obsidian', count: 7 }, { name: 'flint', count: 2 }, { name: 'blaze_powder', count: 1 }], ...extra });
   it('d0132: beds 6/8, obsidian 7/8, no bow, arrows 0/12, the pickaxe, the armour 2/4, the eyes and what makes up for a broken one', () => {
     const facts = readinessOf(frame(world()))!;
-    expect(endLackLine(facts, ['stronghold'])).toBe('エンドまでの不足（数）: ベッド 6/8・黒曜石 7/8・弓なし（糸 0/3・棒 0/3）・矢 0/12（羽根 0・火打石 2・棒 0）'
+    expect(endLackLine(facts, ['stronghold'])).toBe('エンドへ入る前に要る物のうち足りない分（数）: ベッド 6/8（あと 2）・黒曜石 7/8（あと 1）・弓なし（作るなら糸 0/3・棒 0/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）・矢 0/12（羽根 0・火打石 2・棒 0）'
       + '・diamond_pickaxe 耐久 73/1561・防具 2/4（脚・足が無い）・アイ 11/12（割れた分の作り足し: パール 0・粉 1・ロッド 0）');
   });
   it('says nothing in the Nether, or when every number is met', () => {
@@ -116,7 +116,7 @@ describe('(d) the End shortage as one line of numbers', () => {
   it('is part of the live shortage of a task whose node is of the stronghold', () => {
     const tree = withState(['p1', 'p2', 'p3', 'p4', 'p5'], 'n1');
     const parts = readinessParts({ plan: () => undefined, planView: () => null, planTree: () => tree, journeyReadiness: true } as LlmcBodyParts, null, frame(world()), 't1');
-    expect(parts.shortage).toContain('エンドまでの不足（数）: ベッド 6/8');
+    expect(parts.shortage).toContain('エンドへ入る前に要る物のうち足りない分（数）: ベッド 6/8');
   });
 });
 

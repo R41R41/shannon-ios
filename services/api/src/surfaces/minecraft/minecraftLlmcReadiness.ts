@@ -54,7 +54,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: s
   // check: the shield, the blocks of the hideout and food; no goals (a goal line would keep the shortage from being empty).
   nether_blaze: { title: 'ブレイズ戦へ', food: 60, needs: [
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '足場のブロック', count: 32, pattern: BLOCKS }] },
-  end: { title: 'エンドへ', food: 330, needs: [
+  end: { title: 'エンドへ入る前に要る物', food: 330, needs: [
     { label: `ベッド（エンドの点検は ${END_BEDS}・戦いの目標は 10）`, count: END_BEDS, pattern: BED_ITEM },
     { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
     ...END_WEAPONS,
@@ -181,13 +181,13 @@ function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
 
 /** What the pack lacks of some needs: none at all, some but not enough, and armour carried but not worn. */
 interface Gaps { none: string[]; short: string[]; unworn: string[] }
-function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: readonly string[] }): Gaps {
+function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: readonly string[]; rest?: boolean }): Gaps {
   const gaps: Gaps = { none: [], short: [], unworn: [] };
   for (const need of needs) {
     const have = held(parts.counts, need);
     const label = need.materials ? `${need.label}（${need.materials(parts.counts)}）` : need.label;
     if (have <= 0) gaps.none.push(label);
-    else if (have < need.count) gaps.short.push(`${label} ${have}/${need.count}`);
+    else if (have < need.count) gaps.short.push(`${label} ${have}/${need.count}${parts.rest ? `（あと ${need.count - have}）` : ''}`);
     if (need.worn && parts.worn && have > 0) {
       gaps.unworn.push(...[...parts.counts.keys()].filter(name => need.pattern.test(name) && !parts.worn!.includes(name)));
     }
@@ -204,7 +204,7 @@ const foodLack = (table: PrepStage, food: number, world?: Record<string, unknown
   return furnace ? `${foodPointsWords(food)}（${furnace.words}。目安 ${table.food}）` : `${foodPointsWords(food)}（目安 ${table.food}）`;
 };
 /** The required needs of a stage that are not met (the food counts as one). */
-function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; worn?: readonly string[]; world?: Record<string, unknown> }): string[] {
+function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; worn?: readonly string[]; world?: Record<string, unknown>; rest?: boolean }): string[] {
   return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food, parts.world)].filter(Boolean);
 }
 
@@ -233,19 +233,22 @@ function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; 
   // The review of 11/10, E1: an eye carried started the clock at the check, and it ran out before the stronghold. The gate starts it.
   const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, false);
   if (since === null || now - since < END_GATHER_MS) return table;
-  return { ...table, food: END_MIN_FOOD, title: `エンドへ（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
+  return { ...table, food: END_MIN_FOOD, title: `エンドへ入る前に要る物（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
     needs: [...table.needs.filter(need => !gathering(need) && !END_WEAPONS.includes(need)), ...END_FALLBACK_WEAPONS] };
 }
 
 /** Goals are facts of a missing fallback, never requirements of the entry gate. */
-function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
+function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[]; rest?: boolean }): string {
   const goals = table.needs.filter(need => need.goal);
   const wanted = gapWords(gapsOf(goals, parts));
   if (!wanted.length) return '';
   // What a lacking goal costs (`PrepNeed.cost`), said after the list: a goal that reads as optional is not left without its reason.
   const costs = [...new Set(goals.filter(need => need.cost && (held(parts.counts, need) < need.count
     || (need.worn && parts.worn && [...parts.counts.keys()].some(name => need.pattern.test(name) && !parts.worn!.includes(name))))).map(need => need.cost!))];
-  return `目標（そろえば。必須ではない）— ${wanted.join('。')}${costs.length ? `。欠けた目標の代償: ${costs.join('。')}` : ''}`;
+  // 11/27: "bow and arrows missing" read as a thing to go and get (run 8: the first plan wrote a node for them); the reason is said in the same sentence.
+  const archery = goals.some(need => /bow|arrow/u.test(need.pattern.source) && held(parts.counts, need) < need.count)
+    ? '。弓・矢は、道中で糸・羽根・火打石が手に入った時にだけ作る物で、取りに出る節は書かなくてよい（無くても入れる）' : '';
+  return `目標（そろえば。必須ではない）— ${wanted.join('。')}${archery}${costs.length ? `。欠けた目標の代償: ${costs.join('。')}` : ''}`;
 }
 
 /**
@@ -264,17 +267,24 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   if (!stage) return mining;
   const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endCheck(parts))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
-  const goals = goalWords(table, parts);
+  // 11/27: the End's check says how many are left (「7/8（あと 1）」); the other stages keep their words.
+  const said0 = { ...parts, rest: stage === 'end' };
+  const goals = goalWords(table, said0);
   const eyes = stage === 'end' && !returning ? [eyeWords(parts), bedWords(parts)].filter(Boolean).join('。') : '';
+  // 11/27: the first plan wrote `have:bed>=10` from "点検は 8・戦いの目標は 10"; said once, as a fact of the two numbers, only while the beds are short of the aim.
+  const bedNote = stage === 'end' && !returning && table.needs.some(need => need.pattern === BED_ITEM) && countMatching(parts.counts, BED_ITEM) < END_BEDS
+    ? `ベッドの点検が通るのは ${END_BEDS} 本から。10 本は戦いの目標で、節が済む条件を 10 本にしなくてよい` : '';
   if (!table.risk) {
-    const said = [...mustWords(table, parts), goals, mining].filter(Boolean);
+    const said = [...mustWords(table, said0), goals, mining].filter(Boolean);
     if (said.length && eyes) said.push(eyes);
+    if (said.length && bedNote) said.push(bedNote);
     return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
   }
-  const must = mustWords(table, parts);
+  const must = mustWords(table, said0);
   const said = [must.length ? `必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : '',
     goals, mining].filter(Boolean);
   if (said.length && eyes) said.push(eyes);
+  if (said.length && bedNote) said.push(bedNote);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 
@@ -586,6 +596,24 @@ export function parallelFurnaceLine(world: Record<string, unknown>, counts: Item
   return `smelt raw_iron ${raw} furnaces=${PARALLEL_FURNACES} fuel=coal fuelCount=${fuel}（1 個 10 秒。take は残り 15 秒以内だけ体が待つ。それ以上は掘る・捨てるを先に積み、take は後ろへ）`;
 }
 
+/**
+ * run 8 (11/27): digging 16 m below the furnace she had set, `furnace` was sent to it five times. The furnaces the map shows and how far each is above or below her feet, said only
+ * while something is carried to smelt and no furnace is within 5 m vertically (a furnace out of reach is not used by the hand). No furnace on the map: nothing is said.
+ */
+export function furnaceReachLine(world: Record<string, unknown>, counts: ItemCounts): string | null {
+  const feet = feetOf(world);
+  if (!feet || ![...counts].some(([name, n]) => n > 0 && TO_SMELT.test(name))) return null;
+  const rows = (Array.isArray(world.mapLandmarks) ? world.mapLandmarks : []).flatMap(row => {
+    const hit = typeof row === 'string' ? /^F かまど \((-?\d+),(-?\d+),(-?\d+)\)/u.exec(row) : null;
+    return hit ? [{ at: `(${hit[1]},${hit[2]},${hit[3]})`, dy: Number(hit[2]) - Math.floor(feet.y) }] : [];
+  });
+  if (!rows.length || rows.some(row => Math.abs(row.dy) <= 5)) return null;
+  const near = [...rows].sort((a, b) => Math.abs(a.dy) - Math.abs(b.dy)).slice(0, 2);
+  const cobble = countMatching(counts, /^(?:cobblestone|cobbled_deepslate)$/u);
+  return `かまどまでの垂直距離: ${near.map(row => `${row.at} は足元より ${Math.abs(row.dy)} m ${row.dy > 0 ? '上' : '下'}`).join('・')}。furnace は 5 m を超えると使えない（理由: 手の届く範囲が約 5 m）。`
+    + `下で掘る間は下に炉を作る（丸石 8 個で作れる。今 ${cobble} 個）`;
+}
+
 export function fuelShortage(world: Record<string, unknown>, counts: ItemCounts, kinds?: readonly PlanKind[]): string | null {
   let items = 0;
   for (const [name, count] of counts) if (TO_SMELT.test(name)) items += count;
@@ -647,15 +675,58 @@ function ironIngotsWanted(now: PlanNode, counts: ItemCounts): number | null {
   return lacking > 0 ? lacking * 3 : null;
 }
 
-/** What the iron wanted comes to against the pack: the raw iron is smelted before it is an ingot, and a make of an iron thing waits for the ingots (the body answers it as missing: she was using that as a check). */
-function ironLedger(need: number, counts: ItemCounts): string {
+const IRON_ARMOUR: readonly (readonly [string, string])[] = [['helmet', '兜'], ['chestplate', '胸当て'], ['leggings', '脚当て'], ['boots', '靴']];
+
+/**
+ * run 8 (11/27): the first plan wrote "iron, then the bucket and armour" with `have:iron_ingot>=20`; the leggings and boots were made, the ingots went 13 -> 2, and the old
+ * ledger said "20 wanted, dig 17 more" in 84 of 100 decisions (24 hands). What the node makes, said as a fact of the pack, only when the node says it (a target that is armour
+ * or a tool, or a title that names the armour or the bucket) and the worn list is read; nothing when it is not read (no fact is made up).
+ */
+function madeThingsLine(now: PlanNode, counts: ItemCounts, worn: readonly string[] | null): string | null {
+  const parts: string[] = [];
+  const item = String(now.target?.item ?? ''), title = String(now.title ?? '');
+  const metal = /^(iron|diamond|golden|netherite)_(?:helmet|chestplate|leggings|boots)$/u.exec(item)?.[1] ?? (/防具/u.test(title) ? 'iron' : null);
+  if (metal && worn) {
+    const on = IRON_ARMOUR.filter(([slot]) => worn.includes(`${metal}_${slot}`)), off = IRON_ARMOUR.filter(([slot]) => !worn.includes(`${metal}_${slot}`));
+    parts.push(`${metal === 'iron' ? '鉄' : metal}の防具は ${on.length}/4 着ている${on.length ? `（${on.map(([, label]) => label).join('・')}）` : ''}${off.length ? `。まだ ${off.map(([, label]) => label).join('・')}` : ''}`);
+  }
+  if (/^(?:wooden|stone|iron|diamond|netherite)_(?:pickaxe|sword|axe)$/u.test(item)) parts.push(`${item} は${(counts.get(item) ?? 0) > 0 ? '持っている' : 'まだ無い'}`);
+  if (/バケツ/u.test(title)) parts.push(`バケツは${countMatching(counts, /(?:^|_)bucket$/u) > 0 ? '持っている' : 'まだ無い'}`);
+  return parts.length ? `この節が作る物の今: ${parts.join('・')}。` : null;
+}
+
+/**
+ * What the iron wanted comes to against the pack: the raw iron is smelted before it is an ingot, and a make of an iron thing waits for the ingots (the body answers it as missing: she was using that as a check).
+ * The number is the node's condition, not a stock to keep: making armour or a bucket uses the ingots up (run 8: 13 -> 2 and the node stayed unmet for 24 hands).
+ */
+function ironLedger(need: number, counts: ItemCounts, now: PlanNode, worn: readonly string[] | null): string {
   const ingots = countMatching(counts, /^iron_ingot$/u), raw = countMatching(counts, /^raw_iron$/u), rest = need - ingots - raw;
-  return `鉄の勘定: インゴット ${need} 要る（今 インゴット ${ingots}・生の鉄 ${raw}。生の鉄は炉で焼くとインゴット 1 個）。`
-    + (rest > 0 ? `あと生の鉄 ${rest} を掘って焼く。` : '生の鉄は足りている。炉で焼く。')
-    + 'インゴットが揃うまで、鉄で作る物（バケツなど）の make は材料不足で止まる。';
+  const says = /have:iron_ingot>=\d+/u.test(String(now.doneWhen ?? ''));
+  return `鉄の勘定: ${says ? `この節の条件はインゴット ${need} 本` : `バケツに要るインゴットは ${need} 本`}（今 インゴット ${ingots}・生の鉄 ${raw}。生の鉄は炉で焼くとインゴット 1 個）。`
+    + `作る物（防具・バケツなど）に使うとインゴットは減る。在庫を ${need} 本に保つ必要は無く、使って作る前提の数（作った後の在庫は条件の数に届かないことがある）。`
+    + (madeThingsLine(now, counts, worn) ?? '')
+    + (rest > 0 ? `作る物が残るなら、あと生の鉄 ${rest} を掘って焼く。` : '生の鉄は足りている。炉で焼く。')
+    + (says ? '節が作る物がそろい目的が済んでいるなら、plan.update で set state=done にして次の節へ進む。条件の数が今の目的に合わなくなったなら、plan.update で doneWhen を書き直してよい。' : '')
+    + 'インゴットが足りない間は、鉄で作る物（バケツなど）の make は材料不足で止まる。';
 }
 
 const IRON_MARK = /鉄鉱石\[(?:deepslate_)?iron_ore\]/u;
+
+/**
+ * run 8 (11/27): the iron she went for was one ore 16 m down beside water, while a clump of nine pieces was in the scan's row. The pieces and the depth of each, side by side, and
+ * why a clump short of the number wanted is not the pick. Facts from the landmark rows (「×N」「下 M」) and the scan row (「N個の塊」「階段 K 段」); a part not in a row is left out.
+ */
+function ironClumpWords(marks: readonly string[], lead: string, wanted: number | null): string {
+  const seen = marks.filter(line => IRON_MARK.test(line)).slice(0, 2).flatMap(line => {
+    const n = /×(\d+)/u.exec(line)?.[1], down = /下(\d+)/u.exec(line)?.[1], water = /水に近い|水の隣/u.test(line);
+    return n ? [`×${n}${down ? `・下 ${down}` : ''}${water ? '（水に近い）' : ''}`] : [];
+  });
+  const clump = /(\d+)個の塊/u.exec(lead)?.[1], stairs = /階段(\d+)段/u.exec(lead)?.[1];
+  const parts = [seen.length ? `見えている鉄 ${seen.join('・')}` : '', clump ? `走査の鉄 ${clump} 個の塊${stairs ? `・階段 ${stairs} 段` : ''}` : ''].filter(Boolean);
+  if (!parts.length) return '';
+  return `鉄の塊の個数と掘る段数: ${parts.join('／')}。${wanted !== null && wanted > 0 ? `要る生の鉄は ${wanted} 個。` : ''}`
+    + '要る個数に足りない塊（×1 など）を選ぶと、掘り終えてもまた別の塊を探して往復することになる（理由: 塊ごとに掘る段と戻る道がかかる）ので、個数が足りる塊を先に選ぶ。';
+}
 
 /**
  * end1109o09: the now was the iron armour, no iron ore and no coal on the map, and twice by day she waited about 4 minutes for the night
@@ -679,7 +750,8 @@ export function ironSearchLine(world: Record<string, unknown>, counts: ItemCount
   if (lead) {
     // Iron the map shows (open to the air, near her) is mined where it is: the scan's nearest iron is the nearest to the scan's base, not to her, and its hands would take her away from it.
     const seen = marks.some(line => IRON_MARK.test(line));
-    return (need !== null ? ironLedger(need, counts) : '') + `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。`
+    return (need !== null ? ironLedger(need, counts, now, world.worn === undefined ? null : wornItems(world.worn)) : '') + `鉄鉱石の当て（${(scan.mark ?? '').replace('・今は未確認', '')}）: ${lead.slice(0, 160)}。`
+      + ironClumpWords(marks, lead, need !== null ? need - countMatching(counts, /^(?:iron_ingot|raw_iron)$/u) : null)
       + `埋まった近い鉄は go で掘り進んで mine すると早い（階段で 40 マス下りると約 8 分で 2 個、近い埋まった鉄へは約 13 秒で 3 個だった）。${seen ? '' : nearIronHands(lead, feetOf(world))}`
       + `空気に面した遠い鉄は、近い鉄が要る数に足りない時だけ。y=16 へ下りるのは、近くに鉄が無い時だけ。${MINE_FORM}`;
   }
