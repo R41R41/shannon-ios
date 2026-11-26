@@ -70,7 +70,7 @@ describe('(2) the eyes line is facts and a reason, shown only for 10 or more eye
     const text = input(run8World());
     expect(text).toContain('エンダーアイ 11 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）');
     expect(text).toContain('枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 11/12');
-    expect(text).toContain('ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く');
+    expect(text).toContain('ベッド・黒曜石・弓矢（とそれ用の鉄）の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く');
     expect(text).not.toContain('最初の節はストロングホールドを探す節');
     // the facts side's shortage line is not removed
     expect(text).toContain('準備の不足（');
