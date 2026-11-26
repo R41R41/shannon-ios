@@ -1075,6 +1075,7 @@
     "surfaces/stream/streamChatPosts.ts",
     "surfaces/stream/streamChooser.ts",
     "surfaces/stream/streamContract.ts",
+    "surfaces/stream/streamFeed.ts",
     "surfaces/stream/streamGameTalk.ts",
     "surfaces/stream/streamGate.ts",
     "surfaces/stream/streamLedger.ts",

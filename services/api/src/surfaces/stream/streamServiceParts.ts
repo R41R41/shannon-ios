@@ -1,7 +1,7 @@
 import type { CompanionStateSnapshot } from '@shannon/cognition';
 import type { ShannonChatModel } from '../../infra/models/chatModelContract.js';
 import type { StreamFeeling } from '../../mind/emotion/streamFeeling.js';
-import type { CommentaryFactory } from './streamContract.js';
+import type { CommentaryFactory, StreamSessionView, StreamSummary } from './streamContract.js';
 import type { StreamGate } from './streamGate.js';
 import type { StreamFeed } from './streamFeed.js';
 import type { StreamMouth } from './streamMouth.js';
@@ -33,4 +33,13 @@ export interface StreamServiceParts {
   log?: (line: string) => void;
   /** The wiring's timer calls `tick` every this many ms; none while 0 (tests). */
   tickMilliseconds?: number;
+}
+
+/** One started stream as the service holds it (kept here so that `streamService.ts` stays under the 500-line ceiling). */
+export interface StreamSession {
+  /** The end in progress: a second ask for it (the ear's retry) is the same end. */
+  ending?: Promise<{ stream: StreamSessionView; summary: StreamSummary }>;
+  view: StreamSessionView;
+  startedMs: number;
+  endedMs?: number;
 }

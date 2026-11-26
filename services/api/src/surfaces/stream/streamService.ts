@@ -5,7 +5,7 @@ import {
   type StreamBroadcast, type StreamControl, type StreamLineKind, type StreamLinePlan, type StreamReceipt, type StreamSessionView,
   type StreamStartInput, type StreamSummary,
 } from './streamContract.js';
-import type { StreamServiceParts } from './streamServiceParts.js';
+import type { StreamServiceParts, StreamSession as Session } from './streamServiceParts.js';
 import { StreamAuthor, type WrittenLine } from './streamAuthor.js';
 import { chooseComments, type ChosenComments } from './streamChooser.js';
 import { checkedLine } from './streamGate.js';
@@ -25,13 +25,6 @@ import type { WriterComment, WriterPurpose } from './streamWriter.js';
  * (`StreamAuthor`) and given nothing of the owner's private life. The chat's words live in memory until the stream ends. Time and every model
  * are injected; `tick()` is what a timer calls, so a test steps it by hand and `settle()` waits for the work in flight.
  */
-interface Session {
-  /** The end in progress: a second ask for it (the ear's retry) is the same end. */
-  ending?: Promise<{ stream: StreamSessionView; summary: StreamSummary }>;
-  view: StreamSessionView;
-  startedMs: number;
-  endedMs?: number;
-}
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 const TTL: Readonly<Record<StreamLineKind, number>> = {
