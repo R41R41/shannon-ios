@@ -176,6 +176,8 @@ export function timingLine(timing: { wakeMs: number; leftMs: number }, firstLeft
  * did not have, and says what a longer move is. Said only when her last moves were short (a median under 14 m over 3 or more).
  */
 export const SHORT_HOP_M = 14;
+/** The line's first words: the plan made again is not shown the line unless short moves are what stopped her (`minecraftLlmcReplanBrief.ts`). */
+export const HOPS_LINE_HEAD = '直近の go は ';
 export function hopsLine(hops: readonly number[], decisionsMs: readonly number[]): string | null {
   const recent = hops.slice(-5);
   if (recent.length < 3) return null;
@@ -183,7 +185,7 @@ export function hopsLine(hops: readonly number[], decisionsMs: readonly number[]
   const metres = median(recent);
   if (metres >= SHORT_HOP_M) return null;
   const decision = decisionsMs.length ? Math.max(2, Math.round(median(decisionsMs.slice(-10)) / 1000)) : 3;
-  return `直近の go は ${recent.map(m => Math.round(m)).join("・")} m（中央 ${Math.round(metres)} m で約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている。移動の go は 15 m 以上（地図の外の本当の行き先でよい）にするか、go を 2〜3 本 1 つの act に並べる`;
+  return `${HOPS_LINE_HEAD}${recent.map(m => Math.round(m)).join("・")} m（中央 ${Math.round(metres)} m で約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている。移動の go は 15 m 以上（地図の外の本当の行き先でよい）にするか、go を 2〜3 本 1 つの act に並べる`;
 }
 
 /**
