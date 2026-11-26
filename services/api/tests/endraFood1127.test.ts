@@ -30,6 +30,8 @@ describe('(a) a furnace that is cooking is food, said beside the 0 points', () =
   it('is not food when the furnace smelts iron, is in another dimension, or the shape is unknown', () => {
     expect(furnaceFoodOf([{ ...PORK_JOB, input: 'raw_iron', expects: 'iron_ingot×8', count: 8 }], FOOD_POINTS)).toBeNull();
     expect(furnaceFoodOf([{ ...PORK_JOB, status: 'different_dimension' }], FOOD_POINTS)).toBeNull();
+    expect(furnaceFoodOf([{ ...PORK_JOB, unfueledInputCount: 20 }], FOOD_POINTS)).toBeNull();
+    expect(furnaceFoodOf([{ ...PORK_JOB, unfueledInputCount: 10 }], FOOD_POINTS)!.words).toContain('焼き豚肉 10');
     expect(furnaceFoodOf('x', FOOD_POINTS)).toBeNull();
   });
   it('the vitals line and the shortage say it; without a job they are as before', () => {

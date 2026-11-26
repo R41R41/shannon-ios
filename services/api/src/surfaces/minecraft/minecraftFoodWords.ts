@@ -77,7 +77,9 @@ export function furnaceFoodOf(jobs: unknown, values: Readonly<Record<string, num
     const expects = typeof job.expects === 'string' ? /^([a-z_]+)(?:\s*[×x]\s*(\d+))?/u.exec(job.expects.replace(/^minecraft:/u, '')) : null;
     const input = typeof job.input === 'string' ? job.input.replace(/^minecraft:/u, '') : '';
     const cooked = expects?.[1] ?? COOKED_FOOD[input];
-    const count = expects?.[2] ? Number(expects[2]) : typeof job.count === 'number' ? job.count : 0;
+    const total = expects?.[2] ? Number(expects[2]) : typeof job.count === 'number' ? job.count : 0;
+    // the ones the fuel does not reach are not cooking (the ledger says so): not counted as food coming
+    const count = total - (typeof job.unfueledInputCount === 'number' && job.unfueledInputCount > 0 ? job.unfueledInputCount : 0);
     const each = cooked ? values[cooked] : undefined;
     if (!cooked || !COOKED_NAMES.has(cooked) || each === undefined || !Number.isFinite(each) || !(count > 0)) continue;
     const gain = round1(each * count), seconds = Math.max(0, Math.round(job.remainingEstimateMs / 1000));
