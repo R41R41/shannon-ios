@@ -1069,6 +1069,7 @@
     "surfaces/minecraft/minecraftTaskMetrics.ts",
     "surfaces/minecraft/minecraftTransientBody.ts",
     "surfaces/minecraft/minecraftTransientObservation.ts",
+    "surfaces/minecraft/minecraftTravelSpeed.ts",
     "surfaces/minecraft/minecraftWoodAdvice.ts",
     "surfaces/minecraft/minecraftWoolFacts.ts",
     "surfaces/minecraft/minecraftWorkingArbiter.ts",
