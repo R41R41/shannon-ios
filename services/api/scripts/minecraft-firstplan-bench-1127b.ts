@@ -108,14 +108,16 @@ function vmScript(outJson: string, cap: number): string {
   return ['#!/usr/bin/env bash', 'set -u', `PAYLOAD='${payload}'`, "read -r -d '' JS <<'JSEOF'", NODE_RUNNER.trim(), 'JSEOF', 'printf \'%s\' "$PAYLOAD" | base64 -d | node -e "$JS"', ''].join('\n');
 }
 
-interface Result { name: string; text?: string; costUsd?: number; usage?: { output_tokens?: number }; skipped?: string; failed?: string }
+interface Result { name: string; text?: string; stop?: string; costUsd?: number; usage?: { output_tokens?: number }; skipped?: string; failed?: string }
 function score(resultsFile: string, casesFile: string): unknown[] {
   const cases = (JSON.parse(fs.readFileSync(casesFile, 'utf8')) as { cases: Case[] }).cases;
   const results = fs.readFileSync(resultsFile, 'utf8').split('\n').filter(line => line.startsWith('RESULT ')).map(line => JSON.parse(line.slice(7)) as Result);
   return results.map(result => {
     const spec = cases.find(item => item.name === result.name)!;
     if (!result.text) return { name: result.name, note: result.skipped ?? result.failed ?? 'no text' };
-    const answer = strongholdFirst(JSON.parse(result.text), spec.eyes) as { nodes: Array<{ id: string; parent: string; title: string; kind: string; doneWhen?: string; where?: string }> };
+    let parsed: unknown;
+    try { parsed = JSON.parse(result.text); } catch { return { name: result.name, group: spec.group, note: `unreadable answer (stop ${result.stop ?? '?'}, ${result.usage?.output_tokens ?? '?'} output tokens)`, costUsd: result.costUsd }; }
+    const answer = strongholdFirst(parsed, spec.eyes) as { nodes: Array<{ id: string; parent: string; title: string; kind: string; doneWhen?: string; where?: string }> };
     // The tree in the order it was written (a model may put one root over everything: the nodes are counted in order, not only the top level).
     const flat = answer.nodes;
     const stronghold = flat.findIndex(node => node.kind === 'stronghold');
