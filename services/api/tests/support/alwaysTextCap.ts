@@ -19,5 +19,8 @@
  *   (about 29 llmc, about 15 real). The text measures 10,633, the cap is 10,650.
  * - 11/26 (the end-dragon run on Haiku: 316 acts of one hand, the body idle about 3 tenths of the time): the deciding rule says to stack the known follow-up hands in one act and why
  *   (it replaces the older line's first sentence; about 23 llmc, about 11 real). The text measures 10,673, the cap is 10,690.
+ * - 11/26 (the end-dragon run, the 4th: three or four hoglins killed her from 20 in about 13 s; the urgent decision had been told to put attack untilDead first): the urgent rules say to count
+ *   the fight (hits = health / damage per hit, about 0.6 s a hit, the enemies near keep hitting) before putting the attack first, and the route line says a stand on the enemy's side is no retreat
+ *   (about 115 llmc, about 45 real). The text measures 10,788, the cap is 10,800.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_690;
+export const ALWAYS_TEXT_CAP_LLMC = 10_800;

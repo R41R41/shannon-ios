@@ -59,6 +59,8 @@ const URGENT = [
     + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
   // try1124b (the owner's test 11/24: 15 of 38 acts were replaced by the next decision before they arrived; in a replay the moves were 1 to 6 m in 14 of 15 answers).
+  // Run of 11/26 (4th): the fixed urgent line said 「attack untilDead を先頭」 for a hoglin (40 health) with a wooden sword.
+  '- Count a fight before attack untilDead: hits = enemy health / your sword\'s damage (wooden 3.4 measured), about 0.6 s a hit, and every enemy near you keeps hitting meanwhile.',
   '- A move away is one go or walk of 10 blocks or more: a move of 1 to 4 blocks leaves the enemy as near, and the next decision replaces it.',
 ].join('\n');
 
@@ -77,7 +79,7 @@ const LIVE = [
     + 'road, meter (dragon task only): road is the order of the top-level sections (✓ done, ◀ now, （止）stopped, （未・飛ばした）an open section before the current one); meter is the seconds since the start and 「あと」 (remaining) or 「遅れ」 (behind) for the next milestone (a preparation milestone comes with the current counts).',
   '- around: the 1-step cells in the 8 directions around the feet, the cell above the head and the cell below the feet (without digging or placing; up 1, down 3; a diagonal only when the corner columns are open), and the horizontal 6 cells beyond them (full coordinates). '
     + 'A place not written is solid rock (dig through it) or not on the map (unknown). 「掘る (x,y,z) 石の類（溶岩の隣: …）」 is a cell where lava flows in when it is opened.',
-  '- route: the road to the current section\'s ＠coordinates (the nearest standing position reachable without digging, waypoints, k cells to dig). It does not consider enemies or health. If the destination is off the map, the road beyond is unknown. '
+  '- route: the road to the current section\'s ＠coordinates (the nearest standing position reachable without digging, waypoints, k cells to dig). It does not consider enemies or health (a stand on the enemy\'s side is no retreat).If the destination is off the map, the road beyond is unknown. '
     + 'liquid, obsidian: the distance to water, lava and obsidian in order of nearness, whether it can be reached (up to 5 m), and the blocks between (obsidian only in the obsidian section; a cell next to both water and lava = opening it makes them meet).',
   '- investigation: the answers of the probe the head ran after a surprise. stops, jobs, events: the recent stops; outside jobs such as furnaces with the seconds left; what happened after the previous decision.',
   '- map: the map by layer (symbols in the legend below). landmarks: landmarks (one marked [overworld] is in another dimension; directions and up/down are from the current feet). scan: the body\'s scan (once, after a change such as a dimension change). '
@@ -317,14 +319,18 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // Fix 11/13 (N1, N6): the way back is the way come.
     // 1115b c1: a body that began in the Nether read the way back's first stop as a gate (d0375, d0472, d0498); the body says 「（ゲートから）」 only for a noted gate.
     '- ネザーから戻る時: 来た道の最初の点がゲートなのは「来た道（ゲートから）」と書いてある時だけ。「来た道」だけなら最初の点は始まった所で、ゲートではない（ゲートの座標は「控え」の行だけを信じる）。'
-      + '「来た道（ゲートから）」があれば、250m の直の go を出さず、その着地点を逆順に go で重ねる（canDig だけ、canPlace は付けない）。'
+      + '「来た道（ゲートから）」は go の着地点を時刻順に並べた列で、戻りの go の着地点も入っている（往きの道だけではない）。使うのは、ゲートまでの距離が縮む向きの点だけ'
+      + '（各点に「ゲートまで N m」が付いていれば、今のゲートまでの距離より N が小さい点。付いていなければ、「控え」の行のゲートの座標との距離を自分で比べる）。'
+      + 'ゲートへの直の go も通れた実績がある（169m・116m を 1 手で進んだ）ので、直の go でも、止まった所から縮む向きの点へ重ねる go でもよい（どちらも canDig だけ、canPlace は付けない）。'
       + '往きは掘 0 で 3 m/s で通れた道で、足場が分かっている。go が no_floor で止まり、結果に「立てる最寄り (x,y,z)」が付いたら、行き先をその座標に寄せて出し直す。',
     '- sprint は書かない時、体が安全な所だけ走る（溶岩・火・マグマが 2 マス内に無く、隣に maxDrop を超える崖が無い所）。'
       + '走らせたくない時だけ sprint:false。sprint:true は常に走る指定で、3 マスの溝の走り跳びには sprint:true を書く。',
     '- ソウルサンドの上は歩幅が 4 割（時間 2.5 倍）。go の経路探索は、回り道が少し長いだけなら避けて回り、他に道が無ければ渡る。',
     '- 遠い go（要塞が見えるまでの道）は最初から canDig=[netherrack,basalt,blackstone]（要塞の床・壁へ入るなら nether_bricks も）・canPlace=[cobblestone,netherrack]'
       + '・seconds 100〜120 が目安。maxDig・maxPlace は省けば体が決める。'
-      + 'ただし maxPlace は「いま持っている置ける物の数 − 32」まで（1 回の go で使い切ると、橋の途中で置く物 0 になって進めも戻れもしない）。'
+      + 'maxPlace は置く数の上限で、実際に置く数は道が決める。上限が道の要る数より小さいと、道が残りを超えた所で体が limit_place で止まり、同じ所から出し直しになる'
+      + '（足場が少ない所で limit_place・dead_end が続いた実走がある）。だから持ち数の合計（live の「置ける足場」の行）まで上げてよい。'
+      + 'ただし空所・溶岩の上を渡る go は「持っている置ける物の数 − 32」まで（1 回の go で使い切ると、橋の途中で置く物 0 になって進めも戻れもしない）。'
       + '出る前に丸石か netherrack を 64 個以上持つと橋の材料になる。'
       + 'ネザーでは掘る経路の費用が 2.5 倍で、体は開けた所や丘の上を選びやすく、掘った netherrack の補充は当てにしにくい。',
     // Rig end1109f11 (random world): two far gos with maxPlace 60 and 80 laid all 128 cobblestone over a void, leaving her on a plank bridge with nothing to place.
@@ -363,7 +369,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // S8's lab of 11/5 (go 204f7aa): 144 m at 1.02 m/s, 249 m at 1.49 m/s; a hoglin took her from 20 to 7 near the warped forest.
     '- 速さの目安は 1 ブロック 0.7〜1.0 秒（岩をくぐる所は 1 秒前後。溶岩の岸では溶岩よけの反射が go を止めることがある）。溶岩上の壁付きの橋は、床だけの橋より材料を多く使う。',
     // Rig end1109f15: three hoglins in a crimson forest at the start; she fought one by this line's "先に倒す" and four hits took her from 20 to 0 in 70 s.
-    '- 開けた所を走るので、ホグリン（体力 40・1 撃 5 前後）に寄られやすい。斬り合わない（f15：4 撃で体力 20→0）。見えたら go の行き先をそれから離す。寄られたら 2 段積んで上に立つ（届かない）。',
+    // Run of 11/26 (4th): three or four hoglins killed her from 20 in about 13 s; the head's own urgent thought said 「南はホグリンに近い。西へ」 but the reflex held the body. A wooden sword measured 3.4 a hit (5 hits: 40→22.8).
+    '- 開けた所を走るので、ホグリン（体力 40・近接が強い。1 撃 3.5〜5 前後）に寄られやすい。木の剣は 1 打撃 3.4（実測）なので 1 頭に約 12 打撃（約 7 秒）、石の剣でも約 8 打撃かかり、その間に何度も殴られる。'
+      + '木か石の剣では何頭も相手にできない（f15：4 撃で体力 20→0。3〜4 頭に囲まれて 20→0 の実走もある）。斬り合わない。見えたら止まって、ホグリンから離れる向きへ go の行き先を替える（行き先も中継点も、ホグリンのいる側に置かない）。寄られたら 2 段積んで上に立つ（届かない）。',
     '- go が止まったら、体の行の言う通りに直して同じ先へもう一度 go する: limit_dig・limit_place は上限を増やす（「maxDig を増やす」）、dead_end の「が nether_bricks で登れない」は'
       + '「canDig に足す」、no_blocks は行が名指しする物（「荷の netherrack×99 を canPlace に足す」）を足す、「置く物 cobblestone を N 個置いて使い切った」は置く物を足すか補う。'
       + 'low_floor と「置いたブロックが世界に現れない」の時は、同じ go をもう一度で進んだ。マグマの上で反射が体を握っている間（urgent の「反射の最中」）は、送った手は動かない'
