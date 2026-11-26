@@ -8,7 +8,7 @@ import { carried } from './minecraftConditions.js';
  * reported; it names no way to get them.
  */
 export const PEARL_TARGET = 13;
-const GOLD_PER_PEARL = 15.6;
+export const GOLD_PER_PEARL = 15.6;
 
 /** The line for a decision in the Nether with rods in hand and pearls missing, or null. Both ways are set side by side in the same units
  * (end1108c and h28 in a warped forest: with no gold the line still named only the trade, and Haiku twice left the endermen to dig nether
