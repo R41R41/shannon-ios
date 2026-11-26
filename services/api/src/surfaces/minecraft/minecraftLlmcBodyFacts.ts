@@ -14,6 +14,7 @@ import { wantsFood, type FactsContext } from './minecraftLlmcFacts.js';
 import type { PlanKind, PlanTree } from '@shannon/mind';
 import { meterLine, roadLine } from './minecraftLlmcRoad.js';
 import {
+  beforeStronghold,
   feetIn,
   foodFirstLine,
   foodLeads,
@@ -194,11 +195,11 @@ export function readinessParts(
   // end1109o03: the night with no bed: the choices before the plan's now (`nightChoiceLine`); end1109o04: by day with a bed, the day is the plan's (`dayBedLine`).
   const done = doneFacts(observation);
   const choice = planNow ? nightChoiceLine(facts.world, facts.counts, facts.dimension, (!!done && undergroundInOverworld(done)) || roofedInRock(facts.world),
-    facts.food, llmc.singleRequest !== true, llmc.singleRequest === true) : null;
+    facts.food, llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, llmc.singleRequest === true) : null;
   // No bed by day is said too (a night with no bed cost two deaths and the materials in a run), unless a plan node already makes it; and the night's sleep in one line
   // beside the plan's now (a skip on, a booking the body may keep, what a sleep costs), so the sleep is weighed against what the node is for.
   const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|\bbed\b/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
-  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true, () => dayBedAdviceTold(taskId))
+  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, () => dayBedAdviceTold(taskId))
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
   const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
@@ -217,12 +218,23 @@ export function readinessParts(
     : undefined;
   return {
     ...(planNow ? { planNow: huntWaits ? `${[meanwhile, night].filter(Boolean).join('。')}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
-      : [meanwhile, night, first].filter(Boolean).length ? `${[meanwhile, night, first].filter(Boolean).join('。')}。その後に今の節 ${planNow}` : planNow } : {}),
+      : planNowOrdered(planNow, meanwhile, night, first, !!choice) } : {}),
     ...(shortage ? { shortage } : {}),
     ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes, facts.at ?? null), route),
     ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}),
   };
+}
+
+/**
+ * Run 9 (11/27): the sleep and clock paragraph (700 to 1,200 characters) stood before the current node in every decision, and the node's line was read after a long
+ * explanation of when to sleep; the head's 70 hands never served the first node. The furnace's hands and the food's first step still go before the node (they are about
+ * the node's own hands); the sleep and bed paragraph goes after it, unless it is the night's choice (a night with no bed, a few minutes before dark: said first, as it was).
+ */
+export function planNowOrdered(planNow: string, meanwhile: string | null, night: string | null, first: string | null, nightIsChoice: boolean): string {
+  const before = [meanwhile, nightIsChoice ? night : null, first].filter(Boolean);
+  const head = before.length ? `${before.join('。')}。その後に今の節 ${planNow}` : planNow;
+  return night && !nightIsChoice ? `${head}。${night}` : head;
 }
 
 const ARMOUR_SLOTS: ReadonlyArray<readonly [string, string]> = [['helmet', '頭'], ['chestplate', '胴'], ['leggings', '脚'], ['boots', '足']];
@@ -252,7 +264,9 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）`);
   const eyes = count('ender_eye');
   if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
-  return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数）: ${lacks.join('・')}` : null;
+  // The same sentence is in the heading just before (`END_PREP_AFTER_STRONGHOLD`); here it is said short, for the line read alone.
+  const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。防具の欠け・食料・掘る道具は別' : '';
+  return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数${behind}）: ${lacks.join('・')}` : null;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { detourLines, noteGoes } from './minecraftLlmcDetour.js';
+import { noteSleepResult } from './minecraftLlmcSleepHold.js';
 import { fightRepeatLines, noteFights } from './minecraftLlmcFightRepeat.js';
 import { factsContext,withPlanFacts,planTreeOf,readinessParts,currentNodeOf,withRecoveryFact,roadParts } from './minecraftLlmcBodyFacts.js';
 import type { LlmcBodyParts,JudgeParts } from './minecraftLlmcBodyFacts.js';
@@ -174,6 +175,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
     events.noteFailures(receipt?.result, parts.observe(), item.input);
     noteGoes(parts.taskId, currentNodeOf(parts.llmc)?.id, item.input, receipt?.result, now());
     noteFights(parts.taskId, item.input, receipt?.result, parts.observe(), now());
+    noteSleepResult(parts.taskId, receipt?.result, parts.observe(), now());
   });
   let observation: BodyObservation | null = null, bodyAge: string | null = null, reasons: string[] = [];
   /** Continue contract 5: the frame the last context read, as the commands name it (null: it had no life to name). */

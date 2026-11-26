@@ -27,7 +27,7 @@ import { ATTACK_SECONDS_MAX, ENDERMAN_FIGHT_SECONDS_MAX, FIGHT_SECONDS_MAX } fro
 const GOAL = [
   '## Purpose and yardstick (目的と物差し)',
   `- The purpose is the task's goal. The owner's yardstick is speed: a dragon kill within 3 hours (ideally 1.5 hours). Aim to enter the Nether in about ${Math.round(NETHER_BY_SECONDS / 60)} minutes (preparation included), moving smoothly.`,
-  '- Order of priority: avoid imminent danger → meet the preparation requirements → advance quickly to the goal (staying alive matters as much as speed: a death loses items and time, and costs more time than caution does). '
+  '- Order of priority: avoid imminent danger → meet the preparation requirements (準備の決まり: before descending, before the gate; the End check may wait until behind the stronghold) → advance quickly to the goal (staying alive matters as much as speed: a death loses items and time, and costs more time than caution does). '
     + 'Never stop or complete early because of time. The yardstick is a guide, not something that decides a hand.',
 ].join('\n');
 
@@ -113,13 +113,13 @@ const FALLS = [
 ].join('\n');
 
 /** The coordinator, 2026-11-03 (leg 2's plan 5.10: the sea and the night on the 1.4 km walk, the phantoms for a body that has not slept). */
-const LONG_WALK = '- 地上の長い歩き（1 km 超）は朝に出る。ベッドで寝ると夜を飛ばせる。';
+const LONG_WALK = '- 地上の長い歩き（1 km 超）は朝に出る（要塞が今の節なら適用しない）。ベッドで寝ると夜を飛ばせる。';
 /** The coordinator's outside view of 11/4 (night-rules-external-20261104.md): the hour to stop starting, the night before the armour, the climb. */
 const PREP_NIGHT_STOP = '- ベッドがあれば、11500 を過ぎて地上にいたら長い移動・探索を始めず、洞窟から離れた岩の中に 1×2 を掘って塞ぎ、12542 に寝る（敵は壁越しでも水平 8・上下 5 で寝させない）。'
   + 'sleep の手は起きたらベッドを拾い直す。鉄の兜・胸の前は夜に地上を歩かない。地上に着くのが 12500〜23500 になるなら岩の中で寝てから上る。';
 /** Run qr7 (a cake, 65 moves): with no bed and no weapon the night's line may have been read as 「dig a hole and wait」, which does not bring the morning (a hypothesis, not confirmed). */
 const NO_BED_NIGHT = '- ベッドが無い間は、岩の中で待っても朝は早く来ない（時間が過ぎるだけ）。穴に入るのは、石のツルハシがあり、地下で鉱石を掘る作業がある時に、塞いだ縦穴を下りる入口にする場合だけ（夜の促しの A と同じ。待つためではない）。'
-  + 'それ以外の夜は、囲いか水辺・草原の近くでできる仕事（作業台での製作、牛や鶏の近くの作業）を進め、洞窟と遠出だけ朝にする。理由: 穴で待つのは時間が過ぎるだけで、実走では夜の穴に 13 回入り、掘れずに止まった。';
+  + 'それ以外の夜は、囲いか水辺・草原の近くでできる仕事（作業台での製作、牛や鶏の近くの作業）を進め、洞窟と遠出だけ朝にする（要塞が今の節なら遠出も朝にしない）。理由: 穴で待つのは時間が過ぎるだけで、実走では夜の穴に 13 回入り、掘れずに止まった。';
 /**
  * With 12 eyes on the ground the stages are prep and stronghold at once, and prep's "walk long ways in the morning" and "stop starting at 11500"
  * went in with the stronghold's "go on through the night, no hole before dark" (the outside review of 11/10, Q1; end1109s14's detour to a village
@@ -165,7 +165,10 @@ const PLAN = [
   '- The plan is yours (change the order, add, split, blocked and reason). Send plan_update only when something is done, stopped or changed. Keep the order (example: the iron sword is made before going to the Nether). '
     + 'When you skip or postpone a section, write the reason in reason.',
   '- When the body starts an item of another section, the current section may move to that section (to move it back: plan_update\'s current). It does not move while the current section is an unmet preparation section.',
-  '- Fill a shortage before fights or moving deeper (completion conditions and how children close: the plan_update description).',
+  '- Fill a shortage before fights or moving deeper (completion conditions and how children close: the plan_update description). '
+    + 'エンドの点検物の不足は、今の節が stronghold の間は奥への移動に数えない（道中で取れる分でよい）。',
+  '- 今の節が要塞（stronghold）の間は、その手を先に出す。別の節の手は、同じ道の途中にある・危険や夜の囲い・今の節が止まっている・道中や要塞の中で身を守る物（防具の欠け・食料・つるはし）を手元の材料で数分で作れる、のどれかの時だけ。どれかを why に書く'
+    + '（理由: 別の節を先にした実走は、要塞へ 1m も近づかないまま時間が過ぎた）。',
 ].join('\n');
 
 /** The text every decision reads (the knowledge part of the cached system text). */
@@ -534,7 +537,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- ストロングホールドへの道は地上とネザー経由の 2 つ。',
     // end1108b S9 (11/8): the intersection lay 1,375 m away across a sea; she took the sea for a wall (「海の上は渡れない」「橋で届く量ではない」),
     // tunnelled and bridged in 30 m legs at 0.5-0.8 m/s, and went for a gate, flint and gold instead. The same body swam the sea at about 3 m/s.
-    '- 海・川・湖は泳いで渡れる。go に waterOk を付けると、体は水面を泳いで進む（実測で約 3 m/s。深い海でも歩きとほぼ同じ速さ）。'
+    '- 海・川・湖は泳いで渡れる。go に waterOk を付けると、体は水面を泳いで進む（速さは水の割合で変わる。海は 0.5〜1 m/s（7 回目の実測）で、歩きの 2〜2.5 m/s より遅いが、橋を架けるより速い）。'
       + 'waterOk の無い go は水を避けて足場を置く道（橋）を探し、置く数の上限で止まる。海に橋を架けない・海の下を掘って進まない。walk は泳がない。',
     '- 交点が海の向こうにあることは、地上の道をやめる理由にならない。ゲート・火打ち金・金の防具がそろっていないなら、ネザー経由へ切り替えず、go waterOk で交点へ向かう。',
     // end1109s02 S9 (11/9): the first legs toward the sea went without waterOk (replay of the captured decision: 0/5 with waterOk);
@@ -567,8 +570,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '精密な線では最初は最後の線の横へ 24〜32m が次の投げ位置の案で、交点が出ない時は帳簿の案が 200m などへ広がる。',
     '- 精密な線 2 本は交角 0.5° 以上なら交点の候補になり、狭い角ほど誤差の見積りが大きくなる（約 1,460m・0.9° では ±90m 前後）。',
     '- 最初の 3 つの要塞は原点 (0,0) から 1,280〜2,816m の輪の上にあり、アイは一番近い要塞へ飛ぶ。交点がこの輪から大きく外れたら向きや帳簿を疑う。',
-    '- 交点が出たら、もう投げない: 交点まで歩き、mc_probe kind=frames radius=128 で枠を探す（地表から地下の枠が見える）。アイは枠 12 にそのまま要り、投げると 5 回に 1 回は割れる。'
-      + '投げ直すのは、交点の誤差が 128m を超える時（交点の 100m 手前で）と、交点の 128m 内まで来ても枠が見えない時の 1 回（沈めば要塞は真下）。'
+    '- 交点が出たら、もう投げない（誤差が 128m 以内の時。広い間は下の通り）: 交点まで歩き、mc_probe kind=frames radius=128 で枠を探す（地表から地下の枠が見える）。アイは枠 12 にそのまま要り、投げると 5 回に 1 回は割れる。'
+      + '誤差が 128m を超える間は、目 2 本の角度差が小さい（7 回目は 0.7° で ±175m）ので、交点の 300〜500m 手前ごとに 1 本投げ直して絞る（live の帳簿の「近づいたら…から投げ直す」の位置はその最後の 1 本。要塞が手前や奥へずれていても見つけられる。割れる分は目の余裕で見込む）。'
+      + '誤差が 128m 以内になってからは、交点の 128m 内まで来ても枠が見えない時の 1 回だけ（沈めば要塞は真下）。'
       + '交点（24m 内）に着いても枠が見えない時も、そこから投げていなければ 1 回投げて向きを確かめる（同じ所からは投げ直さない）。',
     '- 目玉が真下へ沈んだ（down）所、または 12m 足らずで止まった（arrived）所が要塞の入口。',
     '- ポータルの部屋は入口から 7〜72 ブロック離れていた（測った世界では）。',

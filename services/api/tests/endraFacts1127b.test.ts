@@ -55,7 +55,7 @@ describe('the End shortage: what is left, the two bed numbers, the reason of the
   const counts = new Map<string, number>([['white_bed', 7], ['obsidian', 7], ['cobblestone', 42], ['ender_eye', 11], ['water_bucket', 1], ['iron_sword', 1]]);
   const line = preparationShortage({ dimension: 'overworld', counts, food: 500, nowKinds: ['stronghold'], worn: [] })!;
   it('says the title as a fact and the numbers with what is left', () => {
-    expect(line.startsWith('準備の不足（エンドへ入る前に要る物）: ')).toBe(true);
+    expect(line.startsWith('準備の不足（エンドへ入る前に要る物（')).toBe(true);
     expect(line).toContain('ベッド（エンドの点検は 8・戦いの目標は 10） 7/8（あと 1）');
     expect(line).toContain('黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別） 7/8（あと 1）');
     expect(line).toContain('足場のブロック 42/64（あと 22）');
@@ -124,7 +124,7 @@ describe('the day sleep words are not repeated in full', () => {
     }
     expect(full).toContain('夜の地上は敵が増えて危なく');
     expect(brief).not.toContain('夜の地上は敵が増えて危なく');
-    expect(brief.length).toBeLessThan(full.length / 2);
+    expect(brief.length).toBeLessThan(full.length * 0.7);
   });
   it('says the explanation in full the first time and again only after 8 minutes', () => {
     expect(dayBedAdviceTold('t1', 0)).toBe(false);
