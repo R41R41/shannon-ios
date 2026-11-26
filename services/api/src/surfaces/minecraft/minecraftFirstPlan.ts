@@ -332,7 +332,8 @@ function readinessInput(world: Record<string, unknown>, journeyReadiness?: boole
   const at = record(world.position), feet = at && typeof at.x === 'number' && typeof at.z === 'number' ? { x: at.x, z: at.z } : null;
   // Run 7 (11/27): the lines she threw before this plan (the body keeps them on the world): the point they give, as a guide, is a fact of the first plan too.
   const thrown = dimension === 'overworld' ? eyeLedgerFact(world.eyeThrows, feet, now) : [];
-  return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+  const netherEyes = dimension === 'the_nether' ? eyesInHand(world) : null;
+  return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 
 /**
@@ -380,6 +381,17 @@ const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オー�
   (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
   '投げて落ちたアイは拾う。' +
   'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く（防具の足りない部位・食料・原木を足す節も同じ位置）';
+/**
+ * Run 7 (11/27): a task begun in the Nether with 13 eyes. With the overworld-only rule in the system, Haiku weighed whether it applied (its thinking filled the 9,000 output tokens in 2 of 4 asks with the
+ * new system; with the old system 4 of 4 took 2.8 to 4.2 thousand): the Nether's case is said as a fact of its own, with the same reason.
+ */
+const EYES_IN_NETHER = (eyes: number) => `エンダーアイ ${eyes} 個（ネザーの中）。要塞の場所は現世へ戻って 2 本投げれば出る（足りない物は要らない）。ロッド・パール・アイを足す節は要らない。` +
+  '帰りのゲートで現世へ戻る節が先。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く';
+/** The eyes she carries, in whatever dimension, when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: fewer. */
+function eyesInHand(world: Record<string, unknown>): number | null {
+  const eyes = carriedItemCounts(world, {}).get('ender_eye') ?? 0;
+  return eyes >= EYES_FOR_STRONGHOLD ? eyes : null;
+}
 /** The eyes she carries in the overworld when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: elsewhere or fewer. */
 export function eyesForStronghold(world: Record<string, unknown> | null): number | null {
   const dimension = typeof world?.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;

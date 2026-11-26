@@ -87,8 +87,15 @@ describe('(2) the eyes line is facts and a reason, shown only for 10 or more eye
     const text = input(run8World({ inventory: run8Pack.map(item => item.name === 'ender_eye' ? stack('ender_eye', 9) : item) }));
     expect(text).not.toContain('2 本投げれば');
   });
-  it('in the Nether, no eyes line either', () => {
-    expect(input(run8World({ dimension: 'the_nether' }))).not.toContain('2 本投げれば');
+  it('in the Nether with 10 or more eyes: its own line (back through the gate first, no rods, pearls or eyes to add), not the overworld line; with 9, none', () => {
+    const nether = input(run8World({ dimension: 'the_nether' }));
+    expect(nether).toContain('エンダーアイ 11 個（ネザーの中）。要塞の場所は現世へ戻って 2 本投げれば出る');
+    expect(nether).toContain('ロッド・パール・アイを足す節は要らない。帰りのゲートで現世へ戻る節が先');
+    expect(nether).not.toContain('（オーバーワールド）');
+    expect(input(run8World({ dimension: 'the_nether', inventory: run8Pack.map(item => item.name === 'ender_eye' ? stack('ender_eye', 9) : item) }))).not.toContain('ネザーの中）。要塞');
+  });
+  it('the system says the Nether case too, so that the rule is not weighed', () => {
+    expect(ownFirstPlanSystem()).toContain('ネザーの中にいて目が 10 個以上ある時: ロッド・パール・アイを足す節は要らない。帰りのゲートで現世へ戻る節が先');
   });
 });
 
