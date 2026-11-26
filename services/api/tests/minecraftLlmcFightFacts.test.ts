@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { cookedWords, fightLines, gearLine, packLine, swordGap, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
+import { cookedWords, fightLines, gearLine, packLine, shieldLine, strikeLine, swordGap, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
+import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 
 /** The night of 11/23 (d0001): a skeleton 45 m away with zombies around it, a stone sword, an iron, no armour, no shield, no food. */
@@ -105,5 +106,45 @@ describe('the preparation as facts in the gear line (a fight request: raw meat a
     expect(line).toContain('剣 石（鉄の剣は鉄 2 で作れる・生の鉄は焼く）');
     expect(line).toContain('食べ物 13 点（焼けば 62.4 点・40 秒）');
     expect(line).toContain('射手へ詰める目安');
+  });
+});
+
+/** 11/26: four hoglins, a wooden sword and a shield at 22/336 (the gear line read as if it reached a shooter; no line said the blows or the shield's life). */
+const HOGLINS = [1, 2, 3, 4].map(id => ({ ...threat(id, 'hoglin', 3 + id, id, 60, 0), health: 40 }));
+describe('the blows a fight takes and the shield left (11/26)', () => {
+  it('says each near hostile with its health and the blows a wooden sword needs, and the measured case', () => {
+    const obs = frame({ dimension: 'the_nether', nearbyThreats: HOGLINS }, [['wooden_sword', 1]]);
+    const line = strikeLine(obs, worldOf(obs))!;
+    expect(line).toContain('剣 木の 1 打撃 4');
+    expect(line).toContain('hoglin #1 4m 体力 40 → 10 打撃');
+    expect(line).toContain('合わせて 40 打撃');
+    expect(line).toContain('40 → 22.8');
+    expect(fightLines(obs, false)).toContain(line);
+  });
+  it('uses the table when the row has no health (marked 表), the stone sword blow, and a bare hand', () => {
+    const noHealth = frame({ nearbyThreats: [threat(7, 'zombie', 5, 0, 64, 0)] }, [['stone_sword', 1]]);
+    expect(strikeLine(noHealth, worldOf(noHealth))).toContain('zombie #7 5m 体力 20（表） → 4 打撃');
+    const bare = frame({ nearbyThreats: [threat(7, 'zombie', 5, 0, 64, 0)] }, [['dirt', 1]]);
+    expect(strikeLine(bare, worldOf(bare))).toContain('武器なし（素手の 1 打撃 1）');
+    expect(strikeLine(bare, worldOf(bare))).toContain('→ 20 打撃');
+    const far = frame({ nearbyThreats: [threat(7, 'zombie', 30, 0, 64, 0)] });
+    expect(strikeLine(far, worldOf(far))).toBeNull();
+  });
+  it('says the shield when it is under a third, from the off hand first and from the pack otherwise', () => {
+    expect(shieldLine({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)' })).toBe('盾 残り 22/336（構えている盾。1/3 を切っている）');
+    expect(shieldLine({ worn: '左手: shield(残り120/336)' })).toBeNull();
+    expect(shieldLine({ worn: '左手: なし', inventory: [{ name: 'shield', count: 1, durability: { left: 50, max: 336 } }] })).toContain('盾 残り 50/336（持っている盾');
+    expect(shieldLine({ worn: '左手: shield' })).toBeNull();
+    const obs = frame({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)', nearbyThreats: [] });
+    expect(fightLines(obs, false)).toEqual(['盾 残り 22/336（構えている盾。1/3 を切っている）']);
+  });
+  it('lists a stone or better sword as a goal (not a requirement) of the Nether check, with what it comes to against a hoglin', () => {
+    const base = { dimension: 'the_nether', food: 100, nowKinds: null, counts: new Map([['crafting_table', 1], ['shield', 1], ['cobblestone', 64]]) };
+    const said = preparationShortage(base)!;
+    expect(said).toContain('石以上の剣が無い');
+    expect(said).toContain('ホグリン（体力 40）');
+    expect(said.split('目標')[0]).not.toContain('剣');
+    const armed = preparationShortage({ ...base, counts: new Map([...base.counts, ['stone_sword', 1]]) })!;
+    expect(armed).not.toContain('石以上の剣');
   });
 });

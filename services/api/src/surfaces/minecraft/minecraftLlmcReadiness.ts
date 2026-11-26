@@ -35,12 +35,17 @@ import { WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minec
  */
 type Stage = 'nether_deep' | 'nether_blaze' | 'nether_entry' | 'end' | 'diamonds';
 type Need = PrepNeed;
+/** What the sword in the pack comes to against a hoglin (40 health), as a fact beside a missing sword (the body's table of one blow: wooden 4, stone 5, iron 6). */
+const SWORD_COST = 'ホグリン（体力 40）は 1 打撃の削りが木の剣 4 なら 10 打撃、石 5 なら 8、鉄 6 なら 7 かかる（群れで来る）。必須ではない';
 
 const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: string; food: number; needs: readonly Need[] }>> = {
   nether_deep: { title: 'ネザーの奥へ', food: 100, needs: [
     // The section audit of 11/5: the slabs left the check (they held the fortress's search), and the golden piece is a goal here (the gate asks it).
     { label: '作業台', count: 1, pattern: /^crafting_table$/u },
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u, goal: true, cost: PIGLIN_COST },
+    // 11/26 (a request that began inside the Nether: no sword was in the pack from the start, the gate's table that holds a sword was never read, and four hoglins took 20 health with a wooden
+    // sword): a stone or better sword is a goal here, as the golden piece is. 40 health is a hoglin's: ceil(40/4), ceil(40/5), ceil(40/6) blows.
+    { label: '石以上の剣', count: 1, pattern: /^(?:stone|iron|diamond|netherite)_sword$/u, goal: true, cost: SWORD_COST },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   // end1108h11 S7 (11/8): at the fortress with a bow, 30 arrows, a shield and 478 food points, the check of the way in said 「作業台が無い」 at
   // every decision, the knowledge said 「ブレイズは準備（shortage が空）の後」, and the head hid from a lone blaze at 14 m for 6 minutes at
