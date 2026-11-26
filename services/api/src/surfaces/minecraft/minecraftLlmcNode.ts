@@ -387,7 +387,7 @@ export function followNode(taskId: string, tree: PlanTree, underground = false, 
 }
 
 /** A caution that says why the node waits behind another (「ベッドと黒曜石は要塞の後ろで取る」): the reason of the plan's order, not a danger. */
-const ORDER_CAUTION = /(?:要塞|交点|エンド)の?後ろ|後ろで取る|後ろへ回|後ろに置/u; // the End's check items only (beds, obsidian, scaffolding, bow); armour, food and tools lacking are a short node before the walk
+const ORDER_CAUTION = /(?:要塞|交点|エンド)の?後ろ|後ろで取る|後ろへ回|後ろに置/u; // the nodes the plan puts behind the stronghold (the End's check items, armour, food)
 /** The first order caution of the node and the nodes above it, as `注意（id）: …`, or null. */
 function orderCaution(tree: PlanTree, from: PlanNode): string | null {
   const byId = new Map(tree.nodes.map(node => [node.id, node]));
@@ -409,8 +409,7 @@ function stepWords(leaf: PlanNode, left: PlanNode | undefined, skipped: readonly
   const passed = others.length ? `。飛ばした節は順のまま残っている: ${others.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : '';
   // The node left is named with how far it is and how to go back (run 9: the now moved from the walk to the point to the preparation behind it, and nothing said the walk was still open).
   const reach = left ? reachOf?.(left) ?? null : null;
-  const back = left ? `。計画の順で先の [${left.id}] ${left.title.slice(0, 24)}${reach ? `（${reach}）` : ''} は開いたまま。続ける手が要塞へ発つ前の準備（防具・食料・掘る道具の欠け）なら、そのまま続けてよい。`
-    + `エンドの点検物（ベッド・黒曜石・足場・弓矢）の手なら、要塞の後ろの順なので plan_update の current で [${left.id}] に戻せる` : '';
+  const back = left ? `。計画の順で先の [${left.id}] ${left.title.slice(0, 24)}${reach ? `（${reach}）` : ''} は開いたまま。要塞より後ろの順の節の手を続けているなら、plan_update の current で [${left.id}] に戻せる` : '';
   return `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）${left ? back : '。飛ばした節は順のまま残っている'}${left ? passed : passed.replace(/^。飛ばした節は順のまま残っている/u, '')}${caution ? `。${caution}` : ''}${lack ? `。${lack}` : ''}`;
 }
 
@@ -542,7 +541,7 @@ export function withNodeView(view: Record<string, unknown> | null, tree: PlanTre
   }
   if (owed && rules.some(row => typeof row === 'string' && row.includes(owed!.split(': ')[1]!))) owed = null;
   if (!behind && !owed) return view;
-  return { ...view, ...(behind ? { next: [`戻る先 [${behind.id}] ${behind.title.slice(0, 24)}${reach ? `（${reach}）` : ''}: 計画の順で先の、開いたままの節（発つ前の準備の手を続けるのは妨げない）`, ...next] } : {}),
+  return { ...view, ...(behind ? { next: [`戻る先 [${behind.id}] ${behind.title.slice(0, 24)}${reach ? `（${reach}）` : ''}: 計画の順で先の、開いたままの節`, ...next] } : {}),
     ...(owed ? { rules: [...rules, owed] } : {}) };
 }
 
