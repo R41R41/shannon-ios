@@ -126,9 +126,9 @@ describe('stronghold from thrown eyes', () => {
     near(fix!.x, truth.x, 1);
     near(fix!.z, truth.z, 1);
     expect(fix!.throws).toBe(2);
-    expect(fix!.errorBlocks).toBeGreaterThan(60);
-    expect(fix!.errorBlocks).toBeLessThan(100);
-    expect(fix!.errorBlocks).toBeLessThan(128);
+    // 0.005 degrees for an exact line (2026-11-27; the lab's worst was 0.003): about a quarter of the old 0.02's 60 to 100 m.
+    expect(fix!.errorBlocks).toBeGreaterThan(12);
+    expect(fix!.errorBlocks).toBeLessThan(30);
     expect(stronghold([throwFrom(start.x, start.z, truth), second])).toBeNull();
     expect(stronghold([first, { ...second, flew: 3 }])).toBeNull();
   });
@@ -145,12 +145,12 @@ describe('stronghold from thrown eyes', () => {
     expect([wide, lab, narrow]).not.toContain(null);
     near(lab.x, truth.x, 1);
     near(lab.z, truth.z, 1);
-    expect(lab.errorBlocks).toBeGreaterThan(85);
-    expect(lab.errorBlocks).toBeLessThan(100);
+    expect(lab.errorBlocks).toBeGreaterThan(15);
+    expect(lab.errorBlocks).toBeLessThan(32);
     expect(narrow.errorBlocks).toBeGreaterThan(lab.errorBlocks * 1.7);
     expect(lab.errorBlocks).toBeGreaterThan(wide.errorBlocks * 3);
     expect(stronghold(pair(0.49))).toBeNull();
-    expect(stronghold(pair(0.51, 8000))).toBeNull();
+    expect(stronghold(pair(0.51, 30000))).toBeNull();
   });
 
   it('does not claim more than its lines agree on (two parallel lines 20 m apart and one across)', () => {

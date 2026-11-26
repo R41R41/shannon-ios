@@ -152,14 +152,41 @@ function directLine(direct: DirectPoint, feet: { x: number; z: number } | null):
     + `${there}${FRAME_SEARCH}`;
 }
 
-/** A walk on the ground, in metres a second: 4 over dry land, 2 where water is crossed (S9: the long walks over land and sea). */
-const WALK_FAST = 4, WALK_SLOW = 2;
-const walkWords = (distance: number): string => `約 ${grouped(distance)} m・地上の見込み 約 ${grouped(distance / WALK_FAST)}〜${grouped(distance / WALK_SLOW)} 秒（水の割合で ${WALK_SLOW}〜${WALK_FAST} m/s）`;
+/**
+ * The chance that the 12 frames open with `eyes` eyes in hand: each frame holds an eye from the start with chance 0.1, so the frames still empty are 12 minus a
+ * binomial(12, 0.1) count, and the eyes fill them when `eyes` is at least that many (Java: 0.1 a frame). 11 eyes: 71.8%, 10: 34.1%, 9: 11.1%, 8: 3.3%, 12 or more: 100%.
+ */
+export function frameOpenChance(eyes: number): number {
+  const need = 12 - Math.max(0, Math.floor(eyes));
+  if (need <= 0) return 1;
+  let below = 0, term = Math.pow(0.9, 12);
+  for (let filled = 0; filled < need; filled += 1) {
+    below += term;
+    term *= (12 - filled) / (filled + 1) * (0.1 / 0.9);
+  }
+  return Math.max(0, 1 - below);
+}
+
+/**
+ * Speeds in metres a second. Land: 4 over dry land, 2 where it is rough (S9: the long walks over land and sea). Sea: the run of 2026-11-26, 0:41:17 to 0:47:58,
+ * 197 m in 401 s, 0.49 m/s on average and 0.8 to 0.9 in the best 90 s (short single go hands gave 2 to 2.7); the whole 14 minutes of swimming, with the way back and the
+ * stops, came to a net 0.18 m/s. Two yardsticks are given on purpose: the best stretches (`SEA_FAST`, `SEA_SLOW`) say what a go that keeps moving does; the net
+ * 0.2 m/s of the whole run (the way back, the stops) says what the plan will really get. One run, one sea: not a law.
+ * `minecraftFoodPreparation.ts` imports the sea's speeds.
+ */
+export const WALK_FAST = 4, WALK_SLOW = 2;
+export const SEA_FAST = 1, SEA_SLOW = 0.5;
+export const SEA_NET = 0.2;
+const seconds = (distance: number, speed: number): string => grouped(distance / speed);
+/** The time over a distance by how much of it is water (the head decides from the map: the ledger does not know the water). */
+export const walkWords = (distance: number): string =>
+  `約 ${grouped(distance)} m。地上なら 約 ${seconds(distance, WALK_FAST)}〜${seconds(distance, WALK_SLOW)} 秒（${WALK_SLOW}〜${WALK_FAST} m/s）、`
+  + `海の泳ぎなら 約 ${seconds(distance, SEA_FAST)}〜${seconds(distance, SEA_SLOW)} 秒（${SEA_SLOW}〜${SEA_FAST} m/s。実測 0.5 前後、往復や止まりを含む通しは ${SEA_NET} m/s）。水の割合で間を取る`;
 
 function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
   const ring = Math.round(Math.hypot(fix.x, fix.z));
   const there = feet ? `あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
-  const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す。' : '';
+  const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す（0.5° 以上の 2 本なら誤差は ±数十 m。枠が見えない・近づいて線が食い違った時は 3 本目を投げてよい）。' : '';
   const walk = feet ? `交点まで${walkWords(Math.hypot(fix.x - feet.x, fix.z - feet.z))}。` : '';
   const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${walk}${far}`
     + `原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;

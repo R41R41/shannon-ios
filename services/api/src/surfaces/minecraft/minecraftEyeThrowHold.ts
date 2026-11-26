@@ -44,6 +44,7 @@ const throwsEye = (hand: Record<string, unknown>): boolean => hand.do === 'use' 
   && hand.item.replace(/^minecraft:/u, '') === 'ender_eye' && !(Array.isArray(hand.at) && hand.at.length > 0);
 
 type Place = { x: number; z: number };
+type Feet = NonNullable<ReturnType<typeof feetOf>>;
 const apart = (a: Place, b: Place): number => Math.hypot(a.x - b.x, a.z - b.z);
 
 /** Some throw went from the point itself (within `AT_POINT_BLOCKS`). */
@@ -76,11 +77,30 @@ function pointReason(ledger: EyeLedger, fix: Fix, feet: Place | null, now: numbe
       : thrownAt(throws, fix) ? '' : `。交点（${AT_POINT_BLOCKS}m 内）に着いても枠が見えない時は、そこで 1 回投げて向きを確かめられる`);
 }
 
-/** Why a throw is held now, in words, or null. */
-function reasonOf(ledger: EyeLedger | undefined, world: Record<string, unknown>, pack: ReadonlyMap<string, number>, now: number): string | null {
+/**
+ * Where the throw is made from when a `go` stands before it in the same act: the last go's destination (`to`, or the first of `goals`; from her feet when `rel`).
+ * The frame's feet are where she is NOW, before the go (d0067, d0068, d0070: [go, use ender_eye] held twice as "the same line" while the go went 24 m
+ * sideways). A go that stops short leaves her away from its destination, so a re-issued act (`dependsOn` named, no go before the throw) is read from her
+ * real feet; and a go whose destination cannot be told leaves the feet as they are.
+ */
+function throwPlace(hands: readonly unknown[], at: number, feet: Feet | null): Place | null {
+  for (let index = at - 1; index >= 0; index -= 1) {
+    const hand = objectOf(hands[index]);
+    if (hand?.do !== 'go') continue;
+    const goal = objectOf(hand.to) ?? objectOf(Array.isArray(hand.goals) ? hand.goals[0] : null);
+    const x = goal?.x, z = goal?.z;
+    if (typeof x !== 'number' || typeof z !== 'number' || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+    if (hand.rel === true) return feet ? { x: feet.x + x, z: feet.z + z } : null;
+    return { x, z };
+  }
+  return null;
+}
+
+/** Why a throw is held now, in words, or null. `via`: the throw is read from the destination of a go in the same act. */
+function reasonOf(ledger: EyeLedger | undefined, world: Record<string, unknown>, pack: ReadonlyMap<string, number>, now: number, via: Place | null = null): string | null {
   const count = (name: string) => pack.get(name) ?? 0, eyes = count('ender_eye');
   const canMake = count('ender_pearl') > 0 && count('blaze_powder') + count('blaze_rod') > 0;
-  const feet = feetOf(world);
+  const feet: Place | null = via ?? feetOf(world);
   const fix = ledger?.fix(now) ?? null;
   const frames = framesOf(world), need = frames ? Math.max(0, frames.frames - frames.eyes) : FRAMES;
   const throws = ledger?.throws(now) ?? [];
@@ -100,8 +120,9 @@ function reasonOf(ledger: EyeLedger | undefined, world: Record<string, unknown>,
   if (!last || last.down || !feet) return null;
   const r = last.bearingDeg * Math.PI / 180;
   const side = Math.abs((feet.x - last.x) * -Math.cos(r) - (feet.z - last.z) * Math.sin(r));
-  return side < SAME_LINE_BLOCKS ? `前の投げの線から横へ ${Math.round(side)}m: ここで投げても同じ線になり、交点は出ない。live の目玉の帳簿の「次は」の所（線の横 24m）へ動いて投げる`
-    : null;
+  const from = via ? `この act の go の行き先 (${Math.round(via.x)},${Math.round(via.z)}) は` : '';
+  return side < SAME_LINE_BLOCKS ? `${from}前の投げの線から横へ ${Math.round(side)}m: ここで投げても同じ線になり、交点は出ない。live の目玉の帳簿の「次は」の所（線の横 24m）へ動いて投げる`
+    + (via ? '（go と投げを 1 つの act に書く時は、go の行き先で見る。横 12m 以上離れた行き先なら通る）' : '') : null;
 }
 
 /** The hold (the hand, 1-based, its kind and its line) of a throw of an eye into the sky, or null. */
@@ -112,6 +133,6 @@ export function eyeThrowHold(input: unknown, frame: BodyObservation | null, task
   if (!Array.isArray(hands) || !facts || facts.dimension !== 'overworld') return null;
   const at = hands.findIndex(raw => throwsEye(objectOf(raw) ?? {}));
   if (at < 0) return null;
-  const line = reasonOf(ledgers.get(taskId), facts.world, facts.counts, now());
+  const line = reasonOf(ledgers.get(taskId), facts.world, facts.counts, now(), throwPlace(hands, at, feetOf(facts.world)));
   return line ? { hand: at + 1, kind: 'use', line } : null;
 }

@@ -91,19 +91,12 @@ describe('one more throw from the point itself or from a new place', () => {
     expect(eyeThrowHold(throwEye, frame([['ender_eye', 14], ['ender_pearl', 2], ['blaze_powder', 2]], { x: -1000, y: 70, z: 880 }), 'w')).toBeNull();
   });
   it('a point drawn by lines that disagree stays over 128 m whatever is thrown from it, and the hold still lets one go from a new place', () => {
-    // Two exact lines 60 m apart, each 0.3 degrees off: the point is far from the stronghold and its error stays at about 154 m after a throw from it.
-    const truth = { x: -1100, z: 950 };
-    const eye = (x: number, z: number, off: number): EyeThrow => {
-      const bearingDeg = bearingBetween({ x, z }, truth) + off, r = bearingDeg * Math.PI / 180;
-      return { x, z, bearingDeg, flew: 12, broke: false, unit: { x: Math.sin(r), z: -Math.cos(r) } };
-    };
-    const throws = [eye(0, 0, 0.3), eye(60, 0, -0.3)];
-    const first = stronghold(throws)!;
-    expect(first.errorBlocks).toBeGreaterThan(128);
-    throws.push(eye(first.x, first.z, 0));
-    const after = stronghold(throws)!;
-    expect(after.errorBlocks).toBeGreaterThan(128);
-    const real = { fix: () => stronghold(throws), throws: () => throws } as unknown as EyeLedger;
+    // A point that stays wide (154 m) after a throw from it (with 0.005 degrees of error for an exact line no pair of exact lines gives this any more; a point drawn by
+    // lines that are read badly is what the hold is for, so the fix is given here).
+    const wide = { x: -1085, z: 930, errorBlocks: 154, throws: 2, ahead: [] as number[] };
+    const throws = [{ x: 0, z: 0, bearingDeg: 229 }, { x: 60, z: 0, bearingDeg: 230 }, { x: wide.x, z: wide.z, bearingDeg: 231 }];
+    const after = wide;
+    const real = { fix: () => wide, throws: () => throws } as unknown as EyeLedger;
     registerEyeLedger('d', real);
     // At the point she has thrown already: held there; from a new place outside the circle one goes.
     expect(eyeThrowHold(throwEye, frame(NONE, { x: after.x + 10, y: 70, z: after.z }), 'd')!.line).toContain('同じ辺りから投げ直さない');
