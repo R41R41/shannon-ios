@@ -15,6 +15,7 @@ import { round1 } from './minecraftTransientObservation.js';
 import { foodChoices, foodYieldWords, huntWeaponIn } from './minecraftFoodAcquisition.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 import { agedScan } from './minecraftLlmcScanAge.js';
+import { scaffoldLine } from './minecraftLlmcDetour.js';
 import { AIRISH, readLayers, type Layers } from './minecraftLlmcPreflightMap.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
@@ -458,6 +459,8 @@ export interface FactsContext {
   wantsFood?: boolean;
   /** The stops of the last results (`stopFactsOf`). */
   stops?: readonly string[];
+  /** The node's gos back to the same relay point and the distance to it (`detourLines`): said at every decision while it holds, not once. */
+  detour?: readonly string[];
   /** Typed body failures, including only candidates checked against the frame being shown. */
   failures?: readonly string[];
   /** The way to the dragon (`minecraftEndgame.ts`): the lines of the normal version, and the shorter set an urgent or shortened one keeps. */
@@ -484,7 +487,8 @@ export function inputFacts(observation: BodyObservation | null, context: FactsCo
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];
   const endgame = (short: boolean) => (short || urgent ? context.endgame?.short : context.endgame?.lines) ?? [];
   const make = (short: boolean) => [...head, ...endgame(short), ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
-     context.promises ?? []), ...(short || urgent ? [] : liveFactLines(observation, context.nowKinds)), ...promises, ...stops, ...(context.failures ?? [])]
+     context.promises ?? []), ...(short || urgent ? [] : liveFactLines(observation, context.nowKinds)), ...(urgent ? [] : [scaffoldLine(observation)]), ...promises, ...stops,
+     ...(context.detour ?? []), ...(context.failures ?? [])]
     .filter((line): line is string => !!line);
   return { lines: make(false), compressed: make(true) };
 }
