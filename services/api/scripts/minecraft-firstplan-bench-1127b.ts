@@ -116,15 +116,17 @@ function score(resultsFile: string, casesFile: string): unknown[] {
     const spec = cases.find(item => item.name === result.name)!;
     if (!result.text) return { name: result.name, note: result.skipped ?? result.failed ?? 'no text' };
     const answer = strongholdFirst(JSON.parse(result.text), spec.eyes) as { nodes: Array<{ id: string; parent: string; title: string; kind: string; doneWhen?: string; where?: string }> };
-    const tops = answer.nodes.filter(node => !node.parent);
-    const stronghold = tops.findIndex(node => node.kind === 'stronghold');
-    const ironStock = answer.nodes.some(node => node.kind === 'iron' && /have:iron_ingot>=\d+/u.test(node.doneWhen ?? ''));
-    const kinds = tops.map(node => node.kind);
+    // The tree in the order it was written (a model may put one root over everything: the nodes are counted in order, not only the top level).
+    const flat = answer.nodes;
+    const stronghold = flat.findIndex(node => node.kind === 'stronghold');
+    const ironStock = flat.some(node => node.kind === 'iron' && /have:iron_ingot>=\d+/u.test(node.doneWhen ?? ''));
+    const kinds = flat.map(node => node.kind);
     const before = (kind: string) => { const at = kinds.indexOf(kind); return at < 0 ? null : at; };
-    return { name: result.name, group: spec.group, tops: tops.length, strongholdPosition: stronghold < 0 ? null : stronghold + 1, beforeStronghold: stronghold < 0 ? null : kinds.slice(0, stronghold),
-      ironStock, where: answer.nodes.filter(node => node.where).map(node => node.where).slice(0, 6),
+    const ahead = stronghold < 0 ? [] : flat.slice(0, stronghold).filter(node => !flat.some(other => other.parent === node.id && flat.indexOf(other) >= stronghold));
+    return { name: result.name, group: spec.group, nodes: flat.length, strongholdPosition: stronghold < 0 ? null : stronghold + 1,
+      nodesBeforeStronghold: ahead.map(node => node.kind + ':' + node.title), ironStock, where: flat.filter(node => node.where).map(node => node.where).slice(0, 6),
       order: { village: before('village'), iron: before('iron'), nether: before('nether') ?? before('portal'), stronghold: stronghold < 0 ? null : stronghold },
-      titles: tops.map(node => `${node.id} ${node.title}`), costUsd: result.costUsd, outputTokens: result.usage?.output_tokens };
+      titles: flat.map(node => node.id + ' ' + node.title + ' [' + node.kind + '] ' + (node.doneWhen ?? '')), costUsd: result.costUsd, outputTokens: result.usage?.output_tokens };
   });
 }
 
