@@ -7,7 +7,8 @@ import { applyPlanUpdate,orderedPlan,planFromSeeds,PLAN_LIMITS,promiseItemFits,t
 import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import { scanForPlan } from './minecraftLlmcProbe.js';
 import { carriedItemCounts } from './minecraftItems.js';
-import { carriedFood } from './minecraftLlmcLive.js';
+import { carriedFood, stacks } from './minecraftLlmcLive.js';
+import { eyeLedgerFact } from './minecraftEyeLedger.js';
 import { preparationShortage,recoveryLine } from './minecraftLlmcReadiness.js';
 import { parseCondition } from '../../contracts/minecraftActCondition.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
@@ -35,14 +36,22 @@ const node = (title: string, extra: Omit<PlanSeed, 'title'> = {}): PlanSeed => (
  * the kinds of its own
  * nodes the same way.
  */
+const WOOD_PICKAXE_OR_BETTER = 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe|have:diamond_pickaxe';
+const STONE_TOOLS_OR_BETTER = 'have:stone_pickaxe&have:stone_axe&have:stone_sword|have:iron_pickaxe|have:diamond_pickaxe';
+/** The condition of the seed's top iron node (the kind `iron` with children; its last child has the same words, so the children are told apart): the pickaxe (an iron one, or the
+ * diamond one that comes after it), sword, shield and bucket (the armour is its own top node, after the water). */
+const IRON_TOP_DONE = 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket|have:diamond_pickaxe&have:iron_sword&have:shield&have:bucket';
 const TO_NETHER: readonly PlanSeed[] = [
   // The section audit of 11/5 (runs 60 and 61 both went back up for wood and died there): the wood of the whole run at once after the stone axe, as
   // the last child; the parent waits for it (a child is closed when its parent is done).
   node('木と石の道具', { kind: 'stone_tools',  // no doneWhen: done when its children are, the last the run's wood (e1111h2: an iron-pickaxe branch closed p1.4 at log 3/16)
     children: [
     node('原木を集める', { kind: 'wood', doneWhen: 'have:log>=8|have:planks>=24', note: '作業台・木のツルハシ・斧と石の道具の棒の分（ツルハシ 1 つで済みにしない）' }),
-    node('作業台と木のツルハシ', { kind: 'wood', doneWhen: 'have:wooden_pickaxe|have:stone_pickaxe|have:iron_pickaxe' }),
-    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: 'have:stone_pickaxe&have:stone_axe&have:stone_sword',
+    // Run 8 (11/27): the pack held a diamond pickaxe, an iron sword and a stone axe, yet 「作業台と木のツルハシ」 and the stone tools stayed open (the list stopped at iron, and
+    // the stone pickaxe and sword were never made). `have:pickaxe` is no way out: `carried` counts every id ending in `_pickaxe`, so a wooden or golden one would pass it and a
+    // new world's iron stage would be skipped. The conditions list the tiers that come after: a tier above the node's own means the node's work is behind her.
+    node('作業台と木のツルハシ', { kind: 'wood', doneWhen: WOOD_PICKAXE_OR_BETTER }),
+    node('丸石で石のツルハシ・斧・剣', { kind: 'stone_tools', doneWhen: STONE_TOOLS_OR_BETTER,
       note: '丸石 11（ツルハシ 3・斧 3・剣 2・予備のツルハシ 3）。炉 8・足場は別' }),
     // 11/11 run 7: the amount was the least (16) while many trees stood near; the node says the least and the safe amount, and `stock:wood` reads the logs near.
     node('原木を通しの分（最低12・安心24）', { kind: 'wood', doneWhen: 'stock:wood',
@@ -55,16 +64,16 @@ const TO_NETHER: readonly PlanSeed[] = [
   node('食料とベッド（最初の夜の前・鉄より前）', { kind: 'prep_descent', doneWhen: 'stock:food&have:bed',
     note: '食料は最低40・安心100点（干し草3個）。ベッドが一番（寝れば夜を飛ばせる）: 走査の羊の行で同じ色 3 体を探す。夜にベッドが無ければ、地面に 2 段の穴を掘って塞ぎ、その底から鉄の節へ下りる（外で待たない。朝に戻って続ける）', children: [
     node('無ければ（石の剣か斧を持って）動物を4〜6体狩る', { kind: 'food' }), node('かまどで肉を焼く・パンを作る', { kind: 'food', doneWhen: 'stock:food' })] }),
-  node('鉄（24〜36）', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket',
+  node('鉄（24〜36）', { kind: 'iron', doneWhen: IRON_TOP_DONE,
     caution: ['食料40点・作業台か板4を持ってから下りる（夜にベッドが無ければ、満腹度14・体力16以上で先に下りてよい）',
       '降りる前に石のツルハシを 2 本と石炭 4（鉄 24 と肉を焼く分。見えている最寄りの石炭を先に mine。原木・板は燃やさない）',
       '生の鉄 4 以上は smelt furnaces=3 で並べて焼く。take は残り 15 秒以内だけ体が待つ。それより長ければ掘る手を先に積む',
       '炉は掘り場の 6m 以内に置く。離れたら furnace に dig=stone,dirt maxDig=N を付ける（体が掘って寄る）'],
-    children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe' }),
+    children: [node('最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）', { kind: 'iron', doneWhen: 'have:iron_pickaxe|have:diamond_pickaxe' }),
     // The whole-run audit of 11/4, order 1: the sword and the shield the moment the iron is smelted (run60 met the night with no sword); the boots are
     // the golden ones (the gate's table), so the armour is the three iron pieces. Run 8 (11/13): the gate asks one shield; the spare and its iron
     // and planks are aims (the blazes' stage makes a shield where it stands from iron 1 and planks 6).
-    node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket', caution: ['盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標（ブレイズの湧き場で盾が壊れた時にその場で作り直せる）'] })] }),
+    node('残りの鉄をまとめて採り焼く・剣・盾・バケツ', { kind: 'iron', doneWhen: IRON_TOP_DONE, caution: ['盾1はゲートの必須。予備の盾と作り直しの鉄2・板16は目標（ブレイズの湧き場で盾が壊れた時にその場で作り直せる）'] })] }),
   // Run 9 (11/13): the water before the armour (the bucket is made, and the water is drawn while the furnace smelts).
   node('水入りバケツ（バケツを作ったらすぐ、炉が焼いている間に）', { kind: 'water', doneWhen: 'have:water_bucket',
     note: '目から 12m 以内の届く水源ならその場で use bucket。遠い地表の水へは、近くに汲める水が無い時だけ（同じ池で 2 回失敗したら地表へ）' }),
@@ -219,9 +228,6 @@ function gateFirstFields(seed: PlanSeed): Partial<PlanSeed> {
   }
   return {};
 }
-/** The condition of the seed's top iron node (the kind `iron` with children; its last child has the same words, so the children are told apart):
- * the pickaxe, sword, shield and bucket (the armour is its own top node, after the water). */
-const IRON_TOP_DONE = 'have:iron_pickaxe&have:iron_sword&have:shield&have:bucket';
 const ironFirst = (seed: PlanSeed): PlanSeed => seed.kind === 'iron' && !seed.doneWhen ? { ...seed, title: '最初の鉄3を焼いて鉄のツルハシ（棒・台を確認）' }
   : seed.kind === 'iron_armor' ? { ...seed, title: '鉄の兜・胸当てを作って着る', doneWhen: IRON_ARMOUR_WORN } : seed;
 /**
@@ -259,7 +265,7 @@ const record = (value: unknown) => value && typeof value === 'object' && !Array.
 /** The input: the goal, where and when she is, what she carries, and what the body knows of the land (cut to
  * `inputCharacters`). */
 export function firstPlanInput(goal: string, world: Record<string, unknown> | null,
-  options: { scan?: boolean; readiness?: boolean; journeyReadiness?: boolean; draft?: string | null; words?: readonly string[] } = {}): string {
+  options: { scan?: boolean; readiness?: boolean; journeyReadiness?: boolean; draft?: string | null; words?: readonly string[]; now?: number } = {}): string {
   const part = (label: string, value: unknown, limit: number) => {
     const shown = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
     return shown ? [`${label}: ${shown.slice(0, limit)}`] : [];
@@ -269,8 +275,9 @@ export function firstPlanInput(goal: string, world: Record<string, unknown> | nu
   return [`依頼: ${text(goal, 400)}`,
     ...(options.words?.length ? [`人の言葉（依頼と、届いた言葉。原文・話者・時刻つき。依頼の一行はこの依頼を書き直した物で、言われた言葉の方が詳しい）:\n${options.words.slice(0, 6).join('\n').slice(0, 1_800)}`] : []),
     ...part('位置', world?.position, 80), ...part('ディメンション', world?.dimension, 40),
-    ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...part('持ち物', world?.inventory, 800),
-    ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...readinessInput(world, options.journeyReadiness, planGoal(goal) === null)] : []),
+    ...part('バイオーム', world?.biome, 60), ...part('時刻', world?.time, 20), ...packInput(world),
+    ...(options.readiness && world ? [...part('着ている物', world.worn, 200), ...finishedInput(world),
+      ...readinessInput(world, options.journeyReadiness, planGoal(goal) === null, options.now ?? Date.now())] : []),
     ...(options.draft ? [options.draft.slice(0, 3_200)] : []),
     ...(scan ? [`走査（読み込み済みの範囲の目印）:\n${scan.slice(0, 2_400)}`] : []),
     ...part('目印', world?.mapLandmarks, 1_500), ...part('地図の要約', world?.mapSummary, 1_500),
@@ -312,7 +319,7 @@ export function openingDraft(seed: PlanTree | null): string | null {
  * there), and health that does
  * not come back: the code's facts, for the first node.
  */
-function readinessInput(world: Record<string, unknown>, journeyReadiness?: boolean, singleRequest = false): string[] {
+function readinessInput(world: Record<string, unknown>, journeyReadiness?: boolean, singleRequest = false, now: number = Date.now()): string[] {
   const dimension = typeof world.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
   const food = carriedFood(world, {}).points, health = typeof world.health === 'number' ? world.health : null;
   const counts = carriedItemCounts(world, {});
@@ -322,7 +329,42 @@ function readinessInput(world: Record<string, unknown>, journeyReadiness?: boole
   // shortage would put a food node first again; the health that does not come back is still a fact of the place.
   if (singleRequest) return recovery ? [recovery] : [];
   const eyes = eyesForStronghold(world);
-  return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : []), foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+  const at = record(world.position), feet = at && typeof at.x === 'number' && typeof at.z === 'number' ? { x: at.x, z: at.z } : null;
+  // Run 7 (11/27): the lines she threw before this plan (the body keeps them on the world): the point they give, as a guide, is a fact of the first plan too.
+  const thrown = dimension === 'overworld' ? eyeLedgerFact(world.eyeThrows, feet, now) : [];
+  const netherEyes = dimension === 'the_nether' ? eyesInHand(world) : null;
+  return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+}
+
+/**
+ * Run 8 (11/27): the pack was cut at 800 characters of JSON (the diamond pickaxe was in it, the stone tools and the shield further on were not read), and the plan was written as if
+ * the finished things were not held. The whole pack in the live's own form (名前×数（耐久 残り/最大）); if it is too long the stacks with the biggest counts go first (cobblestone,
+ * dirt: the things that are many and are not read one by one), and the line says how many kinds were left out.
+ */
+const PACK_LIMIT = 1_500;
+function packInput(world: Record<string, unknown> | null): string[] {
+  const inventory = world?.inventory;
+  if (typeof inventory === 'string') return inventory ? [`持ち物: ${inventory.slice(0, PACK_LIMIT)}`] : [];
+  const rows = stacks(inventory).map(line => ({ line, count: Number(/×(\d+)/u.exec(line)?.[1] ?? 1) }));
+  if (!rows.length) return [];
+  let left = 0;
+  const joined = () => rows.map(row => row.line).join('・');
+  while (joined().length > PACK_LIMIT && rows.length > 1) {
+    const biggest = rows.reduce((best, row, index) => row.count >= rows[best]!.count ? index : best, 0);
+    rows.splice(biggest, 1);
+    left += 1;
+  }
+  return [`持ち物: ${joined()}${left ? `（数の多い ${left} 種は省いた）` : ''}`];
+}
+
+/** The finished things she carries or wears (a tool, a weapon, armour, the shield, a bucket, a bow, a bed...), by their ids: a fact, so that no node asks for one again. */
+const FINISHED = /^(?:(?:wooden|stone|golden|iron|diamond|netherite)_(?:pickaxe|axe|sword|shovel|hoe|helmet|chestplate|leggings|boots)|turtle_helmet|shield|bucket|water_bucket|lava_bucket|flint_and_steel|bow|crossbow|shears|[a-z]+_bed)$/u;
+function finishedInput(world: Record<string, unknown>): string[] {
+  const held = stacks(world.inventory).filter(line => FINISHED.test(line.replace(/×.*$/u, '')));
+  const worn = typeof world.worn === 'string' ? [...world.worn.matchAll(/[:：]\s*([a-z_]+)(?:\(残り(\d+)\/(\d+)\))?/gu)]
+    .filter(found => FINISHED.test(found[1]!)).map(found => `${found[1]}（着ている${found[2] ? `・残り ${found[2]}/${found[3]}` : ''}）`) : [];
+  const all = [...held, ...worn];
+  return all.length ? [`持っている完成品（事実。同じ物を作り直す節・取り直す節は要らない）: ${all.join('・').slice(0, 700)}`] : [];
 }
 
 /**
@@ -331,8 +373,25 @@ function readinessInput(world: Record<string, unknown>, journeyReadiness?: boole
  * said as the input's first fact, and the answer's stages that make eyes are dropped (`strongholdFirst`).
  */
 export const EYES_FOR_STRONGHOLD = 10;
-const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）: ゲート・ネザー・ブレイズ・パール・アイを作る節は要らない。` +
-  '最初の節はストロングホールドを探す節（2 か所から投げて交点を出す）。投げて落ちたアイは拾う';
+/**
+ * Run 8 (11/27): the line was an order (「最初の節は…」) beside a shortage list that read as things to do first; Haiku wrote the village's beds, iron, an obsidian node and a bow first and the
+ * stronghold fourth, with the eyes in the pack. It is the facts and the reason now, and where the shortage's things go (the order's own words are in the plan's system, `CURRENT_PLAN_STRUCTURE`).
+ */
+const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
+  (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
+  '投げて落ちたアイは拾う。' +
+  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く（防具の足りない部位・食料・原木を足す節も同じ位置）';
+/**
+ * Run 7 (11/27): a task begun in the Nether with 13 eyes. With the overworld-only rule in the system, Haiku weighed whether it applied (its thinking filled the 9,000 output tokens in 2 of 4 asks with the
+ * new system; with the old system 4 of 4 took 2.8 to 4.2 thousand): the Nether's case is said as a fact of its own, with the same reason.
+ */
+const EYES_IN_NETHER = (eyes: number) => `エンダーアイ ${eyes} 個（ネザーの中）。要塞の場所は現世へ戻って 2 本投げれば出る（足りない物は要らない）。ロッド・パール・アイを足す節は要らない。` +
+  '帰りのゲートで現世へ戻る節が先。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く';
+/** The eyes she carries, in whatever dimension, when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: fewer. */
+function eyesInHand(world: Record<string, unknown>): number | null {
+  const eyes = carriedItemCounts(world, {}).get('ender_eye') ?? 0;
+  return eyes >= EYES_FOR_STRONGHOLD ? eyes : null;
+}
 /** The eyes she carries in the overworld when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: elsewhere or fewer. */
 export function eyesForStronghold(world: Record<string, unknown> | null): number | null {
   const dimension = typeof world?.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;

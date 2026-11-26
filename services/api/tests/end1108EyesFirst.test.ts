@@ -104,7 +104,9 @@ describe('end1108e S9: Haiku planned the gate, the rods, the pearls and the eyes
   });
   it('says the count as a fact in the first plan\'s input', () => {
     const input = firstPlanInput('エンドラを倒して', world('overworld', 12), { readiness: true });
-    expect(input).toContain('エンダーアイ 12 個（オーバーワールド）: ゲート・ネザー・ブレイズ・パール・アイを作る節は要らない。最初の節はストロングホールドを探す節');
+    // 11/27: the line is the facts and the reason (the order itself is the plan system's); 12 eyes fill the frames, so no shortage of eyes is said
+    expect(input).toContain('エンダーアイ 12 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。投げて落ちたアイは拾う。ゲート・ネザー・ブレイズ・パールを集める節は要らない');
+    expect(input).not.toContain('今 12/12');
     expect(firstPlanInput('エンドラを倒して', world('overworld', 9), { readiness: true })).not.toContain('エンダーアイ 9 個（オーバーワールド）');
   });
 });

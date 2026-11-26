@@ -143,6 +143,8 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       const facts = doneFacts(observation);
       if (!dragonTask || !world || !facts) return NONE;
       deaths.note(world, facts, now());
+      // The eyes the body kept on this world before this task (its `eyeThrows`): read in once, when the ledger is empty; absent from an older body (nothing happens).
+      if (facts.dimension === 'overworld') ledger.seed(world.eyeThrows, now());
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
       const end = endViewOf(observation);
       return compose(world, end, facts, eyeLinesOf(ledger, facts, now()), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),

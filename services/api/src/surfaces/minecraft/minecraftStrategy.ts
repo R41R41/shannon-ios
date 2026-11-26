@@ -74,6 +74,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
   '### 段ごとの準備（この数がすべて。後の訂正は無い）',
   ...PREP_DESCENT_LINES,
   PREP_RULES_WORDS,
+  '- エンダーアイを 10 個以上持って現世にいる場合の鉄: ネザーへ行かないので「ネザーまでに約 30」は要らない。要るのは今の道具・防具に足りない分だけ（入力の「持っている完成品」を引く）で、要塞の後ろ・エンドへ入る節の前でよい。',
   '### 手順の要点',
   FOOD_ACQUISITION_KNOWLEDGE,
   '- 原木: 序盤は石の斧の後に最低 12・安心 24 本まで一度に取る（後で木のために地上へ戻らない）。それ以後は次の工作に不足する分。原木 1 → 板 4（作業台は要らない）。崖の上など届かない木は選ばない（足の高さから幹に届く木か、走査の近い原木）。',
@@ -97,7 +98,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
     + '旧無効版や有効状態が未確認なら頼らない。下りは事前に水を置くか vertical で、自動救済を当てに跳び降りない。'),
 ].join('\n');
 
-const WHOLE_GAME_PLAN_LINES: readonly string[] = ['- エンドラ討伐の後半は', '- 準備の不足は、'];
+const WHOLE_GAME_PLAN_LINES: readonly string[] = ['- エンドラ討伐の後半は', '- 準備の不足は、', '- 順番（エンダーアイを 10 個以上'];
 
 /** The active template is assembled directly; no historical exact-string replacements. */
 export function ownFirstPlanSystem(): string {
