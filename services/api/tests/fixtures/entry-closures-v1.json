@@ -929,6 +929,7 @@
     "surfaces/minecraft/minecraftLlmcGoGuard.ts",
     "surfaces/minecraft/minecraftLlmcGoldTravel.ts",
     "surfaces/minecraft/minecraftLlmcHandGuards.ts",
+    "surfaces/minecraft/minecraftLlmcHazardFacts.ts",
     "surfaces/minecraft/minecraftLlmcHealth.ts",
     "surfaces/minecraft/minecraftLlmcHeldStreak.ts",
     "surfaces/minecraft/minecraftLlmcIronNumbers.ts",
