@@ -66,10 +66,23 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
     short: [...night, ...enclosed, ...urgent, ...footing, ...stall, ...some(blaze), ...frames, ...death] };
 }
 
+/**
+ * A hypothesis from one run (2026-11-26), said as a fact to compare with the overland walk, never a rule: the point in the Nether's coordinates, the obsidian a new
+ * gate needs, and the Nether walk measured once (0.36 m/s over 14.5 minutes). What the ground is where the Nether side comes out is not known.
+ * The Nether side gate's distance is not known to this ledger, so it is not said.
+ */
+function netherCompareLines(ledger: EyeLedger, facts: DoneFacts, now: number): string[] {
+  const fix = ledger.fix(now);
+  if (!fix) return [];
+  const obsidian = facts.counts.get('obsidian') ?? 0;
+  return [`ネザー経由で比べる材料（1 回の観測で、出口の地形は未確認）: 交点のネザー座標 (${Math.round(fix.x / 8)},${Math.round(fix.z / 8)})。`
+    + `ゲートを作り直すなら黒曜石 10 が要る（今 ${obsidian}＋回収）。実測のネザーの歩きは 0.36 m/s。選ぶのは地上の見込み秒数との比べで決める`];
+}
+
 /** The ledger before the portal room is found, with a single coordinate conversion for travel through the Nether. */
 function eyeLinesOf(ledger: EyeLedger, facts: DoneFacts, now: number): string[] {
   if (facts.seen?.has('end_portal_frame') === true) return [];
-  if (facts.dimension === 'overworld') return ledger.lines(facts.feet, now);
+  if (facts.dimension === 'overworld') return [...ledger.lines(facts.feet, now), ...netherCompareLines(ledger, facts, now)];
   if (facts.dimension !== 'the_nether') return [];
   const fix = ledger.fix(now);
   if (!fix) return [];

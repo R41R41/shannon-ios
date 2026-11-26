@@ -100,8 +100,8 @@ describe('the walk to the point (G4) and the throw after it (G2, G3)', () => {
     const fix = ledger.fix(1000);
     expect(fix).not.toBeNull();
     const near = { x: fix!.x + 400, z: fix!.z };
-    expect(ledgerLines(ledger.throws(1000), near, 1000).join('\n')).toContain('交点まで約 400 m・地上の見込み 約 100〜200 秒（水の割合で 2〜4 m/s）');
-    expect(ledgerLines(ledger.throws(1000), null, 1000).join('\n')).not.toContain('地上の見込み');
+    expect(ledgerLines(ledger.throws(1000), near, 1000).join('\n')).toContain('交点まで約 400 m。地上なら 約 100〜200 秒（2〜4 m/s）、海の泳ぎなら 約 400〜800 秒（0.5〜1 m/s');
+    expect(ledgerLines(ledger.throws(1000), null, 1000).join('\n')).not.toContain('地上なら 約');
   });
   it('holds a second throw after the point when nothing is left to make eyes from, and says to pick up the fallen eye', () => {
     const fixAt = { x: -1072, z: 928, errorBlocks: 300 };

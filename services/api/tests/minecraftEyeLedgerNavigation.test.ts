@@ -47,7 +47,7 @@ describe('the short eye baseline and travel through the Nether', () => {
     const lines = restored.lines({ x: 121, z: 84 }, NOW).join('\n');
     expect(lines).toContain('交点 (-1072,928)');
     expect(lines).not.toContain('交点はまだ無い');
-    expect(restored.fix(NOW)!.errorBlocks).toBeGreaterThan(80);
+    expect(restored.fix(NOW)!.errorBlocks).toBeGreaterThan(15);
     // Within the frames' probe (128 m of error or less) the ledger offers no throw before the point: the hold would stop it.
     expect(restored.fix(NOW)!.errorBlocks).toBeLessThanOrEqual(128);
     expect(lines).not.toContain('投げ直す');

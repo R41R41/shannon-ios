@@ -57,8 +57,16 @@ export const MAX_ERROR_BLOCKS = 600;
 const POSITION_NOISE_BLOCKS = 0.2;
 const MIN_BEARING_ERROR_DEGREES = 0.5;
 const MAX_BEARING_ERROR_DEGREES = 6;
-/** A line read from the eye's own positions (measured in the isolated lab, 2026-11-02: ten throws, at most 0.003 degrees off; kept seven times wider). */
-const PRECISE_BEARING_ERROR_DEGREES = 0.02;
+/**
+ * The one-sigma error of a line read from the eye's own positions.
+ * Known (measured): the isolated lab (2026-11-02, on the ground, ten throws) was at most 0.003 degrees off; one real run (2026-11-26) gave two lines from 21 m
+ * apart, 0.64 degrees crossing, about 1,880 m from the point. Unknown (not measured): throws from underground (both of that run's were; the line should not change
+ * with the depth, which is reasoning only) and throws from a slope.
+ * The error of the point is about `distance x sigma x sqrt(2) / sin(crossing)` (one sigma, along the bisector), and the radius given is twice that. With 0.02
+ * (seven times the lab's worst) that run's point read +-163 m and the model took a good point for a bad one and wrote a section to throw again; with 0.005
+ * (1.7 times the lab's worst) it reads about +-41 m, inside the 128 m the frames' probe reaches. A third throw stays allowed when the frames are not seen.
+ */
+const PRECISE_BEARING_ERROR_DEGREES = 0.005;
 /** A flight shorter than this does not fix its direction well, whatever the unit vector says. */
 const PRECISE_MIN_FLEW = 4;
 /**
@@ -172,7 +180,7 @@ function leastSquares(rays: readonly Ray[], start: { x: number; z: number }): { 
 
 /**
  * The radius of the error: twice the long half-axis of the one-sigma ellipse.
- * The covariance already grows as the crossing narrows: at 1,460 m and 0.9°, two precise lines give about 92 m.
+ * The covariance already grows as the crossing narrows: at 1,460 m and 0.9°, two precise lines give about 23 m (0.005° a line).
  */
 function errorRadius(cov: { xx: number; xz: number; zz: number }): number {
   const mean = (cov.xx + cov.zz) / 2;

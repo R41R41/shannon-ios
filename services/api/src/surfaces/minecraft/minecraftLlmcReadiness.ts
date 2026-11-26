@@ -15,6 +15,7 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { framesOf } from './minecraftSeenMarks.js';
+import { frameOpenChance } from './minecraftEyeLedger.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
 import { WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
@@ -149,6 +150,35 @@ export function currentUsableCounts(counts: ItemCounts, inventory?: unknown): Ma
   return usable;
 }
 
+/**
+ * Beds left standing: the map's own rows of beds ("B ベッド (x,y,z) … white_bed", the landmarks) while fewer than `END_BEDS` are carried. A sleep that did not finish
+ * leaves the bed it put down (run of 2026-11-26: 8 became 6 with a bed in the map next to the furnace), and the End's check needs 8; picking one up is one `dig takeOk`
+ * and a `pickup`. A fact with where it is and what it adds, not an order.
+ */
+function bedWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }): string {
+  const have = countMatching(parts.counts, BED_ITEM);
+  const rows = Array.isArray(parts.world?.mapLandmarks) ? (parts.world!.mapLandmarks as unknown[]) : [];
+  const standing = rows.flatMap(row => {
+    const hit = typeof row === 'string' ? /^B ベッド \((-?\d+),(-?\d+),(-?\d+)\)/u.exec(row) : null;
+    return hit ? [`(${hit[1]},${hit[2]},${hit[3]})`] : [];
+  }).slice(0, 3);
+  if (have >= END_BEDS || !standing.length) return '';
+  return `地図に出ているベッド: ${standing.join('・')}（置いたまま離れた物か村の物。拾えば ${have}→${have + standing.length}。エンドの点検は ${END_BEDS} 要り、寝られずに離れると置いた分は持ち物から減ったまま）`;
+}
+
+/**
+ * The eyes' odds, as a fact beside the shortage (only while the frames are not in view and fewer than 12 are carried; only said when something else is short, so the shortage
+ * stays empty exactly when it was). Making one eye takes a pearl and a powder (a rod gives two powders), so what can be made is the least of them.
+ */
+function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }): string {
+  const eyes = countMatching(parts.counts, /^ender_eye$/u);
+  if (eyes >= 12 || eyes <= 0 || (parts.world && framesOf(parts.world))) return '';
+  const pearls = countMatching(parts.counts, /^ender_pearl$/u), powder = countMatching(parts.counts, /^blaze_powder$/u), rods = countMatching(parts.counts, /^blaze_rod$/u);
+  const makeable = Math.min(pearls, powder + 2 * rods), gap = 12 - eyes;
+  return `エンダーアイ ${eyes}/12（開く確率 ${Math.round(frameOpenChance(eyes) * 100)}%。投げ直しは 1 本ごとに 5 回に 1 回割れる）。`
+    + `作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''} → 作れるのは ${makeable} 個（1 個＝パール 1＋粉 1）。12 まであと ${gap} 個まで足せる`;
+}
+
 /** What the pack lacks of some needs: none at all, some but not enough, and armour carried but not worn. */
 interface Gaps { none: string[]; short: string[]; unworn: string[] }
 function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: readonly string[] }): Gaps {
@@ -230,13 +260,16 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endCheck(parts))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
   const goals = goalWords(table, parts);
+  const eyes = stage === 'end' && !returning ? [eyeWords(parts), bedWords(parts)].filter(Boolean).join('。') : '';
   if (!table.risk) {
     const said = [...mustWords(table, parts), goals, mining].filter(Boolean);
+    if (said.length && eyes) said.push(eyes);
     return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
   }
   const must = mustWords(table, parts);
   const said = [must.length ? `必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : '',
     goals, mining].filter(Boolean);
+  if (said.length && eyes) said.push(eyes);
   return said.length ? `準備の不足（${table.title}）: ${said.join('。')}` : null;
 }
 
