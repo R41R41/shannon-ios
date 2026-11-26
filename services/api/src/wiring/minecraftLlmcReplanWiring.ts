@@ -14,7 +14,7 @@ import { obsidianTallyLine } from '../surfaces/minecraft/minecraftLlmcWaterNode.
 import { isDragonPlan } from '../surfaces/minecraft/minecraftLlmcRoad.js';
 import { paceDelay, paceKey } from '../surfaces/minecraft/minecraftLlmcPace.js';
 import { boundTo } from '../surfaces/minecraft/minecraftLlmcReplan.js';
-import { nowLines, plantLines } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
+import { nowLines, plantLines, readSavedResults, resultDigest, RESULTS_KEPT } from '../surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { createReplanFlow, type ReplanFlow, type Replanner, type ReplanSources } from '../surfaces/minecraft/minecraftLlmcReplanFlow.js';
 import type { LlmcQueue } from '../surfaces/minecraft/minecraftLlmcQueueState.js';
 import { treeQuestions, workingNode } from '../surfaces/minecraft/minecraftLlmcNode.js';
@@ -130,13 +130,15 @@ export interface Unheld {
 /** The look and the flow of one task's step, wired to its queue (the look's `raise` is the flow's `note`). Null for a task held on a failure. */
 export function unheldReplan(parts: UnheldParts): Unheld | null {
   if (parts.held) return null;
-  const results: string[] = [];
-  parts.queue.onRan((_item, result) => {
-    results.push(result.text.replace(/\s+/gu, ' ').slice(0, 320));
-    if (results.length > 4) results.shift();
-  });
   const saved = parts.checkpoint as { minecraftReplans?: unknown; minecraftReplanPending?: unknown; minecraftBehindPace?: unknown;
-    minecraftActiveWait?: { node: string; until: number } } | null;
+    minecraftReplanResults?: unknown; minecraftActiveWait?: { node: string; until: number } } | null;
+  // Kept in the checkpoint: a step is made anew (a stall closes it) and the stall waits for the next step, which would ask for the plan with an empty
+  // list (the third run of 11/26: the brief of p0005 had no result, at the start of step 48).
+  const results: string[] = readSavedResults(saved?.minecraftReplanResults);
+  parts.queue.onRan((_item, result) => {
+    results.push(resultDigest(result.text));
+    if (results.length > RESULTS_KEPT) results.shift();
+  });
   const flow = createReplanFlow({ taskId: parts.taskId, saved: saved?.minecraftReplans, savedPending: saved?.minecraftReplanPending, replanner: parts.replanner,
     clock: parts.activeClock, log: parts.log, vitals: () => stallVitals(parts.observe()), sources: stall => sourcesOf(parts, results, stall),
     bind: update => boundTo(parts.plan.tree(), update),
@@ -157,7 +159,7 @@ export function unheldReplan(parts: UnheldParts): Unheld | null {
   const stage = (): PlanKind | null => strongStageNow({ fcaPlanTree: parts.plan.tree() }, doneFacts(parts.observe())?.dimension ?? null);
   const close = (reason: string): void => parts.queue.closeStep?.(reason);
   return { watch, flow, current, stage, close,
-    checkpoint: () => ({ ...flow.checkpoint(), ...watch.checkpoint(), minecraftActiveWait: watch.activeWait() }) };
+    checkpoint: () => ({ ...flow.checkpoint(), ...watch.checkpoint(), minecraftActiveWait: watch.activeWait(), minecraftReplanResults: [...results] }) };
 }
 
 /** The lifecycle of an unheld task: the look at each result and before each decision, and the plan made again at a decision's start. */

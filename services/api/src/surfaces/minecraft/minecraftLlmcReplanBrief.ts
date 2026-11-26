@@ -5,6 +5,7 @@ import { kindOf } from './minecraftPlanFacts.js';
 import { REPLAN, type ReplanRecord } from './minecraftLlmcReplan.js';
 import type { PaceDelay } from './minecraftLlmcPace.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
+import { HOPS_LINE_HEAD } from './minecraftLlmcQueueWords.js';
 
 /**
  * The brief the strong model makes the plan again from (no history of the talk: the head's own record of the task, in order of how much it
@@ -39,6 +40,32 @@ export interface BriefInput {
 
 type Rec = Record<string, unknown>;
 const rec = (value: unknown): Rec | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Rec : null;
+/** How many of the last acts' results the brief keeps (the newest are shown; `cut` shortens them). */
+export const RESULTS_KEPT = 4;
+/**
+ * One result of the body, as a line for the brief: the first two lines of its text (what stopped and the hand's own words) and the first line that
+ * names the reason's code (「穴の手が止まった理由 enderman_not_visible」), which sits after them and was cut off by a plain slice of the text
+ * (the third run of 11/26: the brief of a replan held no result at all, and its why named a hit that never came).
+ */
+export function resultDigest(text: string): string {
+  const lines = text.split('\n').map(line => line.replace(/\s+/gu, ' ').trim()).filter(Boolean);
+  const head = lines.slice(0, 2).join(' ').slice(0, 260);
+  const code = lines.slice(2).find(line => /理由 [a-z][a-z0-9_]+/u.test(line));
+  return code ? `${head} ／ ${code.slice(0, 100)}` : head;
+}
+/** The results a checkpoint held, read with care (a step is made anew, and the stall waits in the checkpoint for the next step). */
+export function readSavedResults(raw: unknown): string[] {
+  return (Array.isArray(raw) ? raw : []).filter((item): item is string => typeof item === 'string' && item.length > 0).map(item => item.slice(0, 400)).slice(-RESULTS_KEPT);
+}
+/**
+ * The body's queue lines for the brief. The head's line about short moves (「直近の go は …移動の go は 15 m 以上…」) is advice to the head for how to move;
+ * the plan made again copied it into a caution for a node that had stopped for a hidden eye (11/26), so it is kept only for a stall made by stops in one
+ * spot, where short moves can be the cause.
+ */
+export function queueBriefLines(queue: readonly string[], stallKind: string): string[] {
+  return queue.filter(line => stallKind === 'same_spot_stops' || !line.startsWith(HOPS_LINE_HEAD));
+}
+
 const MARK: Readonly<Record<string, string>> = { done: '✓', blocked: '止', wait: '待', continue: '・' };
 
 /** One node: its mark, id, kind and title, what shows it done, its target, its place, its note and (when blocked) why. */
@@ -126,7 +153,7 @@ function sections(input: BriefInput, cut: number): string[] {
     ['今の様子', input.now],
     ['事実', input.facts.slice(0, cut > 1 ? 14 : 6)],
     ['直近の結果', input.results.slice(-(cut > 2 ? 4 : 2))],
-    ['体の列', input.queue.slice(0, 4)],
+    ['体の列', queueBriefLines(input.queue, stall.kind).slice(0, 4)],
     ['前の立て直し', earlier],
     ...(cut > 0 ? [['この段の知識', [input.knowledge]] as [string, readonly string[]]] : []),
   ];
