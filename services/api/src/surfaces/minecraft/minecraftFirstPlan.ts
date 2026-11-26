@@ -379,7 +379,7 @@ export const EYES_FOR_STRONGHOLD = 10;
 const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
   (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
   '投げて落ちたアイは拾う。' +
-  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く';
+  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く（防具の足りない部位・食料・原木を足す節も同じ位置）';
 /** The eyes she carries in the overworld when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: elsewhere or fewer. */
 export function eyesForStronghold(world: Record<string, unknown> | null): number | null {
   const dimension = typeof world?.dimension === 'string' ? world.dimension.replace(/^minecraft:/u, '') : null;
