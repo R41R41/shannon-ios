@@ -27,7 +27,7 @@ const FIGHT_RESULT = [
 const HOPS = hopsLine([42, 14, 5, 2, 2], [4000, 4000, 4000])!;
 
 const tree = (() => {
-  const planned = planFromSeeds([{ title: 'エンダーマンからパールを取る', kind: 'pearl', doneWhen: 'have:ender_pearl>=14' }], { at: new Date(0).toISOString() });
+  const planned = planFromSeeds([{ title: 'エンダーマンからパールを取る', kind: 'pearl', doneWhen: 'have:ender_pearl>=14' }])!;
   return applyPlanUpdate(planned, { ops: [{ op: 'add', parent: planned.nodes[0]!.id, title: '開けた地面で目の見える個体へ fight する', kind: 'pearl', doneWhen: 'have:ender_pearl>=14' }] },
     { at: new Date(0).toISOString() }).tree;
 })();
