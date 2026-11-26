@@ -388,3 +388,35 @@ export function promiseKeptWords(entry: { item: string; count: number; use: stri
     : kept.how === 'revised' ? `約束 #${kept.id} を改訂した（rev ${kept.rev}）: ${thing}。前は ${kept.was ?? '?'}`
       : `約束 #${kept.id} は既に同じ数である: ${thing}`;
 }
+
+/**
+ * The body writes a hand's line at most `BODY_LINE_CHARS` characters and ends a longer one with 「…」 (the contract's `ActHandLine.line`). Run of 11/26 (a fight that
+ * stopped `enderman_not_visible`): every line of that stop ended in 「…48m 内のエンダーマン 17 体はどれも…」, so what decides the next hand (how far the nearest
+ * one with a visible eye is, which blocks stand between) and the body's note after it were cut before the head was sent them, and the head read a line that
+ * looked whole. The cut is the body's and its rest never reaches the head; this says that the line was cut, as a fact, so that a missing end is not read as a
+ * line that ends there.
+ */
+export const BODY_LINE_CHARS = 160;
+export function clippedLineWords(line: ActHandLine): string[] {
+  if ((line.status !== 'stopped' && line.status !== 'failed') || !line.line.endsWith('…') || line.line.length < BODY_LINE_CHARS - 2) return [];
+  return [`${FACT}この行は体が ${BODY_LINE_CHARS} 字で切って送った。切れた先（その行の後半の事実）は頭に届いていない`];
+}
+/** A fight that stopped after at least this long is told with its time (run of 11/26: four stops of 26 to 31 s against one of 0.4 s that came back at once). */
+export const FIGHT_LONG_MS = 10_000;
+const SECONDS_IN_LINE = /[（(](\d+(?:\.\d+)?)秒[）)]/u;
+/**
+ * How long the hand that stopped took, for a fight that stopped (or was stopped) after `FIGHT_LONG_MS` or more. The line says nothing of time, and the body's note of
+ * what it did meanwhile follows the cut of the line, so the head could not tell a stop that came back at once from one that came after the half minute. The act's
+ * seconds less those the done hands before it say (`（0.6秒）`) is told as it is; what the body did in that time is not known to the head and is not said.
+ */
+export function fightTimeWords(result: ActResult, line: ActHandLine): string[] {
+  if (line.do !== 'fight' || (line.status !== 'stopped' && line.status !== 'failed') || result.ok || !Number.isFinite(result.ms)) return [];
+  const lastStopped = [...result.lines].reverse().find(item => item.do === 'fight' && (item.status === 'stopped' || item.status === 'failed'));
+  if (lastStopped !== line) return [];
+  const earlier = result.lines.filter(item => item.i < line.i && item.status === 'done')
+    .reduce((sum, item) => sum + 1_000 * Number(SECONDS_IN_LINE.exec(item.line)?.[1] ?? 0), 0);
+  const own = result.ms - earlier;
+  if (own < FIGHT_LONG_MS) return [];
+  return [`${FACT}この fight の手は止まるまでに約 ${Math.round(own / 1000)} 秒かかった（act 全体 ${num(result.ms / 1000)} 秒）。`
+    + '行には時間の記載が無く、その間に体が何をしていたかは頭に届いていない'];
+}

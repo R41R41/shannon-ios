@@ -10,6 +10,7 @@ import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, clockStalledSeconds, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 import { furnaceLedgerLines } from './minecraftLlmcFurnaceWait.js';
+import { withStopCodes, type StopCode } from './minecraftLlmcRepeat.js';
 
 /**
  * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the
@@ -283,6 +284,8 @@ export interface LlmcLiveParts {
   jobs?: BodyValue;
   /** r3: the whole texts of the last step's results the history keeps short (`llmcStoredResult`), shown this once. */
   lastResults?: readonly string[];
+  /** The codes of the stopped hands beside the body's stop lines (`withStopCodes`). */
+  stopCodes?: readonly StopCode[];
   /** r3: why this step is urgent (`urgentReasons`), when it is. */
   urgent?: readonly string[];
   /** r3: health lost since the last decision (a fall, a blast), for the hint to look round (`lookHint`). */
@@ -393,7 +396,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...routeField(world),
     ...nearbyField(world, parts.planNow),
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
-    stops: strings(world.recentStops, STOPS),
+    stops: withStopCodes(strings(world.recentStops, STOPS), parts.stopCodes ?? []),
     ...(look ? { look } : {}),
     state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: parts.trend.lostIn5min() } : {}),
       ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
