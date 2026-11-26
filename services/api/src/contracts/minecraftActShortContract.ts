@@ -1,4 +1,5 @@
 import { ACT_MAX_HANDS, ACT_THOUGHT_DESCRIPTION, ACT_THOUGHT_MAX, KEEP_FORM, KEEP_MAX, type ActHand, type ActInput, type ActKeep, type ActPos } from './minecraftActContract.js';
+import { LIMITS_MANUAL_LINE } from './minecraftActLimits.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
@@ -83,6 +84,7 @@ const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
 "は戦いをやめて食べる/退く体力（今の体力以上だと始める前に退く）。挙げた相手以外は追わない。反射（溶岩・溺れ・体力 8 以下の逃走）が優先で、反射が起きたら止まる。")
     + 'fight は剣か斧が荷に要る（無いと no_weapon）。素手で殴るなら attack 相手 を使う。'
     + '理由: lost・unreachable・retreat・reflex・limit_time・no_weapon。',
+  LIMITS_MANUAL_LINE,
   manualPage('mine', 'mine（指定した同種の鉱脈を掘って回収）', [
   'mine ブロック名 X,Y,Z [X,Y,Z ...] [count=N] [tool=名] [dig=名,名] [maxDig=N] [collect=false] [exposeOk] [seconds=N]',
   ("  鉱脈を掘る。1 マスだけ書けば足りる: つながった同じ鉱石（ななめも。y=0 付近は iron_ore と deepslate_iron_ore もひと続き）は体が近い順に全部たどって掘り、拾い、道具を持ち替える" +

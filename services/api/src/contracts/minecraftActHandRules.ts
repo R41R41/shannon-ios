@@ -3,6 +3,8 @@ import { shieldRushProblem } from './minecraftShieldRushContract.js';
 import { denActProblem, denProblem } from './minecraftEnderDenContract.js';
 import { fillProblem } from './minecraftFillContract.js';
 import { bedBurstActProblem, bedBurstProblem } from './minecraftBedBurstContract.js';
+import { ATTACK_SECONDS_MAX, ENDERMAN_FIGHT_SECONDS_MAX, FIGHT_RANGE_MAX, FIGHT_SECONDS_MAX, FIGHT_SECONDS_MIN, GO_RANGE, GO_SECONDS, HUNT_RANGE, HUNT_SECONDS, MINE_SECONDS,
+  OBSIDIAN_SECONDS, PORTAL_SECONDS, SLEEP_SECONDS, SMELT_SECONDS, TIDY_SECONDS, WAIT_SECONDS } from './minecraftActLimits.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { VERTICAL_DIRS, VERTICAL_LIQUIDS, VERTICAL_SHAPES, VERTICAL_TOWARDS, type ActHand, type HandKind } from './minecraftActContract.js';
 
@@ -101,22 +103,22 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   use: useProblem,
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : approachProblem(hand),
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : approachProblem(hand),
-  wait: hand => hand.seconds! < 0.5 || hand.seconds! > 30 ? 'seconds は 0.5〜30' : null,
+  wait: hand => hand.seconds! < WAIT_SECONDS[0] || hand.seconds! > WAIT_SECONDS[1] ? `seconds は ${WAIT_SECONDS[0]}〜${WAIT_SECONDS[1]}` : null,
   attack: attackProblem,
   go: goProblem,
   sleep: sleepProblem,
-  obsidian: hand => seconds(hand, 5, 300) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源（L）か黒曜石（O）のマス 1〜24 マス' : null)
+  obsidian: hand => seconds(hand, ...OBSIDIAN_SECONDS) ?? (hand.at!.length < 1 || hand.at!.length > 24 ? 'at は溶岩の源（L）か黒曜石（O）のマス 1〜24 マス' : null)
     ?? count(hand, 64) ?? obsidianDigProblem(hand) ?? names(hand),
-  fight: hand => seconds(hand, 5, fightSecondsMax(hand)) ?? (hand.range !== undefined && hand.range > 16 ? 'range は 0〜16' : null)
+  fight: hand => seconds(hand, FIGHT_SECONDS_MIN, fightSecondsMax(hand)) ?? (hand.range !== undefined && hand.range > FIGHT_RANGE_MAX ? `range は 0〜${FIGHT_RANGE_MAX}` : null)
     ?? denProblem(hand as unknown as Record<string, unknown>),
-  mine: hand => seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
+  mine: hand => seconds(hand, ...MINE_SECONDS) ?? count(hand, 64) ?? (hand.at!.length > 4 ? 'at は鉱脈のマス 4 つまで（つながった同じ種類を体がたどる）' : null)
     ?? (BLOCK_NAME.test(hand.block!) ? null : 'block はブロックの id（例 iron_ore）') ?? names(hand),
   hunt: huntProblem,
   tidy: tidyProblem,
   make: hand => count(hand, 64) ?? approachProblem(hand),
-  portal: hand => seconds(hand, 5, 120) ?? (hand.at!.length !== 1 ? 'at は枠の内側の左下のマス 1 つ' : null) ?? names(hand),
+  portal: hand => seconds(hand, ...PORTAL_SECONDS) ?? (hand.at!.length !== 1 ? 'at は枠の内側の左下のマス 1 つ' : null) ?? names(hand),
   vertical: verticalProblem,
-  smelt: hand => seconds(hand, 5, 60) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
+  smelt: hand => seconds(hand, ...SMELT_SECONDS) ?? (hand.items!.length < 1 || hand.items!.length > 4 ? 'items は 1〜4 種類' : null)
     ?? (hand.items!.some(entry => entry.count === undefined) ? 'items には個数が要る' : null) ?? (hand.at !== undefined && hand.at.length > 4 ? 'at は 4 つまで' : null),
 };
 /** sleep: `on=false` is "not tonight" (seconds 60–300 for how long, else until the morning), `on=true` ends it; no `on`: its seconds 10–60 and item as before. */
@@ -124,7 +126,7 @@ function sleepProblem(hand: ActHand): string | null {
   if (hand.on !== undefined && typeof hand.on !== 'boolean') return 'on は true か false';
   if (hand.on === false) return hand.seconds !== undefined && (hand.seconds < 60 || hand.seconds > 300) ? 'on=false の seconds は 60〜300（寝ない秒数。省くと朝まで）' : null;
   if (hand.on === true && hand.seconds !== undefined) return 'on=true（寝ないを解く）に seconds は付けない';
-  return seconds(hand, 10, 60) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null);
+  return seconds(hand, ...SLEEP_SECONDS) ?? (hand.item !== undefined && !/^[a-z_]+_bed$/u.test(hand.item) ? 'item はベッド（〜_bed）' : null);
 }
 const RUSH_FIELDS = ['retreatTo', 'retreatHp', 'area', 'shieldReserve', 'onCrossfire', 'pickup'] as const;
 const objectOf = (value: unknown): Record<string, unknown> | null =>
@@ -181,8 +183,8 @@ export function shieldRushActProblem(input: unknown): string | null {
  */
 function huntProblem(hand: ActHand): string | null {
   if (typeof hand.target !== 'string' || /^#?\d+$/u.test(hand.target.trim())) return 'target は食料の動物の種類（cow・pig・sheep・chicken・rabbit。カンマで複数: pig,cow）。id は attack';
-  return seconds(hand, 5, 120) ?? count(hand, 64) ?? (hand.count !== undefined && !(Number.isInteger(hand.count) && hand.count >= 1) ? 'count は 1〜64 の整数' : null)
-    ?? (hand.range !== undefined && !(hand.range >= 4 && hand.range <= 48) ? 'range は 4〜48（m。手を始めた所から測る）' : null);
+  return seconds(hand, ...HUNT_SECONDS) ?? count(hand, 64) ?? (hand.count !== undefined && !(Number.isInteger(hand.count) && hand.count >= 1) ? 'count は 1〜64 の整数' : null)
+    ?? (hand.range !== undefined && !(hand.range >= HUNT_RANGE[0] && hand.range <= HUNT_RANGE[1]) ? `range は ${HUNT_RANGE[0]}〜${HUNT_RANGE[1]}（m。手を始めた所から測る）` : null);
 }
 /** tidy (2026-11-13): room 1〜20 (whole), seconds 5〜120, items and keep with counts 1 or more (keep needs one). */
 function tidyProblem(hand: ActHand): string | null {
@@ -190,10 +192,10 @@ function tidyProblem(hand: ActHand): string | null {
   if (hand.smelt !== undefined && typeof hand.smelt !== 'boolean') return 'smelt は true か false（smelt=off）';
   if (hand.items !== undefined && (hand.items.length > 8 || hand.items.some(entry => entry.count !== undefined && !(entry.count >= 1)))) return 'items は 8 種類まで・個数は 1 以上';
   if (hand.keep !== undefined && (hand.keep.length > 8 || hand.keep.some(entry => !entry.item || !(entry.count >= 1)))) return 'keep は 物:数 を 8 つまで（数は 1 以上）';
-  return seconds(hand, 5, 120);
+  return seconds(hand, ...TIDY_SECONDS);
 }
 function attackProblem(hand: ActHand): string | null {
-  return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > 30 ? 'seconds は 30 まで' : null);
+  return shieldRushHandProblem(hand) ?? (hand.seconds !== undefined && hand.seconds > ATTACK_SECONDS_MAX ? `seconds は ${ATTACK_SECONDS_MAX} まで` : null);
 }
 /** S6 (body claude/dragon-pearls14): batch barters use count; keep one call within one stack of 64 gold ingots. */
 function useProblem(hand: ActHand): string | null {
@@ -204,7 +206,7 @@ function useProblem(hand: ActHand): string | null {
  * fight's most seconds (the body's fightSecondsMax): the kind enderman (a name, `minecraft:` allowed, any case) 150 for pearl hunting, every other
  * target 60 (an id is 60).
  */
-export const FIGHT_SECONDS_MAX = 60, ENDERMAN_FIGHT_SECONDS_MAX = 150;
+export { FIGHT_SECONDS_MAX, ENDERMAN_FIGHT_SECONDS_MAX };
 const fightSecondsMax = (hand: ActHand): number =>
   typeof hand.target === 'string' && /^(minecraft:)?enderman$/u.test(hand.target.trim().toLowerCase()) ? ENDERMAN_FIGHT_SECONDS_MAX : FIGHT_SECONDS_MAX;
 /**
@@ -287,8 +289,8 @@ export function verticalLimitProblem(hand: ActHand): string | null {
 function goProblem(hand: ActHand): string | null {
   if (hand.to !== undefined && hand.goals !== undefined) return 'to と goals は片方だけ（候補を並べるなら goals）';
   if (hand.goals !== undefined && (hand.goals.length < 2 || hand.goals.length > 8)) return 'goals は 2〜8 マス（1 つなら to）';
-  if (hand.range !== undefined && (hand.range < 0 || hand.range > 4)) return 'range は 0〜4';
-  if (hand.seconds !== undefined && (hand.seconds < 5 || hand.seconds > 120)) return 'seconds は 5〜120';
+  if (hand.range !== undefined && (hand.range < GO_RANGE[0] || hand.range > GO_RANGE[1])) return `range は ${GO_RANGE[0]}〜${GO_RANGE[1]}`;
+  if (hand.seconds !== undefined && (hand.seconds < GO_SECONDS[0] || hand.seconds > GO_SECONDS[1])) return `seconds は ${GO_SECONDS[0]}〜${GO_SECONDS[1]}`;
   return names(hand);
 }
 

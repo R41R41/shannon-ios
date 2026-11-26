@@ -1,4 +1,4 @@
-import { lineMeters, REACH_SHORT, REACH_TEXT, SHOOTER_KINDS, SHOOTER_WORD, type ReachKind } from './minecraftLlmcReachWords.js';
+import { lineMeters, MOOD_TEXT, REACH_SHORT, REACH_TEXT, SHOOTER_KINDS, SHOOTER_WORD, type ReachKind } from './minecraftLlmcReachWords.js';
 import { ptText, type P } from './minecraftLlmcWalkRules.js';
 
 /**
@@ -12,7 +12,7 @@ import { ptText, type P } from './minecraftLlmcWalkRules.js';
  * has a way); each says how it stands to her (the frame's `reach`, said after its place), and the others are one line, 「ほか N 体（いちばん近い: …）」.
  */
 interface Enemy { id: string; name: string; dist: number; pos: P | null; notes: string[]; urgent: boolean; wait: boolean;
-  reach: ReachKind | null; shooter: boolean }
+  reach: ReachKind | null; shooter: boolean; angry: boolean }
 export const OMIT = /^ほか(\d+)件（長いため略）$/u;
 /** A hostile within this many metres is always written as a line of its own. */
 export const LINE_METERS = 24;
@@ -28,6 +28,14 @@ export function relText(self: P, target: P): string {
   if (dy) parts.push(`${dy > 0 ? '上' : '下'}${Math.abs(dy)}`);
   return parts.length ? parts.join('・') : '同じマス';
 }
+/**
+ * The relative place of a hostile that is walled off: a height of 3 or more is said against her feet (「足元より 5 下」), the words of the body's own failure
+ * (11/26: 「北1・下5」 was read as 5.1 m away behind a wall, and the same fight was called at again; the hostile was in a hole 5 below).
+ */
+export function walledRelText(self: P, target: P): string {
+  const dy = target.y - self.y, text = relText(self, target);
+  return Math.abs(dy) < 3 ? text : text.replace(/(上|下)(\d+)$/u, (_all, side: string, n: string) => `足元より ${n} ${side}`);
+}
 const detail = (rest: string): string => rest.replace(/^(?:上|下) \d+・?/u, '').replace(/^・/u, '');
 
 class Hostiles {
@@ -36,7 +44,7 @@ class Hostiles {
   touch(id: string, name: string, dist: number): Enemy {
     let enemy = this.byId.get(id);
     if (!enemy) {
-      enemy = { id, name, dist, pos: null, notes: [], urgent: false, wait: false, reach: null, shooter: false };
+      enemy = { id, name, dist, pos: null, notes: [], urgent: false, wait: false, reach: null, shooter: false, angry: false };
       this.byId.set(id, enemy);
       this.order.push(id);
     }
@@ -89,6 +97,7 @@ export function mergeEnemies(body: Record<string, unknown>, self: P): { urgent: 
       enemy.pos = { x: +m[4]!, y: +m[5]!, z: +m[6]! };
       enemy.reach = KINDS.find(kind => m[7]!.includes(REACH_TEXT[kind])) ?? null;
       enemy.shooter = m[7]!.includes(`・${SHOOTER_WORD}`);
+      enemy.angry = m[7]!.includes('怒っている');
     } else if (OMIT.test(line)) omitted.push(line);
   }
   for (const line of list('unreachable')) {
@@ -106,10 +115,12 @@ export function mergeEnemies(body: Record<string, unknown>, self: P): { urgent: 
     else kept.push(item.line);
   }
   const text = (e: Enemy) => {
-    const rel = e.pos ? ` ${ptText(e.pos)} ${relText(self, e.pos)}` : '';
+    const rel = e.pos ? ` ${ptText(e.pos)} ${e.reach === 'walled' ? walledRelText(self, e.pos) : relText(self, e.pos)}` : '';
     // The probe's own words of the reach (with what lies between) are the better ones: the frame's are said only where there are none.
     const frame = e.reach && !e.notes.some(note => REACH_NOTE.test(note)) ? [REACH_TEXT[e.reach]] : [];
-    const note = [...e.notes.filter(Boolean), ...frame, ...isShooter(e) ? [SHOOTER_WORD] : []].join('・');
+    // An angry one behind a wall does not come: said so, in fewer words than the frame's 「向かって来る」 (the merge dropped the mood altogether).
+    const mood = e.reach === 'walled' && e.angry ? [MOOD_TEXT.angryWalled] : [];
+    const note = [...e.notes.filter(Boolean), ...frame, ...isShooter(e) ? [SHOOTER_WORD] : [], ...mood].join('・');
     return `#${e.id} ${e.name} ${e.dist}m${rel}${e.wait ? '（判断を待つ間に出た）' : ''}${note ? `・${note}` : ''}`;
   };
   const all = hostiles.all();

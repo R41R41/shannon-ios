@@ -85,8 +85,18 @@ const topOf = (tree: PlanTree): string | null => {
   return at?.id ?? null;
 };
 
-/** The plan: the done top-level nodes on one line; the open ones, the one she is in with its whole subtree and its rules; the promises still open. */
-export function planLines(tree: PlanTree): string[] {
+/**
+ * A caution that is a stopped hand's own line copied onto the node (`cautionFact`'s last form: 「fight: 届かない（元: …」, with the place first at times).
+ * It says what one stop was, not what is known; the plan made again read it as the cause of a different stop (11/26: a roof-lid line stood as the reason
+ * for a walled one 5 below).
+ */
+export const isFailureCopy = (text: string): boolean => /^(?:(-?d+,-?d+,-?d+) の )?[a-z_]+: /u.test(text);
+
+/**
+ * The plan: the done top-level nodes on one line; the open ones, the one she is in with its whole subtree and its rules; the promises still open.
+ * Cautions that are a stop's own line are shown only when the stall is stops in one spot (the kind they were written for); for any other stall they are old words.
+ */
+export function planLines(tree: PlanTree, stallKind = 'same_spot_stops'): string[] {
   const order = orderedPlan(tree.nodes);
   const top = order.filter(node => node.parentId === null);
   const here = topOf(tree);
@@ -95,7 +105,7 @@ export function planLines(tree: PlanTree): string[] {
   for (const node of top.filter(item => item.state !== 'done')) {
     out.push(nodeLine(node, tree));
     if (node.id !== here) continue;
-    for (const line of [...(node.forbid ?? []).map(text => `  禁止: ${text}`), ...(node.caution ?? []).map(text => `  注意: ${text}`)]) out.push(line);
+    for (const line of [...(node.forbid ?? []).map(text => `  禁止: ${text}`), ...(node.caution ?? []).filter(text => stallKind === 'same_spot_stops' || !isFailureCopy(text)).map(text => `  注意: ${text}`)]) out.push(line);
     const descendants = new Set([node.id]);
     for (const child of order) {
       if (child.parentId && descendants.has(child.parentId)) {
@@ -149,7 +159,7 @@ function sections(input: BriefInput, cut: number): string[] {
     ['止まり', [`${stall.why}（種類 ${stall.kind}）`, ...(stall.node ? [stalledWords(input)] : [])]],
     ['人の言葉（依頼と、あとから届いた言葉。原文・話者・時刻つき）', input.words ?? []],
     ['時間の物差し', input.pace ? [`節目 ${input.pace.milestone}・目安 ${input.pace.targetSeconds} 秒・遅れ ${input.pace.secondsBehind} 秒`] : []],
-    ['計画', planLines(input.tree)],
+    ['計画', planLines(input.tree, stall.kind)],
     ['今の様子', input.now],
     ['事実', input.facts.slice(0, cut > 1 ? 14 : 6)],
     ['直近の結果', input.results.slice(-(cut > 2 ? 4 : 2))],

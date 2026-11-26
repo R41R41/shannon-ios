@@ -33,6 +33,7 @@ export type { FillArgs, FillCode, FillGroup, FillResult } from './minecraftFillC
  */
 import { PLAN_LIMITS,promiseItemFits } from '@shannon/mind';
 import { CONDITION_SCHEMA,validCondition } from './minecraftActCondition.js';
+import { OUT_OF_RANGE_TEXT, RANGE_LIMITS_TEXT, SECONDS_LIMITS_TEXT } from './minecraftActLimits.js';
 import { dependsProblem,fillActProblem,handProblem,shieldRushActProblem } from './minecraftActHandRules.js';
 import { DEN_DESCRIPTION, DEN_DIRECTIONS, denActProblem } from './minecraftEnderDenContract.js';
 import { aggregateGoal,type CutBy,type GoalOutcome,type RunEnd } from './continueContract.js';
@@ -136,8 +137,8 @@ export const VIEW_DESCRIPTION = [
  * What `seconds` and `range` may be, hand by hand (the schema's bounds are the widest of any hand; `minecraftActHandRules.ts` holds each one's own).
  * Play 1124: 7 of 18 turned-away acts were a go with range above 4 (the old schema said 16) or seconds above a hand's top: the model wrote what the schema allowed.
  */
-const SECONDS_LIMITS = 'wait 0.5〜30・attack 30 まで・go/mine/portal/hunt/tidy 5〜120・smelt 5〜60・sleep 10〜60・obsidian 5〜300・fight 5〜（種類で上限が違う）。範囲外の手は動かさずに断られる（その act は全部動かない）';
-const RANGE_LIMITS = 'go 0〜4・fight 0〜16・hunt 4〜48・vertical 1 か 2・walk と pickup は m。範囲外の手は動かさずに断られる（その act は全部動かない）';
+const SECONDS_LIMITS = `${SECONDS_LIMITS_TEXT}。${OUT_OF_RANGE_TEXT}`;
+const RANGE_LIMITS = `${RANGE_LIMITS_TEXT}。${OUT_OF_RANGE_TEXT}`;
 
 const pos = (description: string) => ({ type: 'object', description, additionalProperties: false, required: ['x', 'y', 'z'],
   properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } });

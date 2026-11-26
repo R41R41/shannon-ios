@@ -7,6 +7,7 @@ import { MATERIAL_ACQUISITION_LINES } from './minecraftRequestKnowledge.js';
 import { NIGHT_FIGHT_LINES, REQUEST_NIGHT_LINE, REQUEST_STEPS_LINES } from './minecraftRequestSteps.js';
 import { REQUEST_PEOPLE_LINES } from './minecraftRequestPeople.js';
 import { SLEEP_EXCEPT } from '../../contracts/minecraftSleepWords.js';
+import { ATTACK_SECONDS_MAX, ENDERMAN_FIGHT_SECONDS_MAX, FIGHT_SECONDS_MAX } from '../../contracts/minecraftActLimits.js';
 /**
  * mb-llmc v2 (改修案 2.1): the mode's instructions and knowledge, cut once more from `minecraftKnowledgeCore.ts` (own prompt):
  * - `V2_ALWAYS`: what every decision needs (how to decide, how to read the live state, the map, falls, enemies, the plan). With the header,
@@ -469,7 +470,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '届く範囲の大人で怒っていない個体に、最大 3 体まで 1 個ずつ渡し、6 秒見終わるのを待って出た物を拾い、繰り返す。'
       + '先に金の防具を 1 つ着ける'
       + '（equip item=golden_boots。着けた後に読み戻し、違えば equip_failed）。code: not_adult（子ども）・piglin_hostile（怒っている）・out_of_reach・not_accepted・nothing_returned。',
-    '- fight target=enderman は seconds 120〜150（体の上限は 150）で出す。倒すたびに見張りが延びるので、1 回の手で何体も倒せる（短く切ると、そのたびに屋根を作り直す）。'
+    `- fight target=enderman は seconds 120〜${ENDERMAN_FIGHT_SECONDS_MAX}（名前 enderman の上限。#id で呼ぶと ${FIGHT_SECONDS_MAX}、attack は ${ATTACK_SECONDS_MAX}。これを超える手は act ごと断られる）で出す。倒すたびに見張りが延びるので、1 回の手で何体も倒せる（短く切ると、そのたびに屋根を作り直す）。`
       + '倒したら、同じ act の次の手に pickup を並べる（判断を待たない。パールは落とし物で、待つ間に消える時間が進む）。',
     '- エンダーマン（HP 40・背が 3 マス）: 目を合わせると怒る。準備なしに合わせない（look で足元）。弓は使わない（テレポートでよける）。'
       + 'fight target=enderman は体が屋根の穴を作って戦う: 平らな地面（ナイリウム・ネザーラック）で 3×3×2 の空きがある所に立って呼ぶ。'
