@@ -11,7 +11,7 @@ import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecra
 import { isDragonPlan, reachedMilestoneNames } from './minecraftLlmcRoad.js';
 import { offer, pending, withdraw, type OnceFact } from './minecraftLlmcOnceFacts.js';
 import { wantsFood, type FactsContext } from './minecraftLlmcFacts.js';
-import type { PlanTree } from '@shannon/mind';
+import type { PlanKind, PlanTree } from '@shannon/mind';
 import { meterLine, roadLine } from './minecraftLlmcRoad.js';
 import {
   feetIn,
@@ -21,10 +21,13 @@ import {
   parallelFurnaceLine,
   ironSearchLine, sheepAbsentLine, goldAbsentLine, foodAbsentLine,
   preparationShortage,
+  preparationStage,
   readinessOf,
   recoveryLine,
 } from './minecraftLlmcReadiness.js';
-import { wornItems } from './minecraftItems.js';
+import { BED_ITEM, wornItems } from './minecraftItems.js';
+import { carried } from './minecraftConditions.js';
+import { END_BEDS, END_OBSIDIAN } from './minecraftLlmcPrepRules.js';
 import { waterNodeFacts } from './minecraftLlmcWaterNode.js';
 import { shiftFacts } from './minecraftLlmcShiftFacts.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
@@ -174,6 +177,7 @@ export function readinessParts(
       goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
       foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts, tree?.nodes, facts.at ?? null),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
+      endLackLine(facts, nowKinds(planFacts), llmc.journeyReadiness),
     ]
       .filter(Boolean)
       .join('。') || null;
@@ -218,6 +222,36 @@ export function readinessParts(
     ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}),
   };
+}
+
+const ARMOUR_SLOTS: ReadonlyArray<readonly [string, string]> = [['helmet', '頭'], ['chestplate', '胴'], ['leggings', '脚'], ['boots', '足']];
+const EYES_FOR_FRAMES = 12;
+/**
+ * Run 7 of 11/26 (past the fortress the shortage listed the beds, obsidian and the bow, and said nothing of the pickaxe at 73 of 1561, the armour at 2 of 4 or the
+ * pearls and rods that make up for a broken eye): the End's check as one line of numbers, each only while it falls short, from the pack, the worn line and the durability
+ * the frame carries. Facts only; where to get an item is not said (the pack's own counts are all it knows).
+ */
+export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, kinds: readonly PlanKind[] | null, journeyReadiness?: boolean): string | null {
+  if (journeyReadiness === false || facts.dimension !== 'overworld' || preparationStage(facts.dimension, facts.counts, kinds) !== 'end') return null;
+  const { counts, world } = facts, count = (item: string) => carried(counts, item);
+  const lacks: string[] = [];
+  const beds = [...counts].reduce((sum, [name, n]) => sum + (BED_ITEM.test(name) ? n : 0), 0);
+  if (beds < END_BEDS) lacks.push(`ベッド ${beds}/${END_BEDS}`);
+  if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}`);
+  if (!count('bow')) lacks.push(`弓なし（糸 ${count('string')}/3・棒 ${count('stick')}/3）`);
+  if (count('arrow') < 12) lacks.push(`矢 ${count('arrow')}/12（羽根 ${count('feather')}・火打石 ${count('flint')}・棒 ${count('stick')}）`);
+  const picks = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
+    const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null, durability = item?.durability as Record<string, unknown> | undefined;
+    const left = durability?.left, max = durability?.max;
+    return item && /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_pickaxe$/u.test(String(item.name)) && typeof left === 'number' && typeof max === 'number' && max > 0
+      ? [{ name: String(item.name), left, max }] : [];
+  }).sort((a, b) => b.left - a.left)[0];
+  if (picks && picks.left < picks.max / 2) lacks.push(`${picks.name} 耐久 ${picks.left}/${picks.max}`);
+  const worn = wornItems(world.worn), missing = ARMOUR_SLOTS.filter(([slot]) => !worn.some(name => name.endsWith(`_${slot}`))).map(([, label]) => label);
+  if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）`);
+  const eyes = count('ender_eye');
+  if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
+  return lacks.length ? `エンドまでの不足（数）: ${lacks.join('・')}` : null;
 }
 
 export const STALE_FACT_KEY = 'stale_node:';
@@ -333,7 +367,7 @@ export function roadParts(
     tree = null;
   }
   // Chapter 8: the meter's seconds are the seconds the task ran, without the time it was held (the time limit counts the same).
-  const road = roadLine(tree),
+  const road = roadLine(tree, observation),
     meter = meterLine(tree, observation, minutes, heldMs);
   return { ...(road ? { road } : {}), ...(meter ? { meter } : {}) };
 }

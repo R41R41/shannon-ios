@@ -112,12 +112,19 @@ export const milestoneWords = (): string =>
  * the title's words; the seeded plan's last node, 「エンドでドラゴン」). */
 export const isDragonPlan = (tree: PlanTree | null | undefined): boolean => !!tree && tree.nodes.some(node => kindOf(node) === 'dragon');
 
-const SHOWN_AFTER = 5, SHOWN_DONE = 3;
+/**
+ * Run 7 of 11/26 (d0003: 「[p9] 黒曜石を取りに…」 was tagged for 「エンドへ入る」 for 13 minutes; the road said 「ほか 5 節」 and the plan's `ids` line is ids alone, so the
+ * title of the obsidian node [p7] was nowhere in what the model read, and the road's 「ストロングホールド探し◀今」 hid that the current node was its child [n1]): every open
+ * top-level node is named with its id (the tag the model writes in a why), the node she is in says the current leaf's id, and a bed node done but short now is not a ✓.
+ */
+const SHOWN_AFTER = 11, SHOWN_DONE = 3;
 const MARKS: Readonly<Record<string, string>> = { blocked: '（止）', done: '✓' };
 /** Run 41: a node before the one she is in that is neither done nor blocked (the preparation was passed over and
  * vanished from the road without a mark). */
 const SKIPPED_MARK = '（未・飛ばした）';
-const label = (node: PlanNode): string => node.title.replace(/[（(].*$/u, '').trim().slice(0, 12) || node.id;
+/** A done bed node whose count the pack no longer holds (the beds were placed or slept in): the ✓ is not what the pack shows now. */
+const SHORT_MARK = '（今は足りない）';
+const label = (node: PlanNode): string => `${node.id} ${node.title.replace(/[（(].*$/u, '').trim().slice(0, 12) || node.id}`;
 /** The top-level node the current node is under (or is). */
 function topOf(tree: PlanTree): string | null {
   const byId = new Map(tree.nodes.map(node => [node.id, node]));
@@ -126,24 +133,31 @@ function topOf(tree: PlanTree): string | null {
   return at?.id ?? null;
 }
 /**
- * `body.road`: the top-level nodes in order, the last few done ones with ✓, the one she is in with ◀今, the next
- * five, and how many are left; a blocked one
- * with 止. Run 41: a node before the one she is in that is still open stays on the road with 「（未・飛ばした）」 (it does
- * not count in 「済み n 節」).
+ * `body.road`: the top-level nodes in order, each with its id, the last few done ones with ✓, the one she is in with ◀今 (and the current leaf's id when it is a
+ * child), the open ones after it, and how many are left past `SHOWN_AFTER`; a blocked one with 止. Run 41: a node before the one she is in that is still open
+ * stays on the road with 「（未・飛ばした）」 (it does not count in 「済み n 節」). `observation`: a done node of the kind `bed` is re-read against the pack.
  * Null when the plan is not the dragon's.
  */
-export function roadLine(tree: PlanTree | null | undefined): string | null {
+export function roadLine(tree: PlanTree | null | undefined, observation: BodyObservation | null = null): string | null {
   if (!tree || !isDragonPlan(tree)) return null;
   const top = orderedPlan(tree.nodes).filter(node => node.parentId === null), current = topOf(tree);
   const here = Math.max(0, top.findIndex(node => node.id === current));
   const passed = top.slice(0, here), settled = passed.filter(node => node.state === 'done' || node.state === 'blocked'), open = top.slice(here);
   const kept = new Set(settled.slice(-SHOWN_DONE).map(node => node.id));
   const early = settled.length > SHOWN_DONE ? `済み ${settled.length - SHOWN_DONE} 節 ` : '';
-  const mark = (node: PlanNode, index: number): string => index === 0 && current ? '◀今' : MARKS[node.state] ?? '';
+  const facts = doneFacts(observation);
+  const stateMark = (node: PlanNode): string => {
+    if (node.state === 'done' && facts && kindOf(node) === 'bed') {
+      const predicate = parseDoneWhen(node.doneWhen);
+      if (predicate && !predicateHolds(predicate, facts)) return SHORT_MARK;
+    }
+    return MARKS[node.state] ?? '';
+  };
+  const mark = (node: PlanNode, index: number): string => index === 0 && current ? `◀今${tree.current && tree.current !== node.id ? `[${tree.current}]` : ''}` : stateMark(node);
   const shown = open.slice(0, SHOWN_AFTER + 1).map((node, index) => `${label(node)}${mark(node, index)}`);
   const left = open.length - shown.length;
   const before = passed.filter(node => kept.has(node.id) || (node.state !== 'done' && node.state !== 'blocked'))
-    .map(node => `${label(node)}${MARKS[node.state] ?? SKIPPED_MARK}`).join(' ');
+    .map(node => `${label(node)}${stateMark(node) || SKIPPED_MARK}`).join(' ');
   return `道のり: ${early}${before}${before ? ' → ' : ''}${shown.join(' → ')}${left > 0 ? ` → ほか ${left} 節` : ''}`;
 }
 

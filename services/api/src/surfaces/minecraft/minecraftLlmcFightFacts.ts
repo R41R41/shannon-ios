@@ -1,7 +1,8 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carriedItemCounts, wornItems } from './minecraftItems.js';
 import { carriedFood } from './minecraftLlmcLive.js';
-import { cookingOf } from './minecraftConditions.js';
+import { carried, cookingOf } from './minecraftConditions.js';
+import { recipeOf } from './minecraftLlmcRecipes.js';
 import { SHOOTER_KINDS } from './minecraftLlmcReachWords.js';
 import type { PlanFacts } from './minecraftPlanFacts.js';
 
@@ -152,6 +153,36 @@ export function shieldLine(world: Record<string, unknown>): string | null {
   return `盾 残り ${shield.left}/${shield.max}（${shield.held ? '構えている盾' : '持っている盾'}。1/3 を切っている）`;
 }
 
+/**
+ * Run 7 of 11/26 (the diamond pickaxe went 764 → 73 of 1561 in 40 minutes and the stone axe stood at 15 of 131; only the shield had a line at a third, and no why
+ * of 132 decisions named a tool's wear): a pick, axe, sword or shovel under a third of its life is said as the shield is, with what its recipe needs and what the
+ * pack holds of it (the recipe table, smelting from raw iron). Facts only: what to make and when is the decision's.
+ */
+const TOOL_ITEM = /^(?:minecraft:)?((?:wooden|stone|golden|iron|diamond|netherite)_(?:pickaxe|axe|sword|shovel))$/u;
+const PART_WORDS: Readonly<Record<string, string>> = { iron_ingot: '鉄インゴット', cobblestone: '丸石', planks: '板', diamond: 'ダイヤ', gold_ingot: '金インゴット', stick: '棒' };
+function partLine(name: string, counts: ReadonlyMap<string, number>): string | null {
+  const recipe = recipeOf(name);
+  if (!recipe) return null;
+  const have = (item: string): number => item === 'cobblestone' ? carried(counts, 'cobblestone') + carried(counts, 'cobbled_deepslate') + carried(counts, 'blackstone')
+    : carried(counts, item);
+  const needs = recipe.needs.map(part => `${PART_WORDS[part.item] ?? part.item} ${part.count}`).join('・');
+  const held = recipe.needs.map(part => {
+    const raw = part.item === 'iron_ingot' ? carried(counts, 'raw_iron') : 0;
+    return `${PART_WORDS[part.item] ?? part.item} ${have(part.item)}${raw ? `＋原鉄 ${raw}` : ''}`;
+  }).join('・');
+  return `作り直すなら ${needs}（持ち: ${held}）`;
+}
+export function toolLines(world: Record<string, unknown>): string[] {
+  const counts = carriedItemCounts(world, undefined);
+  return (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
+    const item = rec(raw), durability = rec(item?.durability), left = finite(durability?.left), max = finite(durability?.max);
+    const id = TOOL_ITEM.exec(String(item?.name))?.[1];
+    if (!item || !id || left === null || max === null || max <= 0 || left >= max * SHIELD_LOW_FRACTION) return [];
+    const make = partLine(id, counts);
+    return [`${id} 残り ${left}/${max}（1/3 を切っている${make ? `。${make}` : ''}）`];
+  }).slice(0, 3);
+}
+
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */
 const nightly = (world: Record<string, unknown>): boolean =>
   (finite(world.timeOfDay) ?? -1) >= 12_000 && (world.dimension === undefined || world.dimension === 'overworld');
@@ -244,5 +275,5 @@ export function waterLine(world: Record<string, unknown>): string | null {
 export function fightLines(observation: BodyObservation | null, request: boolean): string[] {
   const world = rec(observation?.state.world);
   if (!world) return [];
-  return [packLine(world, nightly(world), request), gearLine(observation, world), strikeLine(observation, world), shieldLine(world), waterLine(world)].filter((line): line is string => !!line);
+  return [packLine(world, nightly(world), request), gearLine(observation, world), strikeLine(observation, world), shieldLine(world), ...toolLines(world), waterLine(world)].filter((line): line is string => !!line);
 }

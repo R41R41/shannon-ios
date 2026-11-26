@@ -7,7 +7,7 @@ import { carriedItemCounts,EDIBLE_FOOD } from './minecraftItems.js';
 import { FOOD_POINTS,stacks } from './minecraftLlmcLive.js';
 import { markDelivered,offer,pending,type OnceFact } from './minecraftLlmcOnceFacts.js';
 import { fightLines } from './minecraftLlmcFightFacts.js';
-import { dropAdvice,FULL_COST,packFacts,PACK_SLOTS,reportedFree } from './minecraftLlmcPack.js';
+import { dropAdvice,FULL_COST,packFacts,PACK_SLOTS,reportedFree,slotsOf } from './minecraftLlmcPack.js';
 import { heldBack,promiseLines } from './minecraftLlmcPromises.js';
 import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
@@ -374,7 +374,22 @@ export function digPackLine(observation: BodyObservation | null, hands: readonly
   if (toldPack.size > 32) toldPack.delete(toldPack.keys().next().value as string);
   const spare = dropAdvice(free === 0 ? packed : { ...packed, worn: [] }, item => heldBack(promises, item));
   return `空き ${free}/${PACK_SLOTS}：掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
+    + digRoomWords(hands, packed.filler, free)
     + (spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）');
+}
+/**
+ * Run 7 of 11/26 (free 0 to 2 of 36, five gos stopped on a full pack in 3.5 minutes; the line said 「拾えない」 and not how many the go would dig): what the free slots and the
+ * part-filled stacks of the filler can still take (64 a slot) against the most the act's digging hands may dig (a go's or vertical's `maxDig`, a dig's cells), so the drop and
+ * the dig limit are set against one number. The upper bound is the hand's limit, not an estimate of the rock on the way.
+ */
+function digRoomWords(hands: readonly ActHand[] | undefined, filler: ReadonlyArray<[string, number]>, free: number): string {
+  const dropped = (hands ?? []).filter(hand => hand.do === 'drop').reduce((sum, hand) => sum + (hand.items ?? []).reduce((all, item) => all + (item.count ?? 0), 0), 0);
+  const room = free * 64 + filler.reduce((sum, [name, count]) => sum + slotsOf(name, count) * 64 - count, 0) + dropped;
+  const digs = (hands ?? []).filter(diggingHand).map(hand => hand.do === 'dig' ? (hand.collect === false ? 0 : hand.at?.length ?? 0)
+    : typeof hand.maxDig === 'number' ? hand.maxDig : 0);
+  const most = digs.reduce((sum, count) => sum + count, 0);
+  if (!most) return `拾える見込みは約 ${room} 個まで${dropped ? `（この act の drop ${dropped} 個を含む）` : ''}。`;
+  return `拾える見込みは約 ${room} 個まで${dropped ? `（この act の drop ${dropped} 個を含む）` : ''}・この act の掘る上限は合わせて ${most}（${most > room ? '上限まで掘ると途中で満杯になり止まる。先に drop で空けるか、上限を下げる' : '足りる'}）。`;
 }
 /** Free slots at or under this: the line also says what fills the pack. */
 const NEAR_FULL = 3;
