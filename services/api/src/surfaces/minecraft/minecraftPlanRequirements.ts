@@ -63,7 +63,7 @@ function shortOfTarget(id: string, target: NonNullable<PlanNode['target']>, coun
   const lower = !spare ? '' : have >= FRAME_EYES
     ? `予備を減らすなら同じ set で target の count と doneWhen の数を ${FRAME_EYES}〜${have} に下げてよい（枠の ${FRAME_EYES} は下回らない）`
     : `枠に ${FRAME_EYES} 要るので数は下げない`;
-  return `${id}: 取得目標 ${target.item}×${target.count} は今 ${have}${parts}、あと ${target.count - have}で未達。${DONE_REPAIR}。${lower}`;
+  return `${id}: 取得目標 ${target.item}×${target.count} に今 ${have}${parts}、あと ${target.count - have}。${DONE_REPAIR}。${lower}`;
 }
 
 function unreservedStock(node: PlanNode, counts: ReadonlyMap<string, number>, tree?: PlanTree) {
