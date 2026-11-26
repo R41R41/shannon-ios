@@ -265,7 +265,7 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   const eyes = count('ender_eye');
   if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
   // The same sentence is in the heading just before (`END_PREP_AFTER_STRONGHOLD`); here it is said short, for the line read alone.
-  const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。防具の欠け・食料・掘る道具は別' : '';
+  const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい' : '';
   return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数${behind}）: ${lacks.join('・')}` : null;
 }
 

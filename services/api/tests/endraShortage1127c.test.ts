@@ -3,6 +3,8 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { ACT_CONTRACT_VERSION } from '../src/contracts/minecraftActContract.js';
 import { beforeStronghold, preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { endLackLine, planNowOrdered } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
+import { firstPlanInput } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
+import { CURRENT_PLAN_STRUCTURE } from '../src/surfaces/minecraft/minecraftCurrentPlanPrompt.js';
 import { END_PREP_AFTER_STRONGHOLD } from '../src/surfaces/minecraft/minecraftEndPrepWords.js';
 import { meterLine } from '../src/surfaces/minecraft/minecraftLlmcRoad.js';
 import { seedPlan } from '../src/surfaces/minecraft/minecraftFirstPlan.js';
@@ -47,9 +49,41 @@ describe('the End shortage heading before the stronghold', () => {
   });
   it('puts the same words beside the lack line', () => {
     const facts = { dimension: 'overworld', counts: counts(11), world: { eyeThrows: THROWS }, food: 500 } as never;
-    expect(endLackLine(facts, ['stronghold'] as never)).toContain('点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。防具の欠け・食料・掘る道具は別');
+    expect(endLackLine(facts, ['stronghold'] as never)).toContain('点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい');
     expect(endLackLine(facts, ['stronghold'] as never)).toContain('ベッド 7/8（あと 1）');
     expect(endLackLine({ ...(facts as object), world: { mapLandmarks: FRAMES } } as never, ['stronghold'] as never)).not.toContain('要塞の後ろでよい');
+  });
+  it('says armour, food and digging tools lacking may be made before leaving, only from near material, and the End items go behind with no trip for one bed', () => {
+    const line = shortage(11, ['stronghold'])!;
+    expect(END_PREP_AFTER_STRONGHOLD).toContain('身を守る物の欠け（防具の部位・食料・掘る道具）は別で、要塞へ発つ前に作ってよい');
+    expect(END_PREP_AFTER_STRONGHOLD).toContain('30m 以内');
+    expect(END_PREP_AFTER_STRONGHOLD).toContain('遠いかまどへ通わない');
+    expect(END_PREP_AFTER_STRONGHOLD).toContain('遠くへ掘りに行く節は作らない');
+    expect(line).toContain('ベッド 1 個のために村へ往復しない');
+    expect(line).toContain('ベッド（エンドの点検は 8・戦いの目標は 10） 7/8（あと 1）');
+  });
+  it('shows no armour permission with no eyes (a new world), a cake or a house: the sentence is only for the stronghold-first case', () => {
+    for (const kinds of [['food'], ['cake'], ['house'], ['wood']]) {
+      expect(preparationShortage({ dimension: 'overworld', counts: new Map(), food: 5, nowKinds: kinds as never, worn: [] }) ?? '').not.toContain('発つ前に作ってよい');
+    }
+    expect(endLackLine({ dimension: 'overworld', counts: new Map(), world: {}, food: 5 } as never, ['food'] as never) ?? '').not.toContain('発つ前に作ってよい');
+  });
+});
+
+describe('the plan words: armour before the walk, the End items behind', () => {
+  const pack = [{ name: 'ender_eye', count: 11 }, { name: 'iron_ingot', count: 6 }];
+  it('writes the short departure node for armour, and the End items behind, in the first plan input and the plan system', () => {
+    const text = firstPlanInput('エンドラを討伐して', { dimension: 'overworld', inventory: pack, worn: '頭: iron_helmet、胴: iron_chestplate、脚: なし、足: なし' }, { readiness: true, journeyReadiness: true, now: 0 });
+    expect(text).toContain('要塞の前の短い節（出発の準備）にしてよい');
+    expect(text).toContain('30m 以内');
+    expect(text).toContain('エンドの点検物は要塞の後ろの節');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('要塞の前の短い節（出発の準備）にしてよい');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('ベッド 1 個のために村へ往復しない');
+  });
+  it('does not write it with no eyes (a new world) or for a cake or a house', () => {
+    for (const goal of ['エンドラを討伐して', 'ケーキを作って', '家を建てて']) {
+      expect(firstPlanInput(goal, { dimension: 'overworld', inventory: [] }, {})).not.toContain('出発の準備');
+    }
   });
 });
 

@@ -81,7 +81,7 @@ describe('(2) a follow names the node it left, and how to go back', () => {
     expect(found).toMatchObject({ to: 'p2.3', from: 'p1.1' });
     expect(found.words).toContain('今の節を [p2.3] に進めた');
     expect(found.words).toContain(`計画の順で先の [p1.1] 交点の手前まで歩く（${REACH}） は開いたまま`);
-    expect(found.words).toContain('要塞より後ろの順の節の手を続けているなら、plan_update の current で [p1.1] に戻せる');
+    expect(found.words).toContain('防具・食料・掘る道具の欠けの手なら、そのまま続けてよい。エンドの点検物（ベッド・黒曜石・足場・弓矢）の手なら、要塞の後ろの順なので plan_update の current で [p1.1] に戻せる');
     expect(found.words).toContain('注意（p2）: ベッドと黒曜石は要塞の後ろで取る');
     // the node left is not listed a second time among the nodes passed
     expect(found.words).not.toContain('飛ばした節は順のまま残っている');
@@ -94,7 +94,7 @@ describe('(2) a follow names the node it left, and how to go back', () => {
   });
   it('withNodeView puts the node left first in next, and the later order caution in rules once', () => {
     const out = withNodeView({ next: ['p9 先'], rules: ['注意（p2）: ベッドと黒曜石は要塞の後ろで取る'], now: null }, treeOf(ROWS, 'p2.3'), 'overworld', node => node.id === 'p1.1' ? REACH : null)!;
-    expect((out.next as string[])[0]).toBe(`戻る先 [p1.1] 交点の手前まで歩く（${REACH}）: 計画の順で先の、開いたままの節`);
+    expect((out.next as string[])[0]).toBe(`戻る先 [p1.1] 交点の手前まで歩く（${REACH}）: 計画の順で先の、開いたままの節（身を守る物の準備の手を続けるのは妨げない）`);
     expect(out.next).toHaveLength(2);
     // the ancestors' caution is already in rules: not added again
     expect(out.rules).toHaveLength(1);
@@ -115,7 +115,7 @@ describe('(3) the first plan: what it keeps, what it says, the adoption and the 
     expect(CURRENT_PLAN_STRUCTURE).toContain('空にしない');
     expect(CURRENT_PLAN_STRUCTURE).toContain('理由: 空の doneWhen では頭の入力に「済む条件」も「今: 未…（距離）」も出ず');
     expect(CURRENT_PLAN_STRUCTURE).toContain('座標がまだ無い探索の節（目を投げて位置を絞る前、目が 0 個の序盤）は今まで通り doneWhen を空にしてよく');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('防具の足りない部位・食料・原木を足す節も要塞の後ろに置く');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('防具の欠け・食料・掘る道具の欠けは、海を渡り要塞の中で戦う前の備えなので、要塞の前の短い節（出発の準備）にしてよい');
     expect(CURRENT_PLAN_STRUCTURE).toContain('削らず、順だけ要塞の後ろ・エンドへ入る節の前に置く');
     expect(firstPlanSystemFor('エンドラを討伐して')).toContain('要塞へ向かう節の書き方');
     expect(firstPlanSystemFor('作業台を作って')).not.toContain('要塞へ向かう節の書き方');
