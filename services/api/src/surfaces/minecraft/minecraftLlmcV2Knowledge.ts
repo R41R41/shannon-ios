@@ -334,6 +334,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'だから要塞・スポナーの近く（要塞が見えてから、スポナーの足場まで）の go は canPlace を付けず、canDig だけで岩の中を通す。'
       + '岩の中に道が無い（no_path・search_timeout）なら、空所を渡らず、岩のある側へ回る中継点・トンネル（上の 1 段下の岩）・vertical up stairs で高さを合わせる。'
       + 'go の道に「幅 1 の橋」「押されたら落ちる」が出たら、その go は止めて岩の側へ戻る。',
+    '- 中継点を重ねて進む道で、live の「この段の go」の行が「同じ中継点へ N 回戻った」と言う時は、戻りも同じ所での停止も行き先に近づいていない。行き先までの距離が縮んでいるなら続け、縮まないなら、同じ中継点へ go を出し直さず、別の向きの道（迂回・橋・掘り抜き）に変える。敵を斬って進む手は、倒せば道が開く時に選ぶ。',
     // end1109f13 (random world): a go with canPlace from the rim of a lava lake (the lava 4 below) stepped off while laying the first floor; she could not climb
     // the 4-high wall out of the lava and died in 5 s (the lava-escape reflex jumped in place).
     '- 溶岩の湖（縁の下に溶岩が見える空所）は渡らず回る: go に canPlace を付けず canDig だけで岸の岩の中を通すか、湖の無い方角を選ぶ'
@@ -344,7 +345,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     // end1108b S8b (Haiku): 40 cobblestone went into a bridge over the lava sea, she then dug the bridge's own blocks for more, they fell into
     // the lava, and she was left on a column one block wide until the request failed.
     '- 溶岩や空所の上の橋・柱にいる間は、自分が置いた床と両脇を掘らない（掘った物は下の溶岩へ落ちて拾えず、立つ所が減る）。'
-      + '置く物が残り 16 個を切ったら、橋の先へ進まず、来た道を陸（ネザーラックの地面）まで戻り、足場ではない壁や丘のネザーラックを掘って 64 個以上にしてから進み直す。'
+      + '橋・登りの go を出す前に、live の「置ける足場」の行の合計を見て maxPlace と canPlace を決める（合計が maxPlace に足りないと、宙で止まる）。合計が 16 個を切ったら、橋の先へ進まず、来た道を陸（ネザーラックの地面）まで戻り、足場ではない壁や丘のネザーラックを掘って 64 個以上にしてから進み直す。'
       + '要塞が溶岩の海の向こうの高い所にある時は、海の上の長い橋より、陸の岩の中を要塞の高さへ上る階段（vertical up stairs）と岩の中のトンネルを先に比べる。',
     '- ポータルの手（enter）で入ると、その act は「次元が変わった…（手の途中）」と止まって返る（入れた印で、失敗ではない）。入った直後の 60 秒は、scan と landmarks で足元と溶岩を確かめてから動く。ゲートの中に立ち続けても移らない時は、着いた直後の冷却のことがある: wait や同じ walk を繰り返さず、体の結果文（「ポータルの外から入り直して…」）の通りに一度外へ出てから入り直す。'
       + 'ゲートの出口の高さは、地上の枠の高さとは限らない（出口が溶岩の岸のことがある）。着いたら、足元と溶岩を確かめる。',

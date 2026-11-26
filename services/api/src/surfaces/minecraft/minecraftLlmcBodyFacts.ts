@@ -62,6 +62,8 @@ export interface JudgeParts {
   since?: string | undefined;
   ahead?: readonly ActInput[];
   stops?: readonly string[];
+  /** The node's go detour line (`detourLines`). */
+  detour?: readonly string[];
   failures?: readonly string[];
 }
 
@@ -94,6 +96,7 @@ export function factsContext(
       : {}),
     ...(judge.ahead?.length ? { ahead: judge.ahead } : {}),
     ...(judge.stops?.length ? { stops: judge.stops } : {}),
+    ...(judge.detour?.length ? { detour: judge.detour } : {}),
     ...(judge.failures?.length ? { failures: judge.failures } : {}),
     wantsFood: wantsFood({
       fullness: hunger,
