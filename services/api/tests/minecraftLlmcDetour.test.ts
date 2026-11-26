@@ -12,7 +12,7 @@ afterEach(() => forgetDetours());
 const WEST = { x: 40, y: 62, z: -262 }, EAST = { x: 70, y: 62, z: -270 };
 const input = (to: { x: number; y: number; z: number }) => ({ hands: [{ do: 'go', to }] });
 const result = (stopped: boolean, left?: number) => JSON.stringify({ v: 1, ok: !stopped, done: stopped ? 0 : 1, of: 1, at: { x: 50, y: 62, z: -265 }, hp: 20, food: 20, ms: 5_000,
-  lines: [{ i: 0, do: 'go', status: stopped ? 'stopped' : 'done', line: stopped ? 'go 止まった' : 'go 着いた', goal: stopped ? 'partial' : 'done', end: 'finished', motorOps: 2,
+  lines: [{ i: 1, do: 'go', status: stopped ? 'stopped' : 'done', line: stopped ? 'go 止まった' : 'go 着いた', goal: stopped ? 'partial' : 'done', end: 'finished', motorOps: 2,
     ...(stopped && left !== undefined ? { code: 'search_timeout', progress: { unit: 'meter', done: 3, left, at: { x: 50, y: 62, z: -265 }, fromStopM: left } } : {}) }] });
 const MIN = 60_000;
 
@@ -57,6 +57,27 @@ describe('detourLines: the gos of the node, said as facts', () => {
     expect(line).toContain('3 回（止まった 3 回）');
     expect(line).toContain('最初の go で 10 m → 今 8 m（3 回目）');
   });
+
+  it('reads the 1-based line numbers of the body: a go alone, and a go before a fight and a pickup', () => {
+    const lineOf = (i: number, doWhat: string, stopped = false) => ({ i, do: doWhat, status: stopped ? 'stopped' : 'done', line: doWhat, goal: stopped ? 'partial' : 'done', end: 'finished', motorOps: 1,
+      ...(doWhat === 'go' && stopped ? { code: 'search_timeout', progress: { unit: 'meter', done: 3, left: 20, fromStopM: 20 } } : {}) });
+    const act = (lines: unknown[]) => JSON.stringify({ v: 1, ok: false, done: 1, of: lines.length, at: { x: 122, y: 62, z: -316 }, hp: 20, food: 20, ms: 5_000, lines });
+    const dest = { x: 128, y: 62, z: -318 };
+    noteGoes('t', 'n1', { hands: [{ do: 'go', to: dest }] }, act([lineOf(1, 'go', true)]), 0);
+    noteGoes('t', 'n1', { hands: [{ do: 'go', to: dest }, { do: 'fight', target: 'enderman' }, { do: 'pickup' }] }, act([lineOf(1, 'go', true), lineOf(2, 'fight'), lineOf(3, 'pickup')]), MIN);
+    noteGoes('t', 'n1', { hands: [{ do: 'go', to: dest }, { do: 'fight', target: 'enderman' }, { do: 'pickup' }] }, act([lineOf(1, 'go', true), lineOf(2, 'fight'), lineOf(3, 'pickup')]), 2 * MIN);
+    const line = detourLines('t', 'n1', 3 * MIN)[0]!;
+    expect(line).toContain('3 回（止まった 3 回）');
+    expect(line).toContain('今の行き先 (128,62,-318) までの距離: 最初の go で 20 m → 今 20 m（3 回目）');
+  });
+
+  it('a go after a fight in the same act is found by its own number', () => {
+    const act = JSON.stringify({ v: 1, ok: true, done: 2, of: 2, at: WEST, hp: 20, food: 20, ms: 1, lines: [
+      { i: 1, do: 'fight', status: 'done', line: 'f', goal: 'done', end: 'finished', motorOps: 1 },
+      { i: 2, do: 'go', status: 'stopped', line: 'g', goal: 'partial', end: 'finished', motorOps: 1, progress: { unit: 'meter', done: 1, left: 9, fromStopM: 9 } }] });
+    for (let i = 0; i < 3; i += 1) noteGoes('t', 'n1', { hands: [{ do: 'fight', target: 'enderman' }, { do: 'go', to: EAST }] }, act, i * MIN);
+    expect(detourLines('t', 'n1', 3 * MIN)[0]).toContain('今の行き先 (70,62,-270)');
+  });
 });
 
 const frame = (dimension: string, inventory: Array<{ name: string; count: number }>): BodyObservation =>
@@ -73,9 +94,17 @@ describe('scaffoldLine: what she can place, before a bridge or a climb is chosen
     expect(scaffoldLine(frame('nether', []))).toContain('なし（合計 0 個）');
   });
 
+  it('is said for the dimension names of the body (the_nether, the_end), with the roof use named', () => {
+    const line = scaffoldLine(frame('the_nether', [{ name: 'netherrack', count: 4 }]))!;
+    expect(line).toContain('netherrack×4（合計 4 個）');
+    expect(line).toContain('fight の屋根');
+    expect(scaffoldLine(frame('minecraft:the_nether', [{ name: 'netherrack', count: 4 }]))).not.toBeNull();
+    expect(scaffoldLine(frame('the_end', [{ name: 'end_stone', count: 4 }]))).not.toBeNull();
+  });
+
   it('is said in the Nether and the End only, and it is in the facts of a normal input but not of an urgent one', () => {
     expect(scaffoldLine(frame('overworld', [{ name: 'cobblestone', count: 3 }]))).toBeNull();
-    const nether = frame('nether', [{ name: 'netherrack', count: 40 }]);
+    const nether = frame('the_nether', [{ name: 'netherrack', count: 40 }]);
     expect(inputFacts(nether, {}, false).lines.some(line => line.startsWith('置ける足場'))).toBe(true);
     expect(inputFacts(nether, {}, true).lines.some(line => line.startsWith('置ける足場'))).toBe(false);
   });

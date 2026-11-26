@@ -44,6 +44,14 @@ function destOf(hand: Partial<ActHand> | undefined): ActPos | null {
   return posOf(hand.to) ?? posOf(hand.path?.[hand.path.length - 1]) ?? posOf(hand.goals?.[0]);
 }
 
+/**
+ * The go hand a result line belongs to. The body numbers its lines from 1 (`i: index + 1`), so the hand is `hands[i - 1]`; a 0-based `i` is read too
+ * (`hands[i]`) when the first is not a go. Same reading as the fight-repeat module's, kept here so the two do not depend on each other.
+ */
+function goHandOf(hands: readonly Partial<ActHand>[], i: number): Partial<ActHand> | undefined {
+  return [hands[i - 1], hands[i]].find(hand => hand?.do === 'go');
+}
+
 function taskOf(taskId: string, node: string): NodeGoes {
   let state = tasks.get(taskId);
   if (!state) {
@@ -67,7 +75,7 @@ export function noteGoes(taskId: string, node: string | null | undefined, input:
   const state = taskOf(taskId, node);
   for (const line of result.lines) {
     if (line.do !== 'go' || line.end === 'not_run' || line.goal === 'not_started') continue;
-    const dest = destOf(hands[line.i]);
+    const dest = destOf(goHandOf(hands, line.i));
     if (!dest) continue;
     const stopped = !(line.goal === 'done' || line.goal === 'already');
     const fromStop = line.progress?.unit === 'meter' && finite(line.progress.fromStopM) ? line.progress.fromStopM : null;
@@ -129,12 +137,12 @@ export const SCAFFOLD_LOW = 16, SCAFFOLD_LONG = 64;
 
 /**
  * 「置ける足場: netherrack×40・nether_bricks×6（合計 46 個）」: in the Nether and the End, where a bridge or a climb is a go with canPlace, the count of
- * what she may place, before the hand is chosen. None elsewhere (the pack's own line counts the stacks).
+ * what she may place (bridge, climb, and the roof block of a fight), before the hand is chosen. The body's dimension name is `the_nether`. None elsewhere (the pack's own line counts the stacks).
  */
 export function scaffoldLine(observation: BodyObservation | null): string | null {
   const w = world(observation);
   const dimension = typeof w.dimension === 'string' ? w.dimension.replace(/^minecraft:/u, '') : null;
-  if (dimension !== 'nether' && dimension !== 'the_end' && dimension !== 'end') return null;
+  if (dimension !== 'nether' && dimension !== 'the_nether' && dimension !== 'the_end' && dimension !== 'end') return null;
   const found = [...carriedItemCounts(w, observation?.facts ?? {})].filter(([name, count]) => SCAFFOLD.test(name) && count > 0)
     .sort((a, b) => b[1] - a[1]);
   const total = found.reduce((sum, [, count]) => sum + count, 0);
@@ -142,5 +150,5 @@ export function scaffoldLine(observation: BodyObservation | null): string | null
   const level = total < SCAFFOLD_LOW ? `${SCAFFOLD_LOW} 個を切っている。橋・登りを始めても途中で尽きて宙に残る`
     : total < SCAFFOLD_LONG ? `長い橋・登りには ${SCAFFOLD_LONG} 個の目安に足りない（go の置く数 maxPlace はこの合計の中で決める）`
       : `go の置く数 maxPlace はこの合計の中で決める`;
-  return `置ける足場（go の canPlace・vertical の足場に使える物）: ${list}（合計 ${total} 個）。${level}`;
+  return `置ける足場（go の canPlace・vertical・fight の屋根に使える物）: ${list}（合計 ${total} 個）。${level}`;
 }
