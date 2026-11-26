@@ -120,7 +120,7 @@ describe('the day sleep words are not repeated in full', () => {
     for (const line of [full, brief]) {
       expect(line).toContain('昼（寝られるまで');
       expect(line).toContain('なにも進まない');
-      expect(line).toContain('寝られるまで 7 分以上ある間は sleep を入れない。作業の代わりに入れない（理由:');
+      expect(line).toContain('寝られるまで 7 分以上ある間は、sleep だけの手');
     }
     expect(full).toContain('夜の地上は敵が増えて危なく');
     expect(brief).not.toContain('夜の地上は敵が増えて危なく');
