@@ -8,6 +8,7 @@ import { blazeShutLong } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 import { whereCheckLine } from './minecraftLlmcWhereCheck.js';
 import { acquired } from './minecraftConditions.js';
+import { crossingOfWorld, crossingWords } from './minecraftEyeLedger.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes
@@ -139,10 +140,13 @@ const NOW_LIMIT = 200;
  * iron_leggings 0/1）＠… （道: 鉄 › …）」.
  */
 export function currentNodeLine(node: { id: string; title: string; where?: string | undefined; doneWhen?: string | undefined; note?: string | undefined },
-  pathOf: unknown, status: string | null): string {
+  pathOf: unknown, status: string | null, reach: string | null = null): string {
   const path = Array.isArray(pathOf) ? pathOf.filter((item): item is string => typeof item === 'string') : [];
   const head = `[${node.id}] ${node.title}`;
-  const condition = node.doneWhen ? `（済む条件: ${node.doneWhen}${status ? `／今: ${status}` : ''}）` : status ? `（今: ${status}）` : '';
+  // Run 9 of 11/27: a node of the walk to the point had no condition of its own, so nothing said how far the point was; `reach` (「交点まで N m」) stands in its place
+  // (the node's own radius is the plan's to write; no condition is taken from the node above).
+  const shown = !node.doneWhen && reach ? `未: ${reach}` : status;
+  const condition = node.doneWhen ? `（済む条件: ${node.doneWhen}${status ? `／今: ${status}` : ''}）` : shown ? `（今: ${shown}）` : '';
   const way = path.length ? `（道: ${path.slice(-2).join(' › ')}）` : '';
   const note = node.note ? ` ${node.note}` : '';
   const place = (where: string | undefined) => where ? `＠${where}` : '';
@@ -172,7 +176,19 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...noted, note: noted.note ? `${word} ${noted.note}` : word } : noted;
   // The place it names, read against her feet and the body's count of what is round her (`whereCheckLine`: said at the node, where the coordinate is).
   const check = node.state !== 'done' ? whereCheckLine(node, observation) : null;
-  return `${currentNodeLine(held, shown?.path, status)}${check ?? ''}`;
+  return `${currentNodeLine(held, shown?.path, status, node.state !== 'done' && tree ? reachWords(node, tree.nodes, observation) : null)}${check ?? ''}`;
+}
+
+/**
+ * How far the point the eyes give is, for the open stronghold leaf that has no condition of its own (the walk to the point: the ledger's own point and distance, `crossingOfWorld`, once, not worked out
+ * again); null for any other node, with no point yet (the search before the eyes are thrown keeps its line as it was), outside the overworld, or once the frames' room is in sight.
+ */
+export function reachWords(node: PlanNode, nodes: readonly PlanNode[], observation: BodyObservation | null): string | null {
+  if (node.state === 'done' || node.doneWhen || kindOf(node) !== 'stronghold' || nodes.some(kid => kid.parentId === node.id)) return null;
+  const ready = readinessOf(observation);
+  if (!ready || doneFacts(observation)?.seen?.has('end_portal_frame')) return null;
+  const crossing = crossingOfWorld(ready.world, ready.at ?? Date.now());
+  return crossing?.meters != null ? crossingWords(crossing.meters) : null;
 }
 
 /** The portal frame takes 12 eyes; a count above it holds a spare for eyes that break when thrown (`FRAME_EYES` of `minecraftPlanRequirements.ts`). */
@@ -327,7 +343,8 @@ export const PREP_NOT_NOW = '※下りる前の準備の節・地下なので今
  * The nodes it passes stay open in their order (the plan's own next-open comes back to them when this one is
  * done). Null when the tags do not agree.
  */
-export function followNode(taskId: string, tree: PlanTree, underground = false, lackOf?: (leaf: PlanNode) => string | null):
+export function followNode(taskId: string, tree: PlanTree, underground = false, lackOf?: (leaf: PlanNode) => string | null,
+  reachOf?: (node: PlanNode) => string | null):
   { to: string; from: string | null; acts: number; words: string } | null {
   const order = orderedPlan(tree.nodes), questions = treeQuestions(tree), { under, open } = questions;
   // Run 42 (Sonnet tagged p4.1 and p5.1 to p5.3, which the plan never had: every run of them was null and the now
@@ -359,20 +376,41 @@ export function followNode(taskId: string, tree: PlanTree, underground = false, 
        24)} に置いた（体が [${leaf.id}] の項目を続けて始めたが、先に済ませる準備の節 [${owed.id}] `
       + `${owed.title.slice(0, 24)} が開いているため。札は [${leaf.id}] のまま、手は止めていない）` };
   }
-  const skipped = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf))
-    .filter(node => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(
-      leaf.id, node.id)).slice(0, 3);
-  return { to: leaf.id, from: tree.current, acts: tags.length, words: stepWords(leaf, skipped, lackOf) };
+  // Run 9 of 11/27 (the now went p1.1 → p2.3 and the node it left was in no list again): the node left is counted first among the ones passed, and said by name.
+  const leftOf = (node: PlanNode) => questions.open(node.id) && !order.some(kid => kid.parentId === node.id && questions.open(kid.id)) && !questions.under(leaf.id, node.id);
+  const left = tree.current !== null && order.findIndex(node => node.id === tree.current) < order.indexOf(leaf) ? order.find(node => node.id === tree.current && leftOf(node)) : undefined;
+  const passed = order.slice(tree.current === null ? 0 : order.findIndex(node => node.id === tree.current) + 1, order.indexOf(leaf)).filter(leftOf);
+  // The node left is first among the ones passed when it is the walk to the point (said by name below); any other node left is counted last among them (the old words stay).
+  const walk = left && kindOf(left) === 'stronghold';
+  const skipped = [...(walk ? [left] : []), ...passed, ...(left && !walk ? [left] : [])].slice(0, 3);
+  return { to: leaf.id, from: tree.current, acts: tags.length, words: stepWords(leaf, walk ? left : undefined, skipped, lackOf, reachOf, orderCaution(tree, leaf)) };
+}
+
+/** A caution that says why the node waits behind another (「ベッドと黒曜石は要塞の後ろで取る」): the reason of the plan's order, not a danger. */
+const ORDER_CAUTION = /(?:要塞|交点|エンド)の?後ろ|後ろで取る|後ろへ回|後ろに置/u; // the nodes the plan puts behind the stronghold (the End's check items, armour, food)
+/** The first order caution of the node and the nodes above it, as `注意（id）: …`, or null. */
+function orderCaution(tree: PlanTree, from: PlanNode): string | null {
+  const byId = new Map(tree.nodes.map(node => [node.id, node]));
+  for (let at: PlanNode | undefined = from, guard = 0; at && guard < 8; at = byId.get(at.parentId ?? ''), guard += 1) {
+    const line = (at.caution ?? []).find(text => ORDER_CAUTION.test(text));
+    if (line) return `注意（${at.id}）: ${line}`;
+  }
+  return null;
 }
 
 /**
  * The words of the step on to `leaf`. Run59 leg 1 (2026-11-02): the step on past an open shield node was a tag and a fact, with the shield and the
  * armour missing and not said; the required needs of the stage the node belongs to that are not met are said beside it (`lackOf`).
  */
-function stepWords(leaf: PlanNode, skipped: readonly PlanNode[], lackOf?: (leaf: PlanNode) => string | null): string {
+function stepWords(leaf: PlanNode, left: PlanNode | undefined, skipped: readonly PlanNode[], lackOf?: (leaf: PlanNode) => string | null,
+  reachOf?: (node: PlanNode) => string | null, caution?: string | null): string {
   const lack = lackOf?.(leaf) ?? null;
-  const passed = skipped.length ? `: ${skipped.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : '';
-  return `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）。飛ばした節は順のまま残っている${passed}${lack ? `。${lack}` : ''}`;
+  const others = skipped.filter(node => node.id !== left?.id);
+  const passed = others.length ? `。飛ばした節は順のまま残っている: ${others.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : '';
+  // The node left is named with how far it is and how to go back (run 9: the now moved from the walk to the point to the preparation behind it, and nothing said the walk was still open).
+  const reach = left ? reachOf?.(left) ?? null : null;
+  const back = left ? `。計画の順で先の [${left.id}] ${left.title.slice(0, 24)}${reach ? `（${reach}）` : ''} は開いたまま。要塞より後ろの順の節の手を続けているなら、plan_update の current で [${left.id}] に戻せる` : '';
+  return `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）${left ? back : '。飛ばした節は順のまま残っている'}${left ? passed : passed.replace(/^。飛ばした節は順のまま残っている/u, '')}${caution ? `。${caution}` : ''}${lack ? `。${lack}` : ''}`;
 }
 
 /**
@@ -476,6 +514,35 @@ export function treeQuestions(tree: PlanTree) {
   };
   const open = (id: string) => byId.get(id)?.state !== 'done' && byId.get(id)?.state !== 'blocked' && byId.has(id);
   return { byId, under, open };
+}
+
+/**
+ * Run 9 of 11/27 (the walk to the point was p1.1, then the now moved to the preparation behind it and `plan.next` listed only the nodes after that one: the open node before it was in no list, and
+ * the reason for the order, a caution of a later node, was out of `plan.rules`, which holds the now and the nodes above it only). The plan view the live shows, with the open leaf the now left
+ * put first in `next` as the one to go back to (one line, with how far it is), and the first caution of a later node that says why it waits behind another added to `rules` (one line). Nothing
+ * else of the view changes; no node is moved. `dimension`: in the Nether or the End the overworld's work left behind is not a place to go back to (`followDimension`).
+ */
+export function withNodeView(view: Record<string, unknown> | null, tree: PlanTree, dimension: string | null, reachOf?: (node: PlanNode) => string | null): Record<string, unknown> | null {
+  if (!view || !tree.current) return view;
+  const order = orderedPlan(tree.nodes), { open, under } = treeQuestions(tree), at = order.findIndex(node => node.id === tree.current);
+  if (at < 0) return view;
+  const current = order[at]!;
+  const isLeaf = (node: PlanNode) => !order.some(kid => kid.parentId === node.id && open(kid.id));
+  const behind = order.slice(0, at).find(node => open(node.id) && isLeaf(node) && !under(current.id, node.id) && node.prep?.state !== 'skipped' && node.prep?.state !== 'unmet_now'
+    && (dimension === null || dimension === 'overworld' || !OVERWORLD_KINDS.has(kindOf(node))));
+  const reach = behind ? reachOf?.(behind) ?? null : null;
+  const next = Array.isArray(view.next) ? view.next as unknown[] : [];
+  const rules = Array.isArray(view.rules) ? view.rules as unknown[] : [];
+  let owed: string | null = null;
+  for (const node of order.slice(at + 1)) {
+    if (!open(node.id) || under(current.id, node.id)) continue;
+    const line = (node.caution ?? []).find(text => ORDER_CAUTION.test(text));
+    if (line) { owed = `注意（${node.id}・今より後ろの節）: ${line}`; break; }
+  }
+  if (owed && rules.some(row => typeof row === 'string' && row.includes(owed!.split(': ')[1]!))) owed = null;
+  if (!behind && !owed) return view;
+  return { ...view, ...(behind ? { next: [`戻る先 [${behind.id}] ${behind.title.slice(0, 24)}${reach ? `（${reach}）` : ''}: 計画の順で先の、開いたままの節`, ...next] } : {}),
+    ...(owed ? { rules: [...rules, owed] } : {}) };
 }
 
 /** For tests: no task holds a tally. */

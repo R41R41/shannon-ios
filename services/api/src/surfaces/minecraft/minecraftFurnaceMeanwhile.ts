@@ -1,5 +1,7 @@
 import type { PlanNode } from '@shannon/mind';
 import { countMatching, type ItemCounts } from './minecraftItems.js';
+import { crossingOfWorld, crossingWords } from './minecraftEyeLedger.js';
+import { kindOf } from './minecraftPlanFacts.js';
 
 /**
  * Run 6 (2026-11-11, 「焼いてる際にも結局 wait を使って待ってしまっている」): 5 stands at the furnace, 270 s of 1,564, with the ledger's words
@@ -71,14 +73,23 @@ function needsOutput(node: PlanNode, furnace: { input: string; expects: string }
   return food ? /食料|food|焼|調理|cooked/u.test(text) : false;
 }
 
+/** A walk to the point the eyes give is a go of its own, sent as written (run 9 of 11/27: the choice was a coal hand as a string and the walk 「その節の手を足す」, and the string won). */
+export interface MeanwhileGo { x: number; y: number; z: number; meters: number }
+/** The distance from which the walk to the point is a go of its own (blocks). */
+const GO_FROM = 100;
+const goHand = (go: MeanwhileGo): string => `mc_act ["go ${Math.round(go.x)},${Math.round(go.y)},${Math.round(go.z)} waterOk dig=dirt,gravel,sand maxDig=20 seconds=120"]`;
+
 /** The plan's now, else the next open leaf, that does not need the furnace's output: `[id] title`, or null. */
-export function planChoice(nodes: readonly PlanNode[], currentId: string | null, furnace: { input: string; expects: string }): string | null {
+export function planChoice(nodes: readonly PlanNode[], currentId: string | null, furnace: { input: string; expects: string }, go: MeanwhileGo | null = null): string | null {
   const open = (node: PlanNode) => node.state !== 'done' && node.state !== 'blocked' && node.prep?.state !== 'skipped'
     && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done');
   const current = nodes.find(node => node.id === currentId);
   const order = [...(current ? [current] : []), ...nodes.filter(node => node !== current)];
   const node = order.find(item => open(item) && !needsOutput(item, furnace));
-  return node ? `次の節 [${node.id}] ${String(node.title ?? '').slice(0, 40)}${node.where ? `（${String(node.where).slice(0, 30)}）` : ''}（かまどの出力に頼らない）: その節の手を足す` : null;
+  if (!node) return null;
+  const walk = go && go.meters >= GO_FROM && kindOf(node) === 'stronghold';
+  return `次の節 [${node.id}] ${String(node.title ?? '').slice(0, 40)}${node.where ? `（${String(node.where).slice(0, 30)}）` : ''}（かまどの出力に頼らない）: `
+    + (walk ? `${goHand(go)}（${crossingWords(go.meters)}。長い go は 1 手で出してよい）` : 'その節の手を足す');
 }
 
 /** What the hold (which has no plan tree) says of the plan: the last choice the live body computed for the task. */
@@ -111,7 +122,8 @@ export function furnaceMeanwhileLine(world: Rec | null, counts: ItemCounts, node
   if (!world) return null;
   const first = workingFurnaces(world)[0];
   if (!first) { rememberPlanChoice(taskId, null); return null; }
-  const plan = planChoice(nodes, currentId, first);
+  const crossing = crossingOfWorld(world, Date.now()), feetY = num(rec(world.position)?.y);
+  const plan = planChoice(nodes, currentId, first, crossing?.meters != null && feetY !== null ? { x: crossing.x, y: feetY, z: crossing.z, meters: crossing.meters } : null);
   rememberPlanChoice(taskId, plan);
   const choices = meanwhileChoices(world, counts, plan);
   if (!choices.length) return null;

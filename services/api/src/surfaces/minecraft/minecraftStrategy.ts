@@ -98,7 +98,7 @@ export const STRATEGY_KNOWLEDGE_V2 = [
     + '旧無効版や有効状態が未確認なら頼らない。下りは事前に水を置くか vertical で、自動救済を当てに跳び降りない。'),
 ].join('\n');
 
-const WHOLE_GAME_PLAN_LINES: readonly string[] = ['- エンドラ討伐の後半は', '- 準備の不足は、', '- 順番（エンダーアイを 10 個以上'];
+const WHOLE_GAME_PLAN_LINES: readonly string[] = ['- エンドラ討伐の後半は', '- 準備の不足は、', '- 順番（エンダーアイを 10 個以上', '- 要塞へ向かう節の書き方'];
 
 /** The active template is assembled directly; no historical exact-string replacements. */
 export function ownFirstPlanSystem(): string {
