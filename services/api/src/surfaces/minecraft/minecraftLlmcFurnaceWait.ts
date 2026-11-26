@@ -1,5 +1,5 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import { holdChoices, letteredChoices } from './minecraftFurnaceMeanwhile.js';
+import { holdChoices, letteredChoices, SHORT_LEFT_SECONDS } from './minecraftFurnaceMeanwhile.js';
 import { readinessOf } from './minecraftLlmcReadiness.js';
 
 /**
@@ -115,6 +115,8 @@ export function furnaceStandHold(input: unknown, frame: BodyObservation | null, 
   if (recent.length >= FURNACE_STAND_HOLDS) return null;
   const left = furnaces[0];
   const seconds = Math.round(hands.slice(index).reduce((sum, hand) => sum + waitSeconds(hand), 0));
+  // A wait that fits the furnace's short remainder is the best hand there is (11/26: 30 s left, she left and lost 3 minutes): not held.
+  if (left && left.left <= SHORT_LEFT_SECONDS && seconds <= left.left + TAKE_WAITS_SECONDS) return null;
   const many = furnaces.find(item => item.count >= SPLIT_PIECES);
   const split = many ? `（${many.what} を1基で焼くと ${many.count * 10} 秒かかる。1個 10 秒。基数に分けると並んで焼ける）` : '';
   const line = `${left ? `かまど ${left.at} の ${left.what} はあと約 ${left.left} 秒` : '焼いている最中'}${split}。立って待つ wait（${seconds} 秒）は送らない`
