@@ -8,6 +8,7 @@ import { endLackLine, readinessParts, type LlmcBodyParts } from '../src/surfaces
 import { readinessOf } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { llmcInputProblem } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { FIRST_PLAN_SYSTEM_R9 } from '../src/surfaces/minecraft/minecraftFirstPlanPrompts.js';
+import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { candidateMenuTools } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import type { ActHand } from '../src/contracts/minecraftActContract.js';
 
@@ -58,6 +59,10 @@ describe('(a) the road names every open top-level node with its id, and the curr
     expect(roadLine(tree, beds(2))).toContain('p10 竜戦用ベッド10（今は足りない）');
   });
   it('the road and the first plan and the plan tool say the dimension beside a where', () => {
+    // The words the run asks with (`ownFirstPlanSystem`; R9 is a replay comparison only and is not called in a run).
+    expect(ownFirstPlanSystem()).toContain('where は座標のあとに次元を添える');
+    expect(ownFirstPlanSystem()).toContain('エンドの点検（ベッド・黒曜石・弓矢）の節は、要塞の節の後ろ、エンドへ入る節の前');
+    // Historical: R9 held the 11/26 wording (a replay comparison, kept as it was).
     expect(FIRST_PLAN_SYSTEM_R9).toContain('where は座標のあとに次元を添える');
     expect(FIRST_PLAN_SYSTEM_R9).toContain('エンドの点検の節（黒曜石・ベッド・弓と矢）は、エンドへ入る節より前');
     const tool = candidateMenuTools([{ name: 'plan.update', description: 'plan', nativeInputSchema: {} } as never]).find(item => item.name === 'plan.update')!;

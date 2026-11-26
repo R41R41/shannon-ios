@@ -108,7 +108,7 @@ export function ledgerLines(throws: readonly StoredThrow[], feet: { x: number; z
   const head = `目玉の帳簿: 投げた ${throws.length} 個（割れた ${broke}）。新しい順: ${throws.slice(-3).reverse().map(item => throwWords(item, now)).join(' / ')}`;
   const direct = directPoint(throws);
   if (direct) return [head, directLine(direct, feet)];
-  const fix = stronghold(throws);
+  const fix = honestFix(throws);
   if (!fix) return [head, noFixLine(throws, throws[throws.length - 1]!)];
   return [head, ...fixLines(fix, feet)];
 }
@@ -195,9 +195,96 @@ function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
   return near ? [line, `近づいたら、交点の ${Math.max(60, fix.errorBlocks)}m 手前 ${place(near.x, near.z)} から投げ直すと誤差が小さくなる`] : [line];
 }
 
+/**
+ * Run 7 (11/27): after a trek the lines thrown before it come from places far behind her, and their bearings are worth less than the newer ones. When the throws made near the newest one
+ * (within `FAR_OLD_LINE_BLOCKS` of where it was thrown) give a point of their own, the far older lines are left out of it; with fewer, they stay (they still say which way to walk).
+ */
+export const FAR_OLD_LINE_BLOCKS = 500;
+function withoutFarOld(throws: readonly StoredThrow[]): readonly StoredThrow[] {
+  const newest = throws[throws.length - 1];
+  if (!newest || throws.length < 3) return throws;
+  const near = throws.filter(item => Math.hypot(item.x - newest.x, item.z - newest.z) <= FAR_OLD_LINE_BLOCKS);
+  return near.length < throws.length && near.length >= 2 && stronghold(near) !== null ? near : throws;
+}
+
 /** The throws still worth reading at `now` (all of them when no time is given). */
 const alive = (throws: readonly StoredThrow[], now: number | undefined): readonly StoredThrow[] =>
-  now === undefined ? throws : throws.filter(item => now - item.at <= KEEP_MS);
+  withoutFarOld(now === undefined ? throws : throws.filter(item => now - item.at <= KEEP_MS));
+
+/**
+ * A bearing kept to 0.1 degree (the body's record) is known to 0.05 degree, which does not matter for lines 8 degrees apart but moves the crossing of two lines 0.7 degrees apart by
+ * about 14% of its distance (run 7: the point from the unrounded unit vectors was 111 m from the one from the rounded bearings, at 1.8 km). A throw whose unit vector is only its
+ * rounded bearing's is marked by that (a real unit does not equal it); the error of a point that rests on two or more of them is not smaller than that rounding's.
+ */
+const ROUNDING_RAD = 0.07 * Math.PI / 180;
+const fromRoundedBearing = (item: StoredThrow): boolean => {
+  if (!item.unit || item.down || item.arrived) return false;
+  const r = item.bearingDeg * Math.PI / 180;
+  return Math.abs(item.unit.x - Math.sin(r)) < 1e-6 && Math.abs(item.unit.z + Math.cos(r)) < 1e-6 && Math.abs(item.bearingDeg * 10 - Math.round(item.bearingDeg * 10)) < 1e-6;
+};
+export function honestFix(throws: readonly StoredThrow[]): Fix | null {
+  const fix = stronghold(throws);
+  const rounded = throws.filter(fromRoundedBearing);
+  if (!fix || fix.throws < 2 || rounded.length < 2) return fix;
+  const spread = spreadDegrees(rounded);
+  if (spread === null || spread <= 0) return fix;
+  const away = Math.max(...rounded.map(item => Math.hypot(fix.x - item.x, fix.z - item.z)));
+  const error = Math.round(away * ROUNDING_RAD / Math.sin(Math.max(spread, 0.1) * Math.PI / 180));
+  return error > fix.errorBlocks ? { ...fix, errorBlocks: error } : fix;
+}
+
+/**
+ * The eyes the body keeps for this world (`world.eyeThrows`, oldest first: where it stood, the flight's compass bearing as `yawDeg` (north 0, east 90, the same as `bearingDeg`), how far it
+ * flew, whether it broke, when, and in which dimension) as the ledger's own throws. Only the overworld's count. A record that does not read is left out; the flight's end is worked out
+ * from its start, bearing and length (the body does not send it, nor the item's id). The body writes a record only from a flight whose direction it read from the eye's own positions,
+ * and its bearing is that direction (`huntEyeFlight.ts`: `bearingDeg` from `unit`), so the unit vector is the bearing's, and a flight shorter than `ARRIVED_BELOW` is the body's `arrived`.
+ */
+const ARRIVED_BELOW = 11.9;
+export function throwsFromBody(raw: unknown): StoredThrow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StoredThrow[] = [];
+  for (const row of raw) {
+    const item = rec(row);
+    if (!item || item.dim !== 'overworld' || ![item.x, item.z, item.yawDeg, item.flewM, item.atMs].every(finite) || typeof item.broke !== 'boolean') continue;
+    const bearing = ((item.yawDeg as number) % 360 + 360) % 360, flew = Math.max(0, item.flewM as number), r = bearing * Math.PI / 180;
+    out.push({ id: `body:${Math.round(item.x as number)}:${Math.round(item.z as number)}:${bearing}`.slice(0, 80), x: item.x as number, z: item.z as number, bearingDeg: bearing, flew,
+      broke: item.broke, at: item.atMs as number, toX: (item.x as number) + flew * Math.sin(r), toZ: (item.z as number) - flew * Math.cos(r),
+      unit: { x: Math.sin(r), z: -Math.cos(r) }, ...(flew < ARRIVED_BELOW ? { arrived: true } : {}) });
+  }
+  return out.sort((a, b) => a.at - b.at).slice(-KEEP_THROWS);
+}
+
+/** The angle between the two lines that most differ among the throws (degrees, 0 to 90), or null with fewer than two. */
+function spreadDegrees(throws: readonly StoredThrow[]): number | null {
+  let widest: number | null = null;
+  for (let i = 0; i < throws.length; i += 1) for (let j = i + 1; j < throws.length; j += 1) {
+    const turn = Math.abs(throws[i]!.bearingDeg - throws[j]!.bearingDeg) % 180;
+    const angle = Math.min(turn, 180 - turn);
+    if (widest === null || angle > widest) widest = angle;
+  }
+  return widest;
+}
+
+/**
+ * One fact line of the ledger for the first plan's input (`firstPlanInput`), from the eyes the body reports: the point the lines give, how sure it is, which way and how far from where she is
+ * now, and where to throw again from; or that the lines give none. Empty with no throw in the overworld. A point is a guide, not a place to walk to: the reason is in the line.
+ */
+export function eyeLedgerFact(rawThrows: unknown, feet: { x: number; z: number } | null, now: number): string[] {
+  const throws = alive(throwsFromBody(rawThrows), now);
+  if (!throws.length) return [];
+  const count = `目玉を ${throws.length} 本投げた（割れた ${throws.filter(item => item.broke).length}）`;
+  const direct = directPoint(throws);
+  if (direct) return [`${count}。${directLine(direct, feet)}`];
+  const fix = honestFix(throws);
+  if (!fix) return [`${count}。交点はまだ無い（線が ${throws.length < 2 ? '1 本だけ' : '近すぎるか誤差が大きい'}）。近づいて別の場所から投げ直す`];
+  const spread = spreadDegrees(throws);
+  const there = feet ? `あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
+  const near = feet && fix.errorBlocks > 128 ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;
+  const again = near ? `投げ直しは交点の ${Math.max(60, fix.errorBlocks)}m 手前 ${place(near.x, near.z)} から。` : '';
+  const weak = fix.errorBlocks > 150 || (spread !== null && spread < 2)
+    ? `交点は点でなく目安（見積り ±${fix.errorBlocks}m・線のなす角 ${spread === null ? '不明' : tenth(spread)}°。角が小さい線は遠くで少しずれるだけで大きく動く）。近づいて 1〜2 本投げ直す前提で歩く。` : '';
+  return [`${count}。交点 ${place(fix.x, fix.z)}（見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${weak}${again}`.trim()];
+}
 
 /** The ledger of one task. `saved` is what the checkpoint held (`checkpoint()`), read with care: a malformed one is a fresh ledger. */
 export function createEyeLedger(saved: unknown) {
@@ -218,8 +305,19 @@ export function createEyeLedger(saved: unknown) {
       state = { v: 1, throws: [...kept, newest].slice(-KEEP_THROWS) };
       return true;
     },
+    /**
+     * The task's first read of the eyes the body keeps for this world (`throwsFromBody`): taken in only when this ledger holds no throw (a restart of the same task has its own in the
+     * checkpoint, and is not doubled). True when they were taken in.
+     */
+    seed(rawThrows: unknown, now: number): boolean {
+      if (state.throws.length) return false;
+      const seeded = alive(throwsFromBody(rawThrows), now);
+      if (!seeded.length) return false;
+      state = { v: 1, throws: [...seeded] };
+      return true;
+    },
     throws: (now?: number): readonly StoredThrow[] => alive(state.throws, now),
-    fix: (now?: number): Fix | null => stronghold(alive(state.throws, now)),
+    fix: (now?: number): Fix | null => honestFix(alive(state.throws, now)),
     lines: (feet: { x: number; z: number } | null, now: number): string[] => ledgerLines(alive(state.throws, now), feet, now),
     /** The room was found or the End entered: the throws are of no more use. */
     clear(): void {
