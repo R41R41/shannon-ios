@@ -136,7 +136,7 @@ const DEPEND_WORDS: Readonly<Record<DependState, string>> = { succeeded: '済ん
  * only then. The running item's line says the ceiling next to the estimate, as a fact; the estimate itself stays what it is.
  */
 export function fightLongWords(input: ActInput, running: number | null): string {
-  const hand = running !== null && input.hands[running - 1]?.do === 'fight' ? input.hands[running - 1] : input.hands.find(item => item.do === 'fight');
+  const hand = running !== null ? (input.hands[running - 1]?.do === 'fight' ? input.hands[running - 1] : undefined) : input.hands.find(item => item.do === 'fight');
   if (!hand) return '';
   const seconds = hand.seconds ?? 20;
   return `（この fight の見積もりは ${seconds} 秒の半分。倒せない間・個体が来ない間は ${seconds} 秒まで続くことがあり、結果はその時まで来ない）`;

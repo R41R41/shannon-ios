@@ -93,3 +93,11 @@ describe('the codes beside the body stop lines', () => {
     forgetLlmcEvents();
   });
 });
+
+describe('fightLongWords: the running hand decides', () => {
+  it('says nothing while a non-fight hand runs, even if a fight follows it', () => {
+    const input = { hands: [{ do: 'go' }, { do: 'fight', seconds: 90 }], why: 'x' } as unknown as ActInput;
+    expect(fightLongWords(input, 1)).toBe('');
+    expect(fightLongWords(input, 2)).toContain('90 秒まで');
+  });
+});
