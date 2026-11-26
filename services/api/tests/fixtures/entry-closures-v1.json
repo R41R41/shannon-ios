@@ -22,6 +22,7 @@
     "contracts/minecraftActCondition.ts",
     "contracts/minecraftActContract.ts",
     "contracts/minecraftActHandRules.ts",
+    "contracts/minecraftActLimits.ts",
     "contracts/minecraftActShortContract.ts",
     "contracts/minecraftActShortHands.ts",
     "contracts/minecraftActTime.ts",
