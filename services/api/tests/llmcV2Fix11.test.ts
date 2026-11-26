@@ -214,7 +214,7 @@ describe('the review of 11: monotonic milestones, the road\'s blocked nodes, the
   it('says in the instructions: beds explode in the Nether and the End, shortage is not skipped for speed, the cell to open is away from her feet, and the urgent live\'s fields', () => {
     expect(V2_ALWAYS).toContain('a bed in the Nether or the End explodes: do not sleep there');
     expect(V2_ALWAYS).toContain('Never stop or complete early because of time. The yardstick is a guide');
-    expect(V2_ALWAYS).toContain('Order of priority: avoid imminent danger → meet the preparation requirements → advance quickly to the goal');
+    expect(V2_ALWAYS).toContain('Order of priority: avoid imminent danger → meet the preparation requirements (準備の決まり: before descending, before the gate; the End check may wait until behind the stronghold) → advance quickly to the goal');
     expect(V2_STAGES.prep).toContain('足元・立っているマスからは離れたマスを開ける');
     expect(V2_ALWAYS).toContain("In a decision where live's mode is 「急ぎの版」");
     expect(V2_ALWAYS).not.toContain('mode「急ぎの版」は急ぎの時の短い live の印');

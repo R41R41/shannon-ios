@@ -16,6 +16,8 @@ import { dropAdvice, packFacts, packLines } from '../src/surfaces/minecraft/mine
 import { stageKnowledge, stageTextsForKind, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
 import { STRATEGY_KNOWLEDGE_V2 } from '../src/surfaces/minecraft/minecraftStrategy.js';
 import { v2tree } from './helpers/planTreeV2.js';
+import { END_PREP_AFTER_STRONGHOLD } from '../src/surfaces/minecraft/minecraftEndPrepWords.js';
+const heading = (text: string | null) => (text ?? '').replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '');
 
 /**
  * Run59 leg 1 (2026-11-02, coordinator): the head went on to the diamonds with the shield node open (11:30:33Z, the step on was a tag and a fact) and sent the portal hand
@@ -290,10 +292,10 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
     const base = { dimension: 'overworld', food: 333, nowKinds: ['stronghold' as const] };
     const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64], ['iron_sword', 1]];
-    expect(preparationShortage({ ...base, counts: owned(kit) })).toBe('準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い');
-    expect(preparationShortage({ ...base, counts: owned(kit.slice(0, -1)) })).toMatch(/^準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い。目標/u);
+    expect(heading(preparationShortage({ ...base, counts: owned(kit) }))).toBe('準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い');
+    expect(heading(preparationShortage({ ...base, counts: owned(kit.slice(0, -1)) }))).toMatch(/^準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い。目標/u);
     expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
-    expect(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) })).toBe('準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い');
+    expect(heading(preparationShortage({ ...base, counts: owned([...kit, ['bucket', 1]]) }))).toBe('準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い');
     const plan = seedPlan('エンドラを倒して')!;
     const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
     expect(check.doneWhen).toBe('food>=150&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket');

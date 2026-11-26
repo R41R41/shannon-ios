@@ -2,6 +2,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { readinessOf } from './minecraftLlmcReadiness.js';
 import { AFLOAT_NO_SLEEP, BED, BED_FROM, canSleepNow, dayTick, enemyNear, noSleepSpot, minutes, NIGHT_FROM, NIGHT_TO, thunderstorm } from './minecraftNightArms.js';
 import { deathCounterOf } from './minecraftControlState.js';
+import { readActResult } from '../../contracts/minecraftActContract.js';
 import { SLEEP_COST, SLEEP_RESUME, SLEEP_SKIP } from '../../contracts/minecraftSleepWords.js';
 
 /**
@@ -47,7 +48,42 @@ const deathOf = (frame: BodyObservation | null): string => {
 };
 
 /** For tests: no task has held a sleep. */
-export function forgetSleepHolds(): void { holds.clear(); bookings.clear(); skips.clear(); }
+export function forgetSleepHolds(): void { holds.clear(); bookings.clear(); skips.clear(); sleepDone.clear(); ticksSeen.clear(); mornings.clear(); }
+
+/**
+ * Run 9 (11/27): a night was skipped (a sleep hand booked by day completed, the clock went from night to morning), and the line 「体に寝る予約が残っているかもしれない（1 分前に sleep の手を送った）」
+ * stood for six more decisions; the head answered it with a sleep and a wait that moved nothing for 61 s. Two plain facts are kept: a `sleep` hand of the head's came back done (`noteSleepResult`),
+ * and the clock went from night (or dusk) to morning in less time than the wall clock gives (a night is about 8 minutes; a jump is a sleep). Together: the line says it was slept.
+ */
+const sleepDone = new Map<string, { at: number }>();
+const ticksSeen = new Map<string, { tick: number; at: number }>();
+const mornings = new Map<string, { at: number }>();
+const MORNING_LINE_MS = 3 * 60_000;
+const isMorning = (tick: number): boolean => tick >= NIGHT_TO || tick < 6_000;
+/** The clock went from dusk or night to morning faster than real time allows (the game's own sleep skip). */
+function jumpedToMorning(prev: { tick: number; at: number } | undefined, tick: number, clock: number): boolean {
+  if (!prev || !isMorning(tick) || prev.tick < 6_000 || prev.tick >= NIGHT_TO) return false;
+  const advanced = (tick - prev.tick + 24_000) % 24_000, natural = Math.max(0, clock - prev.at) / 50;
+  return advanced > natural * 1.5 + 1_200;
+}
+/** Each look at the clock (the decision's, or a result's): a jump after a sleep hand came back done is the sleep (said by `sleepStateLine`). */
+function noteClock(taskId: string, frame: BodyObservation | null, clock: number): void {
+  const facts = readinessOf(frame), tick = facts && facts.dimension === 'overworld' ? dayTick(facts.world) : null;
+  if (tick === null) return;
+  const done = sleepDone.get(taskId);
+  if (done && jumpedToMorning(ticksSeen.get(taskId), tick, clock) && !mornings.has(taskId)) mornings.set(taskId, { at: clock });
+  ticksSeen.set(taskId, { tick, at: clock });
+  if (ticksSeen.size > 32) ticksSeen.delete(ticksSeen.keys().next().value as string);
+}
+/** The result of an act the queue ran (`resultJson`): a `sleep` hand done is kept, and the clock is looked at (the jump may be inside this very act). */
+export function noteSleepResult(taskId: string, resultJson: string | undefined, frame: BodyObservation | null, clock: number = Date.now()): void {
+  const result = readActResult(resultJson);
+  if (result?.lines.some(line => line.do === 'sleep' && line.goal === 'done')) {
+    sleepDone.set(taskId, { at: clock });
+    if (sleepDone.size > 32) sleepDone.delete(sleepDone.keys().next().value as string);
+  }
+  noteClock(taskId, frame, clock);
+}
 
 const objectOf = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' ? value as Record<string, unknown> : null;
 const sleeps = (hand: Record<string, unknown>): boolean => hand.do === 'sleep' || hand.do === 'use'
@@ -106,6 +142,14 @@ export function sleepStateLine(frame: BodyObservation | null, taskId: string, no
     return `夜の睡眠: 今夜は寝ない（見送り中・${left}。理由: ${skip.why || '書いていない'}）。体の寝る予約は消してある。`
       + `寝る気になったら sleep（on は省く）か ${SLEEP_RESUME}。朝・期限・死亡で自動で戻る`;
   }
+  noteClock(taskId, frame, clock);
+  const morning = mornings.get(taskId);
+  if (morning && clock - morning.at < MORNING_LINE_MS && facts.dimension === 'overworld') {
+    const tick = dayTick(facts.world);
+    bookings.delete(taskId);
+    return `夜の睡眠: 寝た（sleep の手が完了）。今は朝。予約は済んだ（体に残っていない）。${tick === null ? '' : `次の夜は ${minutes(tick >= BED_FROM ? BED_FROM - tick + 24_000 : BED_FROM - tick)}後`}`;
+  }
+  if (morning) { mornings.delete(taskId); sleepDone.delete(taskId); }
   const afloat = noSleepSpot(facts.world);
   const booked = bookings.get(taskId);
   if (booked && clock - booked.at < BOOKING_MS && afloat) {

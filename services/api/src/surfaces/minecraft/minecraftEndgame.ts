@@ -76,7 +76,7 @@ function netherCompareLines(ledger: EyeLedger, facts: DoneFacts, now: number): s
   if (!fix) return [];
   const obsidian = facts.counts.get('obsidian') ?? 0;
   return [`ネザー経由で比べる材料（1 回の観測で、出口の地形は未確認）: 交点のネザー座標 (${Math.round(fix.x / 8)},${Math.round(fix.z / 8)})。`
-    + `ゲートを作り直すなら黒曜石 10 が要る（今 ${obsidian}＋回収）。実測のネザーの歩きは 0.36 m/s。選ぶのは地上の見込み秒数との比べで決める`];
+    + `ゲートを作り直すなら、ゲート用の黒曜石 10 が要る（今 ${obsidian}＋回収。竜の戦い用の 12 とは別の話）。実測のネザーの歩きは 0.36 m/s。選ぶのは地上の見込み秒数との比べで決める`];
 }
 
 /** The ledger before the portal room is found, with a single coordinate conversion for travel through the Nether. */

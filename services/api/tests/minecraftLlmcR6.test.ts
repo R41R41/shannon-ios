@@ -17,6 +17,7 @@ const NO_RECOVERY_LIVE = `${NO_RECOVERY}。持ち物に食べ物が無い: 待�
 import { forgetActNodes, noteActNode, planNowLine, tagActWhy } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { LLMC_SYSTEM_APPENDIX, LLMC_SYSTEM_APPENDIX_R5, LLMC_SYSTEM_APPENDIX_R6, R6_KNOWLEDGE } from '../src/surfaces/minecraft/minecraftKnowledge.js';
 import { v2tree } from './helpers/planTreeV2.js';
+import { END_PREP_AFTER_STRONGHOLD } from '../src/surfaces/minecraft/minecraftEndPrepWords.js';
 
 /**
  * mb-llmc r6 (production run 29, 2026-10-22, Sonnet main, r5: begun inside a Nether fortress, the blazes at 10 s past the plan's "now",
@@ -113,12 +114,13 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     expect(gate.startsWith('準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾・足場のブロックが無い。')).toBe(true);
     expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
     expect(gate).toContain('目標（そろえば。必須ではない）— 盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・足場のブロック（64 あると橋で尽きない）・金のブーツ（金 4 がそろう時）が無い');
-    const end = preparationShortage({ ...home, nowKinds: ['stronghold' as const] })!;
+    const end = preparationShortage({ ...home, nowKinds: ['stronghold' as const] })!.replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '');
     expect(end).toContain('準備の不足（エンドへ入る前に要る物）: ベッド（エンドの点検は 8・戦いの目標は 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ（12 が目安。落ちたアイは拾う）・足場のブロックが無い');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）・矢（光の矢も数える。材料 羽根 0・火打石 0・棒 0（1 ずつで 4 本））が無い');
     // The audit of 11/4, order 10: a spectral arrow is an arrow, a crossbow a bow.
-    expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const], counts: new Map([['crossbow', 1], ['spectral_arrow', 30]]) }))
+    expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const], counts: new Map([['crossbow', 1], ['spectral_arrow', 30]]) })!
+      .replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '').replace('。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。防具の欠け・食料・掘る道具は別', ''))
       .not.toMatch(/弓|矢/u);
   });
 

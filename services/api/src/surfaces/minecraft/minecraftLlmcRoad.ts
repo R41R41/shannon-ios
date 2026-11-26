@@ -104,6 +104,8 @@ const isKept = (item: Milestone): boolean => item.kept === true || KEPT_MILESTON
 const grouped = (seconds: number): string => seconds.toLocaleString('en-US');
 /** The milestone of the gate: the Nether entered. */
 const GATE_INDEX = DRAGON_MILESTONES.findIndex(item => item.doneWhen === 'dim:the_nether');
+/** The last milestone an eye in the pack implies reached (the pearls: an eye is made of a pearl and a rod's powder). */
+const PEARL_INDEX = DRAGON_MILESTONES.findIndex(item => item.doneWhen === 'have:ender_pearl>=13');
 /** The targets as the instructions say them: 「ベッド 150・地下の準備 300・鉄のツルハシ 350・…・ネザー 1,800」. */
 export const milestoneWords = (): string =>
   DRAGON_MILESTONES.filter(item => !item.late).map(item => `${item.short ?? item.name} ${grouped(item.seconds)}`).join('・');
@@ -288,6 +290,14 @@ export function meterParts(tree: PlanTree | null | undefined, observation: BodyO
     clause => clause === item.doneWhen || clause.startsWith(`${item.doneWhen}>=`));
   const current = tree.nodes.find(node => node.id === tree.current);
   // Through the gate: the Nether is reached (past it the later milestones follow one another; none is named by a node or passed over).
+  // Run 9 (11/27): with eyes in the pack the Nether, the fortress, the rods and the pearls are behind her, and a new plan does not carry the milestones its first one reached:
+  // the meter said 「次の節目 黒曜石 10 個」 and the day line 「ネザーまで…」 with 11 eyes in hand. The milestones up to the pearls are read as reached while she holds an eye in the
+  // overworld (or the current node is the stronghold's), so the next one is the eyes or the End's check.
+  const pastNether = facts.dimension === 'overworld' && (carried(facts.counts, 'ender_eye') > 0 || (!!current && kindOf(current) === 'stronghold'));
+  if (pastNether) DRAGON_MILESTONES.forEach((item, index) => {
+    if (index <= PEARL_INDEX && !reached[index]) reached[index] = true;
+    if (index <= PEARL_INDEX) last = Math.max(last, index);
+  });
   const throughTheGate = reached[GATE_INDEX] === true;
   const named = throughTheGate ? -1 : DRAGON_MILESTONES.findIndex((item, index) => !reached[index] && !!current && names(current, item));
   const { index: prepIndex, over: prepOver, fact: prepFact } = prepEnd(tree, facts, reached);

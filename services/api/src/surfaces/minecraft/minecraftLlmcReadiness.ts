@@ -15,7 +15,8 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { framesOf } from './minecraftSeenMarks.js';
-import { frameOpenChance } from './minecraftEyeLedger.js';
+import { frameOpenChance, honestFix, throwsFromBody } from './minecraftEyeLedger.js';
+import { END_PREP_AFTER_STRONGHOLD } from './minecraftEndPrepWords.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
 import { WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
@@ -179,6 +180,18 @@ function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
     + `作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''} → 作れるのは ${makeable} 個（1 個＝パール 1＋粉 1）。12 まであと ${gap} 個まで足せる`;
 }
 
+/** Eyes enough to look for the stronghold with (the first plan's own count, `EYES_FOR_STRONGHOLD`). */
+const EYES_FOR_LOOKING = 10;
+/**
+ * The stretch where the End's check is behind the stronghold: the current node is the stronghold's, or she carries eyes enough and two throws have given a point, and the portal room's
+ * frames are not in view yet. Said in the shortage's heading (run 9, 11/27: the list read as what to do now). Not once the frames are seen.
+ */
+export function beforeStronghold(world: Record<string, unknown> | undefined, counts: ItemCounts, kinds: readonly PlanKind[] | null): boolean {
+  if (world && framesOf(world)) return false;
+  if (kinds?.[0] === 'stronghold') return true;
+  return !!world && countMatching(counts, /^ender_eye$/u) >= EYES_FOR_LOOKING && honestFix(throwsFromBody(world.eyeThrows)) !== null;
+}
+
 /** What the pack lacks of some needs: none at all, some but not enough, and armour carried but not worn. */
 interface Gaps { none: string[]; short: string[]; unworn: string[] }
 function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: readonly string[]; rest?: boolean }): Gaps {
@@ -265,8 +278,11 @@ export function preparationShortage(parts: { dimension: string | null; counts: I
   const mining = miningToolShortage(parts.counts, parts.nowKinds, parts.inventory);
   const stage = parts.journeyReadiness === false ? null : preparationStage(parts.dimension, parts.counts, parts.nowKinds);
   if (!stage) return mining;
-  const table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endCheck(parts))
+  let table: PrepStage = stage === 'end' ? (returning ? RETURN_TO_END : endCheck(parts))
     : stage === 'diamonds' ? BEFORE_DIAMONDS : stage === 'nether_entry' ? BEFORE_GATE : STAGES[stage];
+  // Run 9 (11/27): before the stronghold the heading says where the check goes (`END_PREP_AFTER_STRONGHOLD`); the numbers (「あと N」) stay.
+  if (stage === 'end' && !returning && table.title === STAGES.end.title && beforeStronghold(parts.world, parts.counts, parts.nowKinds))
+    table = { ...table, title: `${table.title}（${END_PREP_AFTER_STRONGHOLD}）` };
   // 11/27: the End's check says how many are left (「7/8（あと 1）」); the other stages keep their words.
   const said0 = { ...parts, rest: stage === 'end' };
   const goals = goalWords(table, said0);
