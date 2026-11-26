@@ -47,6 +47,32 @@ describe('the fights at the same target, counted by the head', () => {
     words.forEach((w, k) => noteFights('t', input, stopped(w), frame(0, 0, [[58, 9]]), T(k)));
     expect(fightRepeatLines('t', frame(0, 0, [[58, 9]]), T(3))[0]).toContain('enderman #58 への fight が 3 回続けて止まった');
   });
+  // The 11/26 run, the queue items q18 to q21 and the calls around them: the stops were missing_item (the roof wanted more blocks), whose words carry no
+  // id, and the head switched between `#18` and `enderman`. Each switch used to start the count again.
+  const MISSING = '無い（元: 屋根に建築用ブロックが 4 個要る。あと 3 個（持っているのは crimson_nylium×1））: fight 止まった missing_item: ここから手の届く 前に自分で張った屋根 5 マスを 1 手で: dig の at に (143,72,-356)';
+  const callFor = (target: string) => ({ hands: [{ do: 'fight', range: 16, seconds: 40, retreatHp: 12, target }, { do: 'pickup', range: 8 }] });
+  it('counts missing_item stops across calls by id and by kind as one hunt, and tells what a kind call does when no other individual is in sight', () => {
+    ['#18', '#18', 'enderman', '#18', 'enderman'].forEach((target, k) => noteFights('t', callFor(target), stopped(MISSING, 'missing_item'), frame(11, 0, [[18, 4]]), T(k)));
+    const alone = fightRepeatLines('t', frame(11, 0, [[18, 4]]), T(5))[0]!;
+    expect(alone).toContain('#18 への fight が 5 回続けて止まった');
+    expect(alone).toContain('missing_item（5 回続き）');
+    expect(alone).toContain('目の見える別の個体が居なければ体は同じ #18 を選び直す（連続で外した個体は、他に選べる個体が無い時だけ戻るため）');
+    expect(alone).toContain('いま近くの別の個体は 0 体');
+    expect(alone).toContain('missing_item など個体の名前が結果に無い止まりも、同じ相手への 1 回に数えた、この実走の結果の数');
+    const crowd = fightRepeatLines('t', frame(11, 0, [[18, 4], [35, 25], [49, 31]]), T(5))[0]!;
+    expect(crowd).toContain('近くの別のエンダーマン 2 体（最寄り 25m）');
+    expect(crowd).toContain('いま近くの別の個体は 2 体（壁や屋根で目が見えない個体は選ばれない）');
+  });
+  it('says nothing of the body pick for a count that only has kind calls, and starts again at another id after an id', () => {
+    for (let k = 0; k < 3; k++) noteFights('t', callFor('enderman'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(k));
+    const kindOnly = fightRepeatLines('t', frame(0, 0, [[18, 4]]), T(3))[0]!;
+    expect(kindOnly).toContain('enderman への fight が 3 回続けて止まった');
+    expect(kindOnly).not.toContain('選び直す');
+    forgetFightRepeats();
+    for (let k = 0; k < 3; k++) noteFights('t', callFor('#18'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(k));
+    noteFights('t', callFor('#35'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(4));
+    expect(fightRepeatLines('t', frame(0, 0, [[18, 4]]), T(4))).toEqual([]);
+  });
   it('does not count a hand that did not run', () => {
     const skipped = JSON.stringify({ v: 1, done: 0, of: 1, lines: [{ i: 0, do: 'fight', status: 'skipped', line: '未実行', goal: 'not_started', end: 'not_run' }] });
     for (let k = 0; k < 4; k++) noteFights('t', input, skipped, frame(0, 0, []), T(k));

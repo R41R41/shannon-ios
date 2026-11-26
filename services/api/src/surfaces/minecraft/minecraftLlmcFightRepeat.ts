@@ -67,7 +67,10 @@ function sameTarget(streak: Streak, target: { key: string; label: string }): boo
   const isId = (key: string): boolean => key.startsWith('#');
   if (isId(streak.key) === isId(target.key)) return false;
   const [named, bare] = isId(streak.key) ? [streak.label, target.key] : [target.label, streak.key];
-  return named.startsWith(`${bare} #`);
+  // The 11/26 run's stops (a missing_item among them) carry no id in their words, so the label was the hand's own `#18`; the head then called by kind
+  // (`enderman`) and back by id, and each switch started the count again under the line. A label that is a bare id has no kind to compare: a kind
+  // call counts as the same hunt (the body picks the last individual again when no other is in sight). `fight` alone names nothing.
+  return named.startsWith(`${bare} #`) || (/^#\d+$/u.test(named) && bare !== 'fight');
 }
 
 /**
@@ -90,7 +93,11 @@ export function noteFights(taskId: string, input: unknown, resultJson: string | 
     }
     streak.stops += 1;
     streak.lastAt = now;
-    if (target.key.startsWith('#') || !streak.key.startsWith('#')) { streak.key = target.key; streak.label = target.label; }
+    if (target.key.startsWith('#') || !streak.key.startsWith('#')) {
+      const keepLabel = target.key === streak.key && streak.label.length > target.label.length;
+      streak.key = target.key;
+      if (!keepLabel) streak.label = target.label;
+    }
     const hit = /与えた打撃 (\d+)/u.exec(line.line);
     if (hit) { streak.landed += Number(hit[1]); streak.landedSeen = true; }
     const code = line.code ?? null;
@@ -105,13 +112,21 @@ export function fightRepeatLines(taskId: string, observation: BodyObservation | 
   const minutes = Math.max(1, Math.round((now - streak.firstAt) / 60_000));
   const pearls = pearlsOf(observation);
   const gain = pearls !== null && streak.pearls0 !== null ? `パール ${pearls >= streak.pearls0 ? '+' : ''}${pearls - streak.pearls0}（${pearls}/${PEARL_TARGET}）` : null;
-  const near = streak.key.startsWith('#') ? endermenNear(world(observation)).filter(item => `#${String(item.id)}` !== streak.key) : endermenNear(world(observation));
+  const byId = streak.key.startsWith('#');
+  const near = byId ? endermenNear(world(observation)).filter(item => `#${String(item.id)}` !== streak.key) : endermenNear(world(observation));
   const others = near.length ? `近くの別のエンダーマン ${near.length} 体（最寄り ${Math.round(near[0]!.distance)}m）` : '近くに別のエンダーマンは見えていない';
   const gold = carried(carriedItemCounts(world(observation), observation?.facts ?? {}), 'gold_ingot');
   const parts = [`${streak.label} への fight が ${streak.stops} 回続けて止まった（最初から ${minutes} 分`
     + `${gain ? `・${gain}` : ''}${streak.landedSeen ? `・与えた打撃 計 ${streak.landed}` : ''}）`];
   if (streak.code) parts.push(`直近の止まりの code: ${streak.code}（${streak.codeCount} 回続き）`);
   parts.push(others);
+  // The body's pick for `fight target=enderman` goes back to the individual it missed in a row when no other one is in sight (11/26: the head wrote "call
+  // by kind to pick another" and the body chose the same #18 for about 20 calls). Said as the body's rule with its reason; no call is refused.
+  if (byId && observation) {
+    parts.push(`種類（fight target=enderman）で呼んでも、目の見える別の個体が居なければ体は同じ ${streak.key} を選び直す（連続で外した個体は、他に選べる個体が無い時だけ戻るため）。`
+      + `いま近くの別の個体は ${near.length} 体（壁や屋根で目が見えない個体は選ばれない）`);
+  }
+  parts.push('この回数は、種類で呼んだ fight と、missing_item など個体の名前が結果に無い止まりも、同じ相手への 1 回に数えた、この実走の結果の数');
   parts.push(`パールの別の手: ピグリンとの交換（金の延べ棒 ${GOLD_PER_PEARL} 個で平均 1 個。いま持っている金の延べ棒 ${gold} 個）、別の場所の屋根、屋根なしの戦い`);
   return [`${parts.join('。')}。同じ相手は、相手と自分の位置が変わらない限り何度呼んでも届かない。同じ手を続けるか、別の個体・場所・手に変えるかは、この回数と時間を見て決める`];
 }
