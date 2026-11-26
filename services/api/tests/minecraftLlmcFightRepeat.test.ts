@@ -73,6 +73,11 @@ describe('the fights at the same target, counted by the head', () => {
     noteFights('t', callFor('#35'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(4));
     expect(fightRepeatLines('t', frame(0, 0, [[18, 4]]), T(4))).toEqual([]);
   });
+  it('does not fold a call at another kind into an id streak', () => {
+    for (let k = 0; k < 2; k++) noteFights('t', callFor('#18'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(k));
+    for (let k = 2; k < 4; k++) noteFights('t', callFor('zombie'), stopped(MISSING, 'missing_item'), frame(0, 0, [[18, 4]]), T(k));
+    expect(fightRepeatLines('t', frame(0, 0, [[18, 4]]), T(4))).toEqual([]);
+  });
   it('does not count a hand that did not run', () => {
     const skipped = JSON.stringify({ v: 1, done: 0, of: 1, lines: [{ i: 0, do: 'fight', status: 'skipped', line: '未実行', goal: 'not_started', end: 'not_run' }] });
     for (let k = 0; k < 4; k++) noteFights('t', input, skipped, frame(0, 0, []), T(k));

@@ -69,8 +69,8 @@ function sameTarget(streak: Streak, target: { key: string; label: string }): boo
   const [named, bare] = isId(streak.key) ? [streak.label, target.key] : [target.label, streak.key];
   // The 11/26 run's stops (a missing_item among them) carry no id in their words, so the label was the hand's own `#18`; the head then called by kind
   // (`enderman`) and back by id, and each switch started the count again under the line. A label that is a bare id has no kind to compare: a kind
-  // call counts as the same hunt (the body picks the last individual again when no other is in sight). `fight` alone names nothing.
-  return named.startsWith(`${bare} #`) || (/^#\d+$/u.test(named) && bare !== 'fight');
+  // call counts as the same hunt (the body picks the last individual again when no other is in sight). Only the enderman kind is folded in (a call at a zombie is another hunt), and `fight` alone names nothing.
+  return named.startsWith(`${bare} #`) || (/^#\d+$/u.test(named) && /^ender/u.test(bare));
 }
 
 /**
