@@ -167,7 +167,7 @@ const PLAN = [
   '- When the body starts an item of another section, the current section may move to that section (to move it back: plan_update\'s current). It does not move while the current section is an unmet preparation section.',
   '- Fill a shortage before fights or moving deeper (completion conditions and how children close: the plan_update description). '
     + 'エンドの点検物の不足は、今の節が stronghold の間は奥への移動に数えない（道中で取れる分でよい）。',
-  '- 今の節が要塞（stronghold）の間は、その手を先に出す。別の節の手は、同じ道の途中にある・危険や夜の囲い・今の節が止まっている・道中や要塞の中で身を守る物（防具の欠け・食料・つるはし）を手元の材料で数分で作れる、のどれかの時だけ。どれかを why に書く'
+  '- 今の節が要塞（stronghold）の間は、その手を先に出す。別の節の手は、同じ道の途中にある・危険や夜の囲い・今の節が止まっている、のどれかの時だけ（防具・食料・つるはしの欠けは、要塞の後ろでよい）。どれかを why に書く'
     + '（理由: 別の節を先にした実走は、要塞へ 1m も近づかないまま時間が過ぎた）。',
 ].join('\n');
 

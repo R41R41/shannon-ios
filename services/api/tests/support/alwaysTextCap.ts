@@ -27,6 +27,6 @@
  * - 11/27 (the 9th end-dragon run: 70 hands of the End's preparation and none of the stronghold, with the stronghold first in the plan): the priority line says the End's check may wait until behind the
  *   stronghold, the plan rules say the End's shortage does not count as moving deeper while the current node is the stronghold, and one rule says the stronghold's hands go first with the three cases that
  *   allow another node's hand (about 330 llmc). The text measures 11,163, the cap is 11,180.
- * - 11/27 (merge, the tools fix): the death rule's English durability clause says a short diamond pickaxe is kept for obsidian, not remade (about 29 llmc). Cap 11,180 -> 11,220 (to be checked against the measured text).
+ * - 11/27 (merge): the tools fix added about 29 (a short diamond pickaxe is kept for obsidian) and the stronghold line dropped its protective exception, which cancelled it. The text measures 11,171, the cap stays 11,180.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 11_220;
+export const ALWAYS_TEXT_CAP_LLMC = 11_180;

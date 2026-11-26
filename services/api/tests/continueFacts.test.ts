@@ -132,8 +132,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/26 (the 4th end-dragon run, hoglins): 8,820 -> 8,930 for the urgent rule that counts a fight and the route line that says a stand on the enemy side is no retreat (about 97: the text measures 8,917).
     // 11/26 (the 6th end-dragon run, burned to death beside lava): 8,930 -> 8,970 for the urgent rule on burning (1 health a second, the Nether's water does not put it out: about 41; the text measures 8,958).
     // 11/27 (the 9th end-dragon run, 70 hands of the End's preparation and none of the stronghold): 8,970 -> 9,300 for the priority line, the plan rule on the End's check items and the stronghold-first line with its three cases and the protective exception (about 323: the text measures 9,293).
-    // 11/27 (merge of the shortage and tools fixes): +29 for the death rule clause that keeps a short diamond pickaxe for obsidian: 9,300 -> 9,330 (to be checked against the measured text).
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(9_330);
+    // 11/27 (merge): the tools fix added about 29 for the pickaxe clause and the stronghold line dropped its protective exception, which cancelled it; the text measures 9,300.
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(9_300);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;
