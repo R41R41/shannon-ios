@@ -90,7 +90,7 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     expect(lines.filter(line => line.startsWith('約束 #'))).toEqual([
       '約束 #3 作業台用の板 4: 今 2（約束の外で使えるのは 0）（足りない 2）', '約束 #4 地下で食べる分の食料 20 点: 今 11 点（約束の外で使えるのは 0 点）（足りない 9）',
       '約束 #5 はしご用の棒 2: 今 0（約束の外で使えるのは 0）（足りない 2）', '約束 #6 黒曜石の枠用の黒曜石 10: 今 7（約束の外で使えるのは 0）（足りない 3）']);
-    expect(lines.find(line => line.startsWith('近くの食べ物'))).toBe('近くの食べ物の候補（24 m 以内・1個の食料点、経路/回収/個数は未確認）: [魚]cod #501 18.2m (188,-18,236)（cod 2.4点→調理後11点）');
+    expect(lines.find(line => line.startsWith('近くの食べ物'))).toBe('近くの食べ物の候補（24 m 以内・1個の食料点、経路/回収/個数は未確認）: [魚]cod #501 18.2m (188,-18,236)（cod 2.4点→調理後11点）（魚は水中で逃げる・attack は目から 3 m 以内でないと届かない）');
     // The queue: each item with its state, its time left and what its hands will do.
     expect(got.live.body.queue).toEqual([
       expect.stringMatching(/^▶ q52 .* 実行中: .*残り 20 秒（見込み）・予定: attack #2601$/u),
@@ -143,7 +143,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
       ...variant === 'compressed' ? { compactAboveTokens: 16_000 } : {} })).live.body.facts))])));
     console.info(`continueFacts size ${JSON.stringify({ ...added, factsTokensByVersion: { normal: added.factsTokens, ...others } })}`);
     // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(760);
+    // 11/27: 760 -> 820 for the fish line's reach (one note beside a fish in the food candidates: about 40).
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(820);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });

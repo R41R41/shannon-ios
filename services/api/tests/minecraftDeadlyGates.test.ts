@@ -104,7 +104,7 @@ describe('the End', () => {
     const kit: Array<[string, number]> = [['cobblestone', 64], ['obsidian', 8], ['water_bucket', 1], ['white_bed', 8], ['cooked_beef', 16]];
     expect(deadlyGateHold(walkIn, overworld(kit))).toBeNull();
     const fewBeds = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'white_bed' ? 7 : n] as [string, number])));
-    expect(fewBeds?.line).toContain('ベッド（目標 10） 7/8');
+    expect(fewBeds?.line).toContain('ベッド（エンドの点検は 8・戦いの目標は 10） 7/8');
     const fewObsidian = deadlyGateHold(walkIn, overworld(kit.map(([name, n]) => [name, name === 'obsidian' ? 7 : n] as [string, number])));
     expect(fewObsidian?.line).toContain('黒曜石（エンドの戦い用');
     expect(fewObsidian?.line).toContain('7/8');

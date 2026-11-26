@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { readinessOf } from './minecraftLlmcReadiness.js';
-import { BED, BED_FROM, canSleepNow, dayTick, enemyNear, minutes, NIGHT_FROM, NIGHT_TO, thunderstorm } from './minecraftNightArms.js';
+import { AFLOAT_NO_SLEEP, BED, BED_FROM, canSleepNow, dayTick, enemyNear, noSleepSpot, minutes, NIGHT_FROM, NIGHT_TO, thunderstorm } from './minecraftNightArms.js';
 import { deathCounterOf } from './minecraftControlState.js';
 import { SLEEP_COST, SLEEP_RESUME, SLEEP_SKIP } from '../../contracts/minecraftSleepWords.js';
 
@@ -106,7 +106,11 @@ export function sleepStateLine(frame: BodyObservation | null, taskId: string, no
     return `夜の睡眠: 今夜は寝ない（見送り中・${left}。理由: ${skip.why || '書いていない'}）。体の寝る予約は消してある。`
       + `寝る気になったら sleep（on は省く）か ${SLEEP_RESUME}。朝・期限・死亡で自動で戻る`;
   }
+  const afloat = noSleepSpot(facts.world);
   const booked = bookings.get(taskId);
+  if (booked && clock - booked.at < BOOKING_MS && afloat) {
+    return `夜の睡眠: ${AFLOAT_NO_SLEEP}。体に寝る予約が残っているかもしれない（${Math.max(1, Math.round((clock - booked.at) / 60_000))} 分前に sleep の手を送った）。要らなければ ${SLEEP_SKIP} で消す`;
+  }
   if (booked && clock - booked.at < BOOKING_MS) {
     return `夜の睡眠: 体に寝る予約が残っているかもしれない（${Math.max(1, Math.round((clock - booked.at) / 60_000))} 分前に sleep の手を送った。体は 25 分まで持ち、夜になり次第、次の手の前で寝る。`
       + `体の側の今の有無は入力に出ない）。${SLEEP_COST}。今夜を使う作業（夜に湧く敵を倒す・夜に急ぐ）か、人が寝ないと言った時は ${SLEEP_SKIP} で予約を消す。寝てよいならそのまま`;
@@ -114,6 +118,7 @@ export function sleepStateLine(frame: BodyObservation | null, taskId: string, no
   const tick = dayTick(facts.world), storm = thunderstorm(facts.world);
   if (!storm && (tick === null || tick >= NIGHT_TO || tick < BED_FROM - 1_200)) return null;
   if (![...facts.counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
+  if (afloat) return null; // the bed's line beside the plan's now says it (`AFLOAT_NO_SLEEP`)
   const effect = storm ? '寝ると雷雨が止む' : SLEEP_COST;
   return `夜の睡眠: ベッドを持っていて、寝る予定になる。${effect}。${nodeTitle ? `今の節「${nodeTitle}」が` : '今の節が'}夜そのもの（夜に湧く敵を倒す・夜のうちに急ぐ）か、人が寝ないと言った時は、${SLEEP_SKIP} を先に出す。`
     + 'ファントムが近い・装備か食料が足りない地上の夜で、夜が目的でなければ寝る';
@@ -134,7 +139,8 @@ export function sleepFirstHold(input: unknown, frame: BodyObservation | null, ta
     if (hands.some(raw => objectOf(raw)?.do === 'sleep' && objectOf(raw)?.on === undefined)) { bookings.set(taskId, { at: clock }); if (bookings.size > 32) bookings.delete(bookings.keys().next().value as string); }
     return null;
   }
-  if (enemyNear(facts.world) || activeSkip(taskId, frame, clock)) return null;
+  // 11/26: afloat with no floor beside her, no sleep can come: the work (a furnace's take) is not held for it.
+  if (noSleepSpot(facts.world) || enemyNear(facts.world) || activeSkip(taskId, frame, clock)) return null;
   const booked = bookings.get(taskId);
   if (booked && clock - booked.at < BOOKING_MS) {
     booked.night ??= clock;

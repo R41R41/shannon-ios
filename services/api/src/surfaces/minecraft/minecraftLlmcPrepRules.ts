@@ -131,7 +131,7 @@ export const BEFORE_GATE: PrepStage = { title: 'ネザーに入る前', food: 40
 export const END_BEDS = 8;
 /** The obsidian the End fight takes (a bed's shield and its base), counted apart from the portal's ten: 12 is the aim, 8 the least. */
 export const END_OBSIDIAN = 8;
-const BEDS: PrepNeed = { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM };
+const BEDS: PrepNeed = { label: `ベッド（エンドの点検は ${END_BEDS}・戦いの目標は 10）`, count: END_BEDS, pattern: BED_ITEM };
 export const FIGHT_OBSIDIAN_LABEL = '黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）';
 const FIGHT_OBSIDIAN: PrepNeed = { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u };
 const WATER_BUCKET: PrepNeed = { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u };

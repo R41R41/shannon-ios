@@ -2,13 +2,13 @@ import { orderedPlan, type PlanKind, type PlanNode } from '@shannon/mind';
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { FOOD_PASS } from './minecraftNightArms.js';
 import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts } from './minecraftItems.js';
-import { carriedFood } from './minecraftLlmcLive.js';
+import { carriedFood, FOOD_POINTS } from './minecraftLlmcLive.js';
 import {
   BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_FALLBACK_WEAPONS, END_GATHER_MS, END_MIN_FOOD, END_OBSIDIAN, END_WEAPONS, endGatherSince,
   FIGHT_OBSIDIAN_LABEL, PIGLIN_COST, RETURN_TO_END,
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
-import { foodPointsWords } from './minecraftFoodWords.js';
+import { foodPointsWords, furnaceFoodOf } from './minecraftFoodWords.js';
 import { agedScan } from './minecraftLlmcScanAge.js';
 import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js';
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
@@ -54,7 +54,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: s
   nether_blaze: { title: 'ブレイズ戦へ', food: 60, needs: [
     { label: '盾', count: 1, pattern: /^shield$/u }, { label: '足場のブロック', count: 32, pattern: BLOCKS }] },
   end: { title: 'エンドへ', food: 330, needs: [
-    { label: 'ベッド（目標 10）', count: END_BEDS, pattern: BED_ITEM },
+    { label: `ベッド（エンドの点検は ${END_BEDS}・戦いの目標は 10）`, count: END_BEDS, pattern: BED_ITEM },
     { label: FIGHT_OBSIDIAN_LABEL, count: END_OBSIDIAN, pattern: /^obsidian$/u },
     ...END_WEAPONS,
     // end1108d S9 (11/8): 「エンダーアイ 11/12」 one throw after 12 sent the first plan back to the Nether; 10 in hand is the stronghold's
@@ -167,10 +167,15 @@ function gapsOf(needs: readonly Need[], parts: { counts: ItemCounts; worn?: read
 const gapWords = (gaps: Gaps): string[] => [gaps.none.length ? `${gaps.none.join('・')}が無い` : '', gaps.short.join('・'),
   gaps.unworn.length ? `持っているが着ていない: ${gaps.unworn.join('・')}` : ''].filter(Boolean);
 
-const foodLack = (table: PrepStage, food: number): string => food < table.food ? `${foodPointsWords(food)}（目安 ${table.food}）` : '';
+/** A furnace's cooking is food not yet in the pack (11/26: 「食料 0 点」 beside 20 porkchops 84 s from done): said inside the lack. */
+const foodLack = (table: PrepStage, food: number, world?: Record<string, unknown>): string => {
+  if (food >= table.food) return '';
+  const furnace = furnaceFoodOf(world?.jobs, FOOD_POINTS);
+  return furnace ? `${foodPointsWords(food)}（${furnace.words}。目安 ${table.food}）` : `${foodPointsWords(food)}（目安 ${table.food}）`;
+};
 /** The required needs of a stage that are not met (the food counts as one). */
-function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; worn?: readonly string[] }): string[] {
-  return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food)].filter(Boolean);
+function mustWords(table: PrepStage, parts: { counts: ItemCounts; food: number; worn?: readonly string[]; world?: Record<string, unknown> }): string[] {
+  return [...gapWords(gapsOf(table.needs.filter(need => !need.goal), parts)), foodLack(table, parts.food, parts.world)].filter(Boolean);
 }
 
 /**
@@ -823,7 +828,7 @@ export function requiredLack(facts: NonNullable<ReturnType<typeof readinessOf>>,
 /** The required needs of one table that are not met, with what going on without them costs, or null (no table, no risk to say, or all met). */
 export function lackOfTable(facts: NonNullable<ReturnType<typeof readinessOf>>, table: PrepStage | null): string | null {
   if (!table?.risk) return null;
-  const must = mustWords(table, { counts: facts.counts, food: facts.food, worn: wornItems(facts.world.worn) });
+  const must = mustWords(table, { counts: facts.counts, food: facts.food, worn: wornItems(facts.world.worn), world: facts.world });
   return must.length ? `未達の必須（${table.title}に必ず）— ${must.join('。')}。欠けたまま進むと: ${table.risk}` : null;
 }
 

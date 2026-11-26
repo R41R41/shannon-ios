@@ -13,6 +13,7 @@ import { FOOD_FISH,nearNeeds } from './minecraftLlmcReachWords.js';
 import { PLAN_FACTS_KEY,type PlanFacts } from './minecraftPlanFacts.js';
 import { round1 } from './minecraftTransientObservation.js';
 import { foodChoices, foodYieldWords, huntWeaponIn } from './minecraftFoodAcquisition.js';
+import { furnaceFoodOf } from './minecraftFoodWords.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 import { agedScan } from './minecraftLlmcScanAge.js';
 import { scaffoldLine } from './minecraftLlmcDetour.js';
@@ -62,8 +63,10 @@ export function vitalsLine(observation: BodyObservation | null): string | null {
   if (health === null && hunger === null) return null;
   const food = foodItems(observation), listed = Array.isArray(w.inventory) || rec(w.inventory) !== null;
   const flesh = carriedItemCounts(w, observation?.facts).get('rotten_flesh') ?? 0;
+  // 11/26: a furnace's cooking is food that is not in the pack (the line said 無し beside 20 porkchops 84 s from done).
+  const furnace = furnaceFoodOf(w.jobs, FOOD_POINTS), furnaceNote = furnace ? `（${furnace.words}）` : '';
   return [...health !== null ? [`体力 ${round1(health)}/20`] : [], ...hunger !== null ? [`満腹 ${round1(hunger)}/20`] : [],
-    ...food.length ? [`食べ物 ${food.slice(0, 5).map(item => item.text).join('・')}`] : listed ? [flesh ? '通常の食べ物 無し' : '食べ物 無し'] : [],
+    ...food.length ? [`食べ物 ${food.slice(0, 5).map(item => item.text).join('・')}${furnaceNote}`] : listed ? [`${flesh ? '通常の食べ物 無し' : '食べ物 無し'}${furnaceNote}`] : [],
     ...flesh ? [`非常食 rotten_flesh×${flesh}（1個で満腹+4、空腹の効果の恐れ。通常の食料点には含めない）`] : [],
     ...effectWords(w).length ? [`効果 ${effectWords(w).join('・')}`] : []].join('・');
 }
@@ -114,6 +117,8 @@ function villageFoodWords(observation: BodyObservation | null): string | null {
   return seenHay ? `村の食べ物: 干し草などの走査の行は古いので今は未確認${knowHow}` : null;
 }
 const HAY_KNOW_HOW = '干し草は 1 個でパン 3＝約 33 点・焼かずに食べられる。hay_block→wheat→bread は make。育った作物は収穫';
+/** 11/26: six attacks at cod in the water, none reached (the fish flees under water; the reach is 3 m from the eyes): said beside the fish, as the facts of the hand. */
+const FISH_NOTE = '（魚は水中で逃げる・attack は目から 3 m 以内でないと届かない）';
 export function foodLine(observation: BodyObservation | null, shown: number): string | null {
   const list = foodChoices(foodCandidates(observation), shown, FOOD_FISH);
   const village = villageFoodWords(observation);
@@ -122,7 +127,7 @@ export function foodLine(observation: BodyObservation | null, shown: number): st
     ? '（狩りは石以上の剣か斧が要る: 今 無し）' : '';
   const animals = `近くの食べ物の候補（${FOOD_NEAR_METERS} m 以内・1個の食料点、経路/回収/個数は未確認）: ${list.map(item =>
     `[${FOOD_FISH.has(item.name) ? '魚' : '陸'}]${item.name}${item.id !== null ? ` #${item.id}` : ''} ${one(item.distance)}m`
-      + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}${bare}`;
+      + `${item.at ? ` ${cell(item.at)}` : ''}${foodYieldWords(item.name, FOOD_POINTS)}`).join('・')}${bare}${list.some(item => FOOD_FISH.has(item.name)) ? FISH_NOTE : ''}`;
   return village ? `${village}／${animals}` : animals;
 }
 

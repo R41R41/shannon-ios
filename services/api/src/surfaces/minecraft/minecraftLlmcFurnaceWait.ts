@@ -1,6 +1,7 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { holdChoices, letteredChoices, SHORT_LEFT_SECONDS } from './minecraftFurnaceMeanwhile.js';
 import { readinessOf } from './minecraftLlmcReadiness.js';
+import { TRAVEL_FAST_MPS, TRAVEL_SLOW_MPS } from './minecraftTravelSpeed.js';
 
 /**
  * mb-llmc v2 (実走37: 鉄 22 個を 1 つのかまどに入れ、wait×6 で 175 秒立って待った。他の手は何も入れなかった): an act with a long wait while a furnace works
@@ -31,9 +32,31 @@ function working(frame: BodyObservation | null): Array<{ at: string; what: strin
  * A line is a reading of the frame's jobs (`remainingEstimateMs`, `expects`, `from`), made again every decision. Null when the jobs are not a list the body wrote.
  * The instruction is said once, in the first line (not once per furnace); the furnace lines are short, soonest first, 4 at most with the rest counted.
  */
-const LEDGER_HEAD = 'かまど帳: 焼く間は待たずに別の作業（かまどの近くの作業が良い。手は planNow の A/B/C）の act を足す。「furnace X,Y,Z take」の act は早めに足してもよい（残りが 15 秒以内なら体が待って取る。長ければ「まだ」と返る）。離れ切る前に取る';
+const LEDGER_HEAD = 'かまど帳: 焼く間は待たずに別の作業（かまどの近くの作業が良い。手は planNow の A/B/C）の act を足す。「furnace X,Y,Z take」の act は早めに足してもよい（残りが 15 秒以内なら体が待って取る。長ければ「まだ」と返る）。離れ切る前に取る。遠くへ行くなら、かまどの行の往復の秒数と焼き終わりまでの秒数を比べて決める（待つ・取りに戻る・取らずに行く）';
 const LEDGER_MAX = 4;
-export function furnaceLedgerLines(jobs: unknown): string[] | null {
+/**
+ * 11/26 (run 7): 20 porkchops went in, the head swam 170 m on and came back for them; the ledger said the seconds left and not what leaving costs. The distances to a furnace, from where she stands and
+ * from the place the plan's now goes to, and the seconds of the trip there and back at the speed the other lines use (`minecraftTravelSpeed`): facts, with no word on what to do.
+ */
+export interface LedgerContext { at?: { x: number; z: number } | null; next?: { x: number; z: number } | null }
+const grouped = (value: number): string => Math.round(value).toLocaleString('en-US');
+const tripWords = (distance: number): string => `${grouped(distance)} m（離れて戻る往復は約 ${grouped(2 * distance / TRAVEL_FAST_MPS)}〜${grouped(2 * distance / TRAVEL_SLOW_MPS)} 秒）`;
+/** The place she stands (`world.position`) and the place the plan's now ends at (the 「済む条件: at:x,y,z」 of the now, in `planNow`), when the frame says them. */
+export function ledgerContextOf(world: Rec | null | undefined, planNow?: string | null): LedgerContext {
+  const at = rec(world?.position), x = num(at?.x), z = num(at?.z);
+  const goal = typeof planNow === 'string' ? /済む条件: at:(-?\d+),(-?\d+),(-?\d+)/u.exec(planNow) : null;
+  return { at: x !== null && z !== null ? { x, z } : null, next: goal ? { x: Number(goal[1]), z: Number(goal[3]) } : null };
+}
+function tripFacts(at: Rec, context: LedgerContext | undefined): string {
+  const x = num(at.x), z = num(at.z);
+  if (!context || x === null || z === null) return '';
+  const parts = [
+    ...(context.at ? [`いまいる所から ${tripWords(Math.hypot(x - context.at.x, z - context.at.z))}`] : []),
+    ...(context.next ? [`今の節の行き先から ${tripWords(Math.hypot(x - context.next.x, z - context.next.z))}`] : []),
+  ];
+  return parts.length ? `。かまどは${parts.join('・')}` : '';
+}
+export function furnaceLedgerLines(jobs: unknown, context?: LedgerContext): string[] | null {
   if (!Array.isArray(jobs) || !jobs.length) return null;
   const rows: Array<{ ms: number; line: string }> = [];
   for (const item of jobs) {
@@ -44,7 +67,7 @@ export function furnaceLedgerLines(jobs: unknown): string[] | null {
     const what = `${String(job.input ?? '')}×${String(job.count ?? '')}${typeof job.expects === 'string' && job.expects ? ` → ${job.expects.slice(0, 30)}` : ''}`;
     const lack = num(job.unfueledInputCount) ? `。燃料が足りず ${job.unfueledInputCount} 個は焼けない（石炭か板を足す）` : '';
     if (job.status === 'different_dimension') { rows.push({ ms: Number.MAX_SAFE_INTEGER, line: `かまど (${cell}): ${what}。別のディメンションにある${lack}` }); continue; }
-    rows.push({ ms, line: ms > 0 ? `かまど (${cell})${from}: ${what}、あと約 ${Math.round(ms / 1000)} 秒${lack}` : `かまど (${cell})${from}: ${what}、時間は来た（take）${lack}` });
+    rows.push({ ms, line: ms > 0 ? `かまど (${cell})${from}: ${what}、あと約 ${Math.round(ms / 1000)} 秒${tripFacts(at, context)}${lack}` : `かまど (${cell})${from}: ${what}、時間は来た（take）${tripFacts(at, context)}${lack}` });
   }
   rows.sort((x, y) => x.ms - y.ms);
   const shown = rows.slice(0, LEDGER_MAX).map(row => row.line);
