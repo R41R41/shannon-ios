@@ -193,6 +193,8 @@ export function urgentFacts(
  * at 8.7 left her standing
  * in the blaze's line, burning, and the next decision took 8 s): a stopIf on health too.
  */
+/** Melee foes whose health a wooden or stone sword does not take down quickly (vanilla max health). */
+const HEAVY_MELEE_FOES = new Map([['hoglin', 40], ['zoglin', 40], ['piglin_brute', 50]]);
 const MELEE_FOES = new Set(['magma_cube', 'wither_skeleton', 'piglin_brute', 'hoglin', 'zoglin', 'zombie', 'husk', 'drowned']);
 
 export function cutOf(text: string, bodyReflex: boolean): string | null {
@@ -202,6 +204,14 @@ export function cutOf(text: string, bodyReflex: boolean): string | null {
     // end1109f19/f20: after a stop on a magma cube, Haiku re-sent the same go with accept [magma_cube] both times
     // (the DANGER line was far away); the next step is said here, beside the stop, for a melee foe.
     const foe = /stopIf: hostileWithin:([a-z_]+) #(\d+) ([\d.]+)m/u.exec(text);
+    // 11/26 (four hoglins, a wooden sword): this line said "attack untilDead first" for a hoglin too, and Haiku leans on the
+    // line beside the stop. A foe of 40〜50 health takes 10 blows of a wooden sword, so the count comes first here.
+    const heavy = foe ? HEAVY_MELEE_FOES.get(foe[1]) : undefined;
+    if (foe && heavy)
+      return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。${foe[1]} は体力 ${heavy} で近接が強い（1 撃 3.5〜9）。`
+        + `「打撃数」の行で倒すのに要る打撃を見る: 8 打撃を超える（木・石の剣）か、近くに同じ敵が 2 体以上なら斬り合わず、`
+        + `その敵と逆の向きへ go で 16m 以上離れる（行き先や route の立ち位置が敵の側なら使わない）。`
+        + `1 体だけで 8 打撃以内なら attack target=#${foe[2]} untilDead を先頭の手に（開けた所で）`;
     if (foe && MELEE_FOES.has(foe[1]))
       return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。近接敵なので accept に入れて横を通らない（歩く・掘る手が続いて殴られる）: `
         + `attack target=#${foe[2]} untilDead を先頭の手に（「押されたら落ちる」の無い開けた所で）、縁なら先に空所から離れる。`

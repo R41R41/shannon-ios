@@ -135,7 +135,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     const near = { ...SHAFT, nearbyEntities: [{ id: 31, name: 'hoglin', distance: 24.2, position: at(330, 52, 80) }],
       scan: { at: 't', dimension: 'the_nether', text: '走査', rows: ['範囲 読み込み 353 チャンク', 'ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 西 112m'] } };
     // The scan's row is said with its age (here unknown) and its distance worked out again from her feet, not the scan's own.
-    expect(foodLeads(near, 'the_nether', nodes)).toBe('食料の当て: #31 hoglin 24m・ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 今の足元から水平 111m・上 18（走査 時刻不明・今は未確認）'
+    expect(foodLeads(near, 'the_nether', nodes)).toBe('食料の当て: #31 hoglin 24m（敵でもある・体力 40。木か石の剣や 2 頭以上なら狙わない）・ネザーの幹 crimson_stem ×80 最寄り (200,70,60) 今の足元から水平 111m・上 18（走査 時刻不明・今は未確認）'
       + '・帰りのゲート (5,35,12) 約 312m（計画 p4 の where）（歩いて約 260 秒。くぐって地上で食料を取り、同じゲートで戻る）');
     // 11/15c n: the scan's gate row with its walk and what it is for (she read 196 m alone as too far and waited 1,600 s with no food).
     const scanned = { ...SHAFT, scan: { at: 't', dimension: 'the_nether', text: '走査', rows: ['ネザーポータル nether_portal (37,84,7) 北西 196m・上 18'] } };

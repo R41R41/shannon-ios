@@ -342,7 +342,9 @@ export function foodLeads(world: Record<string, unknown>, dimension: string | nu
   const animals = (Array.isArray(world.nearbyEntities) ? world.nearbyEntities : []).flatMap(item => {
     const entity = record(item), name = typeof entity?.name === 'string' ? entity.name : '';
     const distance = finite(entity?.distance), id = finite(entity?.id) !== null ? `#${String(entity!.id)} ` : '';
-    return ANIMALS.test(name) && distance !== null ? [{ line: `${id}${name} ${Math.round(distance)}m`, distance }] : [];
+    // 11/26: a hoglin stayed in this list while three of them were hitting her; it is food and a foe, so the line says both.
+    const foe = name === 'hoglin' ? '（敵でもある・体力 40。木か石の剣や 2 頭以上なら狙わない）' : '';
+    return ANIMALS.test(name) && distance !== null ? [{ line: `${id}${name} ${Math.round(distance)}m${foe}`, distance }] : [];
   }).sort((left, right) => left.distance - right.distance).slice(0, 3).map(item => item.line);
   const scan = record(world.scan);
   const sameDimension = !scan?.dimension || String(scan.dimension).replace(/^minecraft:/u, '') === dimension;
