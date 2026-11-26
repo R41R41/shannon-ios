@@ -861,6 +861,7 @@
     "surfaces/minecraft/minecraftControlState.ts",
     "surfaces/minecraft/minecraftControlValidation.ts",
     "surfaces/minecraft/minecraftCurrentPlanPrompt.ts",
+    "surfaces/minecraft/minecraftDeathReturn.ts",
     "surfaces/minecraft/minecraftDescentTrail.ts",
     "surfaces/minecraft/minecraftDragonDefeatLog.ts",
     "surfaces/minecraft/minecraftDropsAdvice.ts",
