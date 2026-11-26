@@ -22,9 +22,7 @@ import { eyesForStronghold, firstPlanInput, openingDraft, seedPlan, strongholdFi
 import { ownFirstPlanSystem } from '../src/surfaces/minecraft/minecraftStrategy.js';
 
 const GOAL = 'エンドラを討伐して';
-const read = (dir: string, name: string) => fs.readFileSync(path.join(dir, name), 'utf8').replace(/
-/gu, '
-');
+const read = (dir: string, name: string) => fs.readFileSync(path.join(dir, name), 'utf8').replace(/\r\n/gu, '\n');
 const TRANSPORT_END = 'あなたはマイクラの体のタスクの、最初の計画ツリーを立てる係';
 const TAIL_FROM = '走査（読み込み済みの範囲の目印）:';
 
