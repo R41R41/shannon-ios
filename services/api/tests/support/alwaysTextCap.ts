@@ -17,5 +17,7 @@
  * - 11/26 (11/15c n, ported onto the 11/24 text: health 6.7 at fullness 17 with no food waited 1,600 s, the gate back 196 m off, held by 「do not travel far while lacking food」 and
  *   「eat, wait to recover」): the health rule says waiting brings nothing back below fullness 18 and allows the far trip for food, and the safety rule waits only at fullness 18 or more
  *   (about 29 llmc, about 15 real). The text measures 10,633, the cap is 10,650.
+ * - 11/26 (the end-dragon run on Haiku: 316 acts of one hand, the body idle about 3 tenths of the time): the deciding rule says to stack the known follow-up hands in one act and why
+ *   (it replaces the older line's first sentence; about 23 llmc, about 11 real). The text measures 10,673, the cap is 10,690.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_650;
+export const ALWAYS_TEXT_CAP_LLMC = 10_690;

@@ -36,7 +36,7 @@ const PREP = PREP_DESCENT_RULE_EN;
 const DECIDE = [
   '## How to decide (how to write hands: mc_act)',
   '- Every decision, read live and plan, then decide.',
-  '- Hands that can be chosen without waiting for a result (craft, switch the held item, eat, pick up) go in the same act as the next move. A run of the same hand: repeat, the count of done and mine, the seconds of go. Read the result again for a moving target or an unknown route. If a hand fails midway, the later hands are not run. '
+  '- Stack the known follow-up in the same act, 2 to 3 hands (make then equip, kill then pick up, go then work): a one-hand act ends before the next decision does (median 4 s) and the body idles, a third of a run. Stack only when the next hand does not need the result. A run of the same hand: repeat, the count of done and mine, the seconds of go. Read the result again for a moving target or an unknown route. '
     + 'Replace an in-progress hand only on danger, failure or a change of goal. Write what you need later in the act\'s keep (it goes on the ledger). Keep what was promised; if you dip into it, write its number and the reason in why.',
   '- A why starts with the section tag (「[p1.2] 丸石でハーフブロック」). For a different section, write its number and the reason. Keep counts already observed apart from counts marked 「これから」 (still to come).',
   '- Write coordinates and dangers needed later in the plan or a why (the history keeps only each hand\'s line). When stopped, fix the premise that did not hold. Never issue the same hand unchanged. '

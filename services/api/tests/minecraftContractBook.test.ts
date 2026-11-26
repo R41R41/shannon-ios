@@ -33,6 +33,10 @@ const isTidyLine = (text: string) => text.startsWith('tidy [物[:数]');
 // 11/13 (h-knowledge): exposeOk on mine and vertical, the seal example and the stairs line on the vertical page, and one queue line (the inline ids again shift
 // by it): the historical contract is made without them, and its hash proves the removal is exact.
 const isQueuePackingLine = (text: string) => text.startsWith('- 列の積み方（体が止まる時間を減らす）');
+// 11/26 (the end-dragon run on Haiku: one hand per decision): a section of nine lines after the tidy-through-hunt lines says to stack the known follow-up hands in one act; the
+// historical contract is made without it (the heading line starts with a blank line, so the joined text is the same as before without it).
+const STACK_1126 = ['\n## 続きの手は同じ act に積む', '- 次に何をするかが今の時点', '- 続きが分かっている並びの例', '  作って着る', '  掘って作る', '  倒して拾う', '  行って働く', '- 失敗した時（体のきまり）', '- 積まない時'];
+const isStackLine = (text: string) => STACK_1126.some(head => text.startsWith(head));
 const REVISIONS_1113: ReadonlyArray<readonly [string | RegExp, string]> = [
   ['[collect=false] [exposeOk] [seconds=N]', '[collect=false] [seconds=N]'],
   ["exposeOk は dig と同じ（敵に見られても掘る。「見られる」の止まりのあと、離れて掘れない時に付ける）。", ''],
@@ -57,7 +61,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and the schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('036d3e83a690ebe6f0322ce8406291917435f2f906127ba5aa997f2d6c2bfb58');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('89ae7325b9c8db68640107e0da29680f868340ba8cccea595b4e69b4195304c3');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('848d8b9cc2cca9535e006ece66c959568186d367e48dca2dedebdcb82f4a96b2');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -73,7 +77,7 @@ describe('the canonical Minecraft input-contract book', () => {
     const legacyShoot = 'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。';
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
     // The inline ids are the lines' positions: without the tidy lines the later ones are numbered as before.
-    const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text) && !isQueuePackingLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
+    const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text) && !isQueuePackingLine(part.text) && !isStackLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
       ? LEGACY_SPECIAL_8C : undo1113(part.text).replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
         .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))

@@ -128,7 +128,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/24: 8,640 -> 8,680 for the scope line's exception (a fight needs gear first: about 40; the text measures 8,660; the night deaths of 11/23).
     // 11/24 (try1124b): 8,680 -> 8,740 for the urgent rule's one line (a move away is 10 blocks or more: about 60; the text measures 8,734; the owner's test of 11/24 07:12).
     // 11/26 (11/15c n, ported): 8,740 -> 8,780 for the food-wait rule (waiting brings nothing below fullness 18: about 29; the text measures 8,763).
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_780);
+    // 11/26 (end-dragon run on Haiku): 8,780 -> 8,820 for the stack-the-follow-up rule (about 22: the text measures 8,802).
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_820);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;
