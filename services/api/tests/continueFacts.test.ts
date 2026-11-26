@@ -131,7 +131,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/26 (end-dragon run on Haiku): 8,780 -> 8,820 for the stack-the-follow-up rule (about 22: the text measures 8,802).
     // 11/26 (the 4th end-dragon run, hoglins): 8,820 -> 8,930 for the urgent rule that counts a fight and the route line that says a stand on the enemy side is no retreat (about 97: the text measures 8,917).
     // 11/26 (the 6th end-dragon run, burned to death beside lava): 8,930 -> 8,970 for the urgent rule on burning (1 health a second, the Nether's water does not put it out: about 41; the text measures 8,958).
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(8_970);
+    // 11/27 (the 9th end-dragon run: a short diamond pickaxe read as a tool to remake): 8,970 -> 9,010 for the death rule's two clauses (a spare stone pickaxe for digging; the diamond one is kept for obsidian: about 49; the text measures 9,007).
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(9_010);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;

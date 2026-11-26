@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { cookedWords, fightLines, gearLine, packLine, shieldLine, strikeLine, swordGap, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
+import { cookedWords, fightLines, gearLine, packLine, shieldLine, strikeLine, swordGap, toolLines, waterLine } from '../src/surfaces/minecraft/minecraftLlmcFightFacts.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
 
@@ -137,6 +137,23 @@ describe('the blows a fight takes and the shield left (11/26)', () => {
     expect(shieldLine({ worn: '左手: shield' })).toBeNull();
     const obs = frame({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)', nearbyThreats: [] });
     expect(fightLines(obs, false)).toEqual(['盾 残り 22/336（構えている盾。1/3 を切っている）']);
+  });
+  it('says a short diamond pickaxe as what obsidian takes, and that the body spends the cheapest tool, while no other pickaxe is carried', () => {
+    const inventory = [{ name: 'diamond_pickaxe', count: 1, durability: { left: 10, max: 1561 } }, { name: 'obsidian', count: 7 }, { name: 'cobblestone', count: 5 }, { name: 'stick', count: 2 }];
+    const lines = toolLines({ inventory });
+    expect(lines[0]).toBe('diamond_pickaxe 残り 10/1561（1/3 を切っている。持ち: ダイヤ 0・棒 2。作り直すなら ダイヤ 3・棒 2）');
+    expect(lines[1]).toContain('体は一番安い道具から使う設計');
+    expect(lines[1]).toContain('石のツルハシ: 持ち: 丸石 5・棒 2。作り直すなら 丸石 3・棒 2');
+    expect(lines[1]).toContain('今は荷の石以上のツルハシがダイヤ 1 本のみ');
+    expect(lines[2]).toBe('黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り 10/1561 は黒曜石 10 個分（今 7 個持ち。必要: 点検あと 1→足りる・戦い用あと 5→足りる・ゲート作り直し10→足りる）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。壊れたら作り直しはダイヤ 3 が要る');
+    expect(lines).toHaveLength(3);
+    expect(toolLines({ inventory: [...inventory, { name: 'diamond_pickaxe', count: 1, durability: { left: 3, max: 1561 } }] }).filter(line => line.startsWith('黒曜石を壊せる'))).toHaveLength(1);
+  });
+  it('says it is short when the diamond pickaxe has fewer uses than the obsidian takes, and drops the spare line when a stone pickaxe is carried', () => {
+    const lines = toolLines({ inventory: [{ name: 'diamond_pickaxe', count: 1, durability: { left: 4, max: 1561 } }, { name: 'stone_pickaxe', count: 4, durability: { left: 131, max: 131 } }] });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('今 0 個持ち。必要: 点検あと 8→足りない・戦い用あと 12→足りない・ゲート作り直し10→足りない');
+    expect(toolLines({ inventory: [{ name: 'diamond_pickaxe', count: 1, durability: { left: 900, max: 1561 } }] })).toEqual([]);
   });
   it('lists a stone or better sword as a goal (not a requirement) of the Nether check, with what it comes to against a hoglin', () => {
     const base = { dimension: 'the_nether', food: 100, nowKinds: null, counts: new Map([['crafting_table', 1], ['shield', 1], ['cobblestone', 64]]) };

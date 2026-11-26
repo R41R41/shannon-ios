@@ -52,12 +52,41 @@ describe('go into the air without canPlace (G9)', () => {
   });
 });
 
+const diamond = (left: number): Item => ({ name: 'diamond_pickaxe', count: 1, durability: { left, max: 1561 } });
+describe('a pickaxe that cannot last, by the kind the blocks need (11/27)', () => {
+  const dig = (canDig: string[], maxDig = 45) => act({ do: 'go', to: { x: 12, y: 10, z: 10 }, canDig, maxDig });
+  const stones = pick('stone_pickaxe', 131);
+  it('lets a go that digs stone or dirt go on a stone pickaxe in the pack while the diamond one is short', () => {
+    expect(goStop(dig(['stone', 'dirt']), frame([diamond(10), { ...stones, count: 4 }]))).toBeNull();
+    expect(goStop(dig(['stone', 'dirt']), frame([diamond(10), stones]))).toBeNull();
+  });
+  it('stops a go that digs iron ore or obsidian when only stone pickaxes are in the pack, and says the pack', () => {
+    const iron = goStop(dig(['stone', 'iron_ore'], 60), frame([pick('stone_pickaxe', 10), pick('wooden_pickaxe', 59)]));
+    expect(iron?.code).toBe('pickaxe_wear');
+    expect(iron?.line).toContain('荷のツルハシ: 石×1（10/131）、木×1（59/131）');
+    const obsidian = goStop(dig(['stone', 'obsidian'], 60), frame([stones, diamond(5)]));
+    expect(obsidian?.code).toBe('pickaxe_wear');
+    expect(obsidian?.line).toContain('ダイヤのツルハシ');
+    expect(goStop(dig(['stone', 'obsidian'], 60), frame([stones]))?.line).toContain('荷にその階級が無い');
+    expect(goStop(dig(['stone', 'iron_ore'], 60), frame([stones, diamond(1000)]))?.code).toBe('go_blocks');
+  });
+  it('does not stop a go that digs stone with only the short diamond pickaxe (the facts say what it is kept for), and a mine of iron ore with a stone pickaxe goes', () => {
+    expect(goStop(dig(['stone', 'dirt']), frame([diamond(10)]))).toBeNull();
+    expect(goStop(act({ do: 'mine', block: 'iron_ore', count: 5 }), frame([diamond(10), stones]))).toBeNull();
+    expect(goStop(act({ do: 'mine', block: 'iron_ore', count: 5 }), frame([diamond(10)]))).toBeNull();
+  });
+  it('does not look at a go under 30 blocks of digging, and goes with enough diamond left', () => {
+    expect(goStop(dig(['stone'], 29), frame([diamond(10)]))).toBeNull();
+    expect(goStop(dig(['stone'], 45), frame([diamond(100)]))).toBeNull();
+  });
+});
+
 describe('a pickaxe that cannot last (G5)', () => {
   const dive = { do: 'vertical', dir: 'down', shape: 'stairs', toward: 'north', toY: -30, maxDig: 60, canDig: ['stone'] };
   it('stops a stairs of 40 steps (about 80 blocks needed) with a stone pickaxe at 30 left and no spare', () => {
     const stop = goStop(act({ ...dive, maxDig: 40 }), frame([pick('stone_pickaxe', 30)]));
     expect(stop?.code).toBe('pickaxe_wear');
-    expect(stop?.line).toBe('stone_pickaxe 残り 30・見込み 80 回。先に予備を作る: make stone_pickaxe（丸石 3・棒 2、作業台の近く）を同じ act の前に');
+    expect(stop?.line).toBe('荷のツルハシ: 石×1（30/131）。この下りの掘りは石の階級以上で足りる（見込み 80 回）が、その階級の残りは合わせて 30。先に予備を作る: 石のツルハシ（丸石 3・棒 2、作業台の近く）を同じ act の前に');
     expect(goStop(act({ do: 'mine', block: 'iron_ore', count: 10 }), frame([pick('stone_pickaxe', 30)]))?.line).toContain('見込み 40 回');
     expect(goStop(act({ do: 'go', to: { x: 12, y: 10, z: 10 }, canDig: ['stone'], maxDig: 80 }), frame([pick('stone_pickaxe', 30)]))?.line).toContain('見込み 40 回');
   });
