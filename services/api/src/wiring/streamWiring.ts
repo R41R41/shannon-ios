@@ -76,7 +76,8 @@ export function configuredStream(parts: StreamWiringParts) {
     gate: new StreamGate({ jev: parts.jev, scopeKey: parts.scopeKey }), identity, persona,
     body: () => parts.live?.()?.block({ alone: false }) ?? null, commentary: streamCommentary(() => parts.live?.() ?? null),
     ...(parts.salt ? { salt: parts.salt } : {}),
-    ...(parts.log ? { log: parts.log } : {}), ...(parts.mouth ? { mouth: parts.mouth } : {}), ...(parts.feed ? { feed: parts.feed } : {}), tickMilliseconds: parts.tickMilliseconds ?? 500,
+    ...(parts.log ? { log: parts.log } : {}), ...(parts.mouth ? { mouth: parts.mouth } : {}), ...(parts.feed ? { feed: parts.feed } : {}),
+    tickMilliseconds: parts.tickMilliseconds ?? 500,
   });
   const route = createStreamRoute({ service, ownerScope: parts.scopeKey });
   return {
