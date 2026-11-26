@@ -24,8 +24,15 @@
  *   (about 115 llmc, about 45 real). The text measures 10,788, the cap is 10,800.
  * - 11/26 (the end-dragon run, the 6th: caught fire beside lava, ate while burning from 4.1 to 2.1 and burned to death; the urgent rules had no word of fire): one short urgent rule says a
  *   burning body loses 1 health a second and the Nether's water does not put it out (about 40 llmc). The text measures 10,828, the cap is 10,830.
+<<<<<<< HEAD
  * - 11/27 (the 9th end-dragon run: 70 hands of the End's preparation and none of the stronghold, with the stronghold first in the plan): the priority line says the End's check may wait until behind the
  *   stronghold, the plan rules say the End's shortage does not count as moving deeper while the current node is the stronghold, and one rule says the stronghold's hands go first with the three cases that
  *   allow another node's hand (about 330 llmc). The text measures 11,163, the cap is 11,180.
  */
 export const ALWAYS_TEXT_CAP_LLMC = 11_180;
+=======
+ * - 11/27 (the 9th end-dragon run: the diamond pickaxe went 73 to 10 of 1561 while digging, and its 「1/3 を切っている」 was read as a tool to remake, dropped twice): the death rule's
+ *   English durability clause says a short diamond pickaxe is kept for obsidian, not remade (about 29 llmc). The text measures 10,859, the cap is 10,860.
+ */
+export const ALWAYS_TEXT_CAP_LLMC = 10_860;
+>>>>>>> claude/endra-tools-1127c

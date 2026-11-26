@@ -99,7 +99,7 @@ function unsafeDestination(hand: Rec, here: Cell | null, view: ReturnType<typeof
  */
 type Found = { code: string; line: string } | null;
 interface Seen { walked: boolean; lost: boolean; producer: boolean; hungered: boolean; pickaxe: boolean }
-interface Stack { name: string; left: number | null }
+interface Stack { name: string; left: number | null; max: number | null; count: number }
 type Point = { x: number; y: number; z: number };
 interface Form { world: Rec; pos: Point | null; pack: Map<string, number>; stacks: Stack[]; view: ReturnType<typeof mapView> | null }
 
@@ -118,11 +118,12 @@ function stacksOf(world: Rec): Stack[] {
   for (const item of Array.isArray(world.inventory) ? world.inventory : []) {
     const stack = rec(item);
     if (stack && typeof stack.name === 'string') {
-      const left = rec(stack.durability)?.left;
-      out.push({ name: stack.name.replace(/^minecraft:/u, ''), left: typeof left === 'number' && Number.isFinite(left) ? left : null });
+      const left = rec(stack.durability)?.left, max = rec(stack.durability)?.max;
+      out.push({ name: stack.name.replace(/^minecraft:/u, ''), left: typeof left === 'number' && Number.isFinite(left) ? left : null,
+        max: typeof max === 'number' && Number.isFinite(max) ? max : null, count: typeof stack.count === 'number' && stack.count > 0 ? stack.count : 1 });
     } else if (typeof item === 'string') {
       const match = /^(?:minecraft:)?([a-z_]+)[^(]*\(耐久(\d+)\//u.exec(item);
-      if (match) out.push({ name: match[1]!, left: Number(match[2]) });
+      if (match) out.push({ name: match[1]!, left: Number(match[2]), max: null, count: 1 });
     }
   }
   return out;
@@ -147,8 +148,9 @@ function formStop(hand: Rec, form: Form, here: Cell | null, seen: Seen): Found {
   switch (hand.do) {
     case 'dig': case 'use': case 'furnace': case 'chest': return reachProblem(hand, form, seen);
     case 'go': case 'walk': return airProblem(hand, form, here) ?? (hand.do === 'go' ? climbProblem(hand, here) ?? longGo(hand, form, seen) : null);
-    case 'vertical': return wearProblem(form, seen, verticalCost(hand, form));
-    case 'mine': return wearProblem(form, seen, typeof hand.count === 'number' ? hand.count * 4 : null);
+    case 'vertical': return wearProblem(form, seen, verticalCost(hand, form), tierOf(list(hand.canDig)), '下りの掘り');
+    case 'mine': return wearProblem(form, seen, typeof hand.count === 'number' ? hand.count * 4 : null,
+      tierOf(Array.isArray(hand.block) ? list(hand.block) : [String(hand.block ?? '')]), 'mine の掘り');
     case 'eat': return fullProblem(hand, form, seen);
     case 'make': return makeProblem(hand, form, seen);
     default: return null;
@@ -156,7 +158,7 @@ function formStop(hand: Rec, form: Form, here: Cell | null, seen: Seen): Found {
 }
 
 /** A go that may dig 30 blocks or more: half of maxDig is the expected wear. */
-const longGo = (hand: Rec, form: Form, seen: Seen): Found => Number(hand.maxDig) >= 30 ? wearProblem(form, seen, Number(hand.maxDig) / 2) : null;
+const longGo = (hand: Rec, form: Form, seen: Seen): Found => Number(hand.maxDig) >= 30 ? wearProblem(form, seen, Number(hand.maxDig) / 2, tierOf(list(hand.canDig)), 'go の掘り先') : null;
 
 /** A dig, use, furnace put or chest farther than 5 m from her with no go or walk before it in the act. */
 function reachProblem(hand: Rec, form: Form, seen: Seen): Found {
@@ -219,18 +221,52 @@ function verticalCost(hand: Rec, form: Form): number | null {
   return steps === null ? null : steps * (hand.shape === 'stairs' ? 2 : 1);
 }
 const JA: Readonly<Record<string, string>> = { planks: '板材', cobblestone: '丸石', iron_ingot: '鉄インゴット', gold_ingot: '金インゴット', diamond: 'ダイヤ', stick: '棒' };
-/** The pickaxe she digs with (the best kind, the most left) and whether a spare of the same kind or better is in the pack: a stop when it cannot last. */
-function wearProblem(form: Form, seen: Seen, need: number | null): Found {
+/** The kind of pickaxe a block needs to be broken for its drop: 1 wooden or gold, 2 stone, 3 iron, 4 diamond. Stone, dirt, sand, gravel, coal and wood take the lowest. */
+const TIER_WORD: Readonly<Record<number, string>> = { 1: '木', 2: '石', 3: '鉄', 4: 'ダイヤ' };
+const TIER_KIND: Readonly<Record<number, string>> = { 1: 'wooden', 2: 'stone', 3: 'iron', 4: 'diamond' };
+const KIND_JA: Readonly<Record<string, string>> = { wooden: '木', golden: '金', stone: '石', iron: '鉄', diamond: 'ダイヤ', netherite: 'ネザライト' };
+function blockTier(name: string): number {
+  if (/^(?:crying_obsidian|obsidian|ancient_debris|respawn_anchor)$/u.test(name)) return 4;
+  if (/^(?:deepslate_)?(?:diamond|gold|emerald|redstone)_ore$/u.test(name)) return 3;
+  if (/^(?:deepslate_)?(?:iron|copper|lapis)_ore$/u.test(name) || /^raw_(?:iron|copper)_block$/u.test(name)) return 2;
+  return 1;
+}
+/** The highest kind of pickaxe the blocks a hand may dig need (the lowest when it names none). */
+const tierOf = (names: readonly string[]): number => names.reduce((top, name) => Math.max(top, blockTier(name)), 1);
+/** 「石×4（131/131）」: the pickaxes in the pack, by kind. */
+function packPicks(picks: readonly Stack[]): string {
+  const groups = new Map<string, Stack[]>();
+  for (const stack of picks) groups.set(stack.name, [...groups.get(stack.name) ?? [], stack]);
+  return [...groups].map(([name, stacks]) => {
+    const kind = name.replace(/_pickaxe$/u, '');
+    const count = stacks.reduce((sum, stack) => sum + stack.count, 0);
+    const wear = [...new Set(stacks.map(stack => `${stack.left}${stack.max !== null ? `/${stack.max}` : ''}`))].join('・');
+    return `${KIND_JA[kind] ?? kind}×${count}（${wear}）`;
+  }).join('、');
+}
+/**
+ * The pickaxes she digs with, by what the hand digs. The body takes the cheapest tool (time plus wear, utils/toolChoice: the diamond one only where nothing cheaper does the job),
+ * so a go that digs stone, dirt or gravel is paid by a stone pickaxe when the pack has one. A stop only when no pickaxe of the kind the blocks need (`tier`) is in the pack,
+ * or the ones that are cannot last (their durability together under the expected wear). The line says what the pack holds and what to make; the diamond one is never the one
+ * to remake here: it is the only tool that breaks obsidian, and it is kept for that.
+ */
+function wearProblem(form: Form, seen: Seen, need: number | null, tier: number, label: string): Found {
   if (need === null || need <= 0 || seen.pickaxe) return null;
   const rank = (stack: Stack) => TIERS[stack.name.replace(/_pickaxe$/u, '')] ?? 0;
   const picks = form.stacks.filter(stack => /^[a-z]+_pickaxe$/u.test(stack.name) && stack.left !== null);
   if (!picks.length) return null;
-  const used = picks.reduce((best, next) => rank(next) > rank(best) || (rank(next) === rank(best) && next.left! > best.left!) ? next : best);
-  const spare = form.stacks.some(stack => stack !== used && /^[a-z]+_pickaxe$/u.test(stack.name) && rank(stack) >= rank(used));
-  if (spare || used.left! >= need) return null;
-  const parts = recipeOf(used.name)?.needs.map(part => `${JA[part.item] ?? part.item} ${part.count}`).join('・');
-  const how = parts ? `先に予備を作る: make ${used.name}（${parts}、作業台の近く）を同じ act の前に` : '先に予備のツルハシを用意する';
-  return { code: 'pickaxe_wear', line: `${used.name} 残り ${used.left}・見込み ${need} 回。${how}` };
+  const fit = picks.filter(stack => rank(stack) >= tier);
+  const left = fit.reduce((sum, stack) => sum + stack.left! * stack.count, 0);
+  if (left >= need) return null;
+  // Only the diamond one fits a hand that stone would do (the 11/27 run: every go refused, 2.5 minutes, with no way to make the spare the line asked for): the hand goes; the facts line says what the diamond one is kept for.
+  if (tier < 4 && fit.length > 0 && fit.every(stack => stack.name === 'diamond_pickaxe')) return null;
+  const level = Math.min(4, Math.max(tier, 2));
+  const parts = recipeOf(`${TIER_KIND[level]}_pickaxe`)?.needs.map(part => `${JA[part.item] ?? part.item} ${part.count}`).join('・');
+  const how = `先に予備を作る: ${TIER_WORD[level]}のツルハシ${parts ? `（${parts}、作業台の近く）` : ''}を同じ act の前に`;
+  const kept = tier < 4 && picks.some(stack => stack.name === 'diamond_pickaxe') ? 'ダイヤは黒曜石用に残る（黒曜石を壊せるのはダイヤだけ）。' : '';
+  const reach = fit.length ? `この${label}は${TIER_WORD[level]}の階級以上で足りる（見込み ${need} 回）が、その階級の残りは合わせて ${left}。`
+    : `この${label}は${TIER_WORD[level]}のツルハシ以上が要る（見込み ${need} 回）が、荷にその階級が無い。`;
+  return { code: 'pickaxe_wear', line: `荷のツルハシ: ${packPicks(picks)}。${reach}${kept}${how}` };
 }
 
 /** An eat while the hunger bar is full (20/20), when no hand before it in the act uses the bar up. */

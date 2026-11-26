@@ -198,7 +198,7 @@ export const RETURN_TO_END: PrepStage = { title: 'エンドへ戻る前', food: 
  * points, the wear of a piece in the pack's line).
  */
 export const SAFETY_FIRST = '- 死は避ける（死ぬと持ち物と、それを取り戻す時間を失う。鉄の装備を手に入れた後は特に高くつく）。ただし死んでも通しは終わらない: 生き返ったら持ち物を回収するか作り直して続ける。死を恐れて待ちを増やさない（待ちも時間を失う）。'
-  + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久）のまま、深い所・ネザー・戦いへ進まない: 食べる（待つのは満腹 18 以上の時だけ）・作り直す・退くを先にする。'
+  + '体力 12 未満・食料 40 点未満・防具か盾かツルハシの耐久が残り 2 割未満（持ち物の行の耐久。黒曜石用のダイヤは別）のまま、深い所・ネザー・戦いへ進まない: 食べる（待つのは満腹 18 以上の時だけ）・作り直す・退くを先にする。'
   + '溶岩の縁・落下の上・火の玉の線では、足元と両脇を確かめて 1 マスずつ。'
   // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
   + '戦いの合間は、体力 18 未満なら見えない所で満腹 18 以上まで食べ、体力 18 以上まで待ってから出る（満腹 18 未満では体力は自然に戻らない。live の recovery の行）。';
@@ -208,7 +208,7 @@ export const SAFETY_FIRST = '- 死は避ける（死ぬと持ち物と、それ�
  * the planner writes the plan in Japanese, and its prompt is Japanese. A test keeps the numbers of the two equal.
  */
 export const SAFETY_FIRST_EN = '- Avoid death (a death loses the items and the time to get them back; it costs especially much once iron gear has been obtained). But a death does not end the run: after respawning, recover the items or make them again and carry on. Do not add waiting out of fear of death (waiting loses time too). '
-  + 'Do not go deeper, into the Nether or into a fight with health below 12, food below 40 points, or the durability of armour, shield or pickaxe below 20% remaining (the 耐久 durability in the inventory line): eat (wait only at fullness 18+), remake, or withdraw first. '
+  + 'Do not go deeper, into the Nether or into a fight with health below 12, food below 40 points, or the durability of armour, shield or pickaxe below 20% remaining (the 耐久 durability in the inventory line; a short diamond pickaxe is kept for obsidian, not remade): eat (wait only at fullness 18+), remake, or withdraw first. '
   + 'At a lava edge, above a drop and in a fireball line, check the feet and both sides and go one cell at a time. '
   // S2's blaze lab of 11/5 (raid3: health 6.1 and fullness 17 for about 1.5 minutes of sorties, health never came back): the head chooses the meal.
   + 'Between fights, if health is below 18, eat out of sight up to fullness 18 or more and wait until health is 18 or more before going out (below fullness 18 health does not come back by itself: live\'s recovery line).';

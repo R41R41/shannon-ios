@@ -75,10 +75,12 @@ describe('(b) a tool under a third of its life is said as the shield is', () => 
     { name: 'iron_sword', count: 1, durability: { left: 250, max: 250 } }, { name: 'diamond', count: 1 }, { name: 'iron_ingot', count: 2 }, { name: 'raw_iron', count: 2 }] };
   it('names the wear and what the recipe needs against what the pack holds; a whole tool has no line', () => {
     const lines = toolLines(world);
-    expect(lines).toEqual([
-      'diamond_pickaxe 残り 113/1561（1/3 を切っている。作り直すなら ダイヤ 3・棒 2（持ち: ダイヤ 1・棒 0））',
-      'stone_axe 残り 15/131（1/3 を切っている。作り直すなら 丸石 3・棒 2（持ち: 丸石 0・棒 0））',
+    expect(lines.slice(0, 2)).toEqual([
+      'diamond_pickaxe 残り 113/1561（1/3 を切っている。持ち: ダイヤ 1・棒 0。作り直すなら ダイヤ 3・棒 2）',
+      'stone_axe 残り 15/131（1/3 を切っている。持ち: 丸石 0・棒 0。作り直すなら 丸石 3・棒 2）',
     ]);
+    expect(lines).toHaveLength(4);
+    expect(lines[3]).toContain('残り 113/1561 は黒曜石 113 個分');
     expect(lines.join('')).not.toContain('iron_sword');
   });
   it('is in the fight facts beside the shield line, and says nothing of a pack with a half-used pickaxe', () => {

@@ -170,17 +170,43 @@ function partLine(name: string, counts: ReadonlyMap<string, number>): string | n
     const raw = part.item === 'iron_ingot' ? carried(counts, 'raw_iron') : 0;
     return `${PART_WORDS[part.item] ?? part.item} ${have(part.item)}${raw ? `＋原鉄 ${raw}` : ''}`;
   }).join('・');
-  return `作り直すなら ${needs}（持ち: ${held}）`;
+  return `持ち: ${held}。作り直すなら ${needs}`;
+}
+/** The pickaxes of the pack that break iron ore and the like (stone or better) besides the diamond one. */
+const SPARE_PICKS = ['stone_pickaxe', 'iron_pickaxe', 'netherite_pickaxe'];
+/** What the obsidian takes (the end check's minimum, the dragon fight's, the gate if it is built again): the plan's own numbers. */
+const OBSIDIAN_CHECK = 8, OBSIDIAN_FIGHT = 12, OBSIDIAN_GATE = 10;
+/**
+ * 11/27 (run 9: the diamond pickaxe went 73 to 10 of 1561 in ten minutes, mostly digging ore and stone, while no other pickaxe was in the pack; the head read
+ * 「残り 73 は 1/3 を切っている」 as a tool to replace, asked for a spare it could not make (the diamond ones cost 3 diamonds), and tried to drop it twice): the facts that
+ * make a short diamond pickaxe a thing to keep. Obsidian breaks with the diamond pickaxe only, one use a block, so what is left is a number of obsidian blocks.
+ * The body takes the cheapest tool by time plus wear (utils/toolChoice: a use of the diamond one is worth 6 s, a stone one 0.1 s), so a stone pickaxe in the pack takes the stone,
+ * dirt, gravel, coal and iron ore. Facts only.
+ */
+function diamondLines(counts: ReadonlyMap<string, number>, left: number, max: number): string[] {
+  const lines: string[] = [];
+  if (!SPARE_PICKS.some(name => (counts.get(name) ?? 0) > 0)) {
+    const stone = partLine('stone_pickaxe', counts);
+    lines.push(`体は一番安い道具から使う設計。石のツルハシが荷にあれば、石・土・砂利・石炭・鉄鉱石は石で足りるので、ダイヤの減りを抑えられる。今は荷の石以上のツルハシがダイヤ 1 本のみで、掘るたびにダイヤが減っている（石のツルハシ: ${stone ?? '丸石 3・棒 2'}）`);
+  }
+  const have = counts.get('obsidian') ?? 0;
+  const need: Array<[string, number]> = [['点検', Math.max(0, OBSIDIAN_CHECK - have)], ['戦い用', Math.max(0, OBSIDIAN_FIGHT - have)], ['ゲート作り直し', OBSIDIAN_GATE]];
+  const said = need.map(([name, n]) => `${name}${name === 'ゲート作り直し' ? '' : 'あと '}${n}${n <= left ? '→足りる' : '→足りない'}`).join('・');
+  lines.push(`黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り ${left}/${max} は黒曜石 ${left} 個分（今 ${have} 個持ち。必要: ${said}）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。壊れたら作り直しはダイヤ 3 が要る`);
+  return lines;
 }
 export function toolLines(world: Record<string, unknown>): string[] {
   const counts = carriedItemCounts(world, undefined);
-  return (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
+  const extra: string[] = [];
+  const lines = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
     const item = rec(raw), durability = rec(item?.durability), left = finite(durability?.left), max = finite(durability?.max);
     const id = TOOL_ITEM.exec(String(item?.name))?.[1];
     if (!item || !id || left === null || max === null || max <= 0 || left >= max * SHIELD_LOW_FRACTION) return [];
     const make = partLine(id, counts);
+    if (id === 'diamond_pickaxe' && extra.length === 0) extra.push(...diamondLines(counts, left, max));
     return [`${id} 残り ${left}/${max}（1/3 を切っている${make ? `。${make}` : ''}）`];
   }).slice(0, 3);
+  return [...lines, ...extra];
 }
 
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */
