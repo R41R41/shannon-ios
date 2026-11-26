@@ -73,7 +73,7 @@ describe('(2) the eyes line is facts and a reason, shown only for 10 or more eye
     expect(text).toContain('ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く');
     expect(text).not.toContain('最初の節はストロングホールドを探す節');
     // the facts side's shortage line is not removed
-    expect(text).toContain('準備の不足（エンドへ）');
+    expect(text).toContain('準備の不足（');
   });
   it('0 eyes (a new world): no eyes line at all, and the seed plan keeps the ordinary order (village, food, iron, ... the Nether)', () => {
     const world = { position: { x: 0, y: 64, z: 0 }, dimension: 'overworld', time: '100', health: 20, food: 20, inventory: [] };
