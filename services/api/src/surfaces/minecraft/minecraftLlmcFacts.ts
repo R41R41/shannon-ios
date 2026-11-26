@@ -406,7 +406,7 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
   // Full (run 46): what it means comes in the line's first words, and what can be dropped is counted from the
 // plan's promises (what they hold back is not offered), in the short line too.
   const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' :
-     ''}${gains.length ? `・次の手で増える見込み: ${gains.join('・')}` : ''}`;
+     ''}${gains.length ? `・次の手で増える見込み（掘り抜く岩の分は数えない）: ${gains.join('・')}` : ''}`;
   if (free === 0) {
     const spare = dropAdvice(packed, item => heldBack(promises, item));
     const drop = spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）';

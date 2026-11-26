@@ -353,12 +353,12 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
   it('a full pack with a make ahead says 空き 0, the item the hand makes, and 満杯', () => {
     const lines = packLines(observation, make, false);
     for (const word of sample.expected.liveMustContain as string[]) expect(lines.join('\n')).toContain(word);
-    expect(lines).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み: make diamond_pickaxe で +1 個`,
+    expect(lines).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
       'drop で空けられる物（約束に回していない分）: dirt×35（1 マス）']);
     expect(sample.expected.bodyDropsNothing).toBe(true);
   });
   it('shortened, it is one line; with room it says only the free slots', () => {
-    expect(packLines(observation, make, true)).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み: make diamond_pickaxe で +1 個`,
+    expect(packLines(observation, make, true)).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
       'drop で空けられる物（約束に回していない分）: dirt×35（1 マス）']);
     expect(packLines(frame({ inventory: stacks.slice(0, 10) }), [], false)).toEqual(['持ち物の空き 26/36']);
     expect(packLines(frame({ inventory: stacks.slice(0, 34) }), [], false)[0]).toBe('持ち物の空き 2/36（もうすぐ満杯）');

@@ -103,6 +103,12 @@ export function bedsIn(lines: readonly string[]): number {
 /** What a full pack costs, said as a fact in the first words of the pack's lines (run 46: 36 of 36 with tuff 65,
  * cobbled deepslate
  * 230 and cobblestone 147, no drop was made; a go stopped full, and the obsidian hand ended "cannot pick up the drop"). */
+/**
+ * run 8 (11/27): nine drops, none of them freed room (near water the body threw sideways under 3 m and the thrown stack was picked up again, dirt 0 -> 22), tidy never used, and the
+ * same iron stopped four times on a full pack. Said beside the free count while it is under 10: why 10, what fills a slot, and which way of freeing room holds.
+ */
+export const digRoomWords = (free: number): string => '掘り進む手（go の dig・mine・dig）の前に空きを 10 以上にする（掘る岩の種類ごとに 1 マス埋まる: 丸石・深層岩・土・安山岩など。理由: 満杯だと掘った物が入らず止まる）。'
+  + `drop は水が近い所や 3 m 以内では投げた物を拾い直すので、体が「拾い直された」と返したら続けず、${free <= FULL_SOON ? 'tidy にするか、' : ''}3 m 以上離れてから drop する`;
 export const FULL_COST = 'これ以上拾えない（黒曜石・鉱石・落とし物も。dig・pickup・make の物も入らず止まる）';
 /**
  * What of the filler can be dropped: each kind less what the plan's promises hold back of it (`held`), the most carried kind also
@@ -231,5 +237,6 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
     out.push(`ベッドは ${beds} 個（エンドの竜戦に 10・最低 8）。通る村のベッドは全部取れる。ベッドのためだけに村へ戻った往復は 1 回 85〜90 秒だった（実走 36・37）。`
       + '羊毛からも作れる（同じ色 3＋板 3。ハサミなら羊 1 頭で 1〜3）');
   }
+  if (free < 10) out.push(digRoomWords(free));
   return out;
 }

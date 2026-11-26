@@ -19,7 +19,7 @@ import {
   foodLeads,
   fuelShortage,
   parallelFurnaceLine,
-  ironSearchLine, sheepAbsentLine, goldAbsentLine, foodAbsentLine,
+  furnaceReachLine, ironSearchLine, sheepAbsentLine, goldAbsentLine, foodAbsentLine,
   preparationShortage,
   preparationStage,
   readinessOf,
@@ -104,7 +104,7 @@ export function factsContext(
         }
       : {}),
     ...(judge.ahead?.length ? { ahead: judge.ahead } : {}),
-    ...(judge.stops?.length ? { stops: judge.stops } : {}),
+    ...(judge.stops?.length ? { stops: withStopReadings(judge.stops) } : {}),
     ...(judge.detour?.length ? { detour: judge.detour } : {}),
     ...(judge.failures?.length ? { failures: judge.failures } : {}),
     wantsFood: wantsFood({
@@ -172,6 +172,7 @@ export function readinessParts(
       }),
       fuelShortage(facts.world, facts.counts, nowKinds(planFacts)),
       parallelFurnaceLine(facts.world, facts.counts),
+      furnaceReachLine(facts.world, facts.counts),
       ironSearchLine(facts.world, facts.counts, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.at ?? null),
       sheepAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
       goldAbsentLine(facts.world, facts.counts, facts.dimension, tree?.nodes ?? [], tree?.nodes.find(node => node.id === tree.current)),
@@ -197,7 +198,7 @@ export function readinessParts(
   // No bed by day is said too (a night with no bed cost two deaths and the materials in a run), unless a plan node already makes it; and the night's sleep in one line
   // beside the plan's now (a skip on, a booking the body may keep, what a sleep costs), so the sleep is weighed against what the node is for.
   const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|\bbed\b/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
-  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true)
+  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true, () => dayBedAdviceTold(taskId))
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
   const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
@@ -236,9 +237,9 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   const { counts, world } = facts, count = (item: string) => carried(counts, item);
   const lacks: string[] = [];
   const beds = [...counts].reduce((sum, [name, n]) => sum + (BED_ITEM.test(name) ? n : 0), 0);
-  if (beds < END_BEDS) lacks.push(`ベッド ${beds}/${END_BEDS}`);
-  if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}`);
-  if (!count('bow')) lacks.push(`弓なし（糸 ${count('string')}/3・棒 ${count('stick')}/3）`);
+  if (beds < END_BEDS) lacks.push(`ベッド ${beds}/${END_BEDS}（あと ${END_BEDS - beds}）`);
+  if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}（あと ${END_OBSIDIAN - count('obsidian')}）`);
+  if (!count('bow')) lacks.push(`弓なし（作るなら糸 ${count('string')}/3・棒 ${count('stick')}/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）`);
   if (count('arrow') < 12) lacks.push(`矢 ${count('arrow')}/12（羽根 ${count('feather')}・火打石 ${count('flint')}・棒 ${count('stick')}）`);
   const picks = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
     const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null, durability = item?.durability as Record<string, unknown> | undefined;
@@ -251,8 +252,36 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）`);
   const eyes = count('ender_eye');
   if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
-  return lacks.length ? `エンドまでの不足（数）: ${lacks.join('・')}` : null;
+  return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数）: ${lacks.join('・')}` : null;
 }
+
+/**
+ * run 8 (11/27): the same iron stopped four times on `limit_dig` and `inventory_full` and the head read it as "surrounded by water" (it was not water). The kinds of stop that
+ * came, said once after the body's stop lines, with the number the limit is set against. Only for the codes present; a line the stops' readers do not match is skipped by them.
+ */
+const STOP_READINGS: ReadonlyArray<readonly [string, string]> = [
+  ['limit_dig', 'limit_dig＝掘る数の上限 maxDig に着いた（水のせいではない）。掘る合計が n マスなら maxDig は n+5 以上にして同じ先へもう一度'],
+  ['inventory_full', 'inventory_full＝持ち物が満杯で掘った物が入らない（水のせいではない）。空きを作ってから掘る'],
+];
+export function withStopReadings(stops: readonly string[]): string[] {
+  const said = STOP_READINGS.filter(([code]) => stops.some(line => line.endsWith(`（${code}）`))).map(([, words]) => words);
+  return said.length ? [...stops, `止まりの読み: ${said.join('。')}`] : [...stops];
+}
+
+/** How long the day's sleep explanation stands before it is said in full again (a night is about 8 minutes; the explanation is not repeated at every decision). */
+const DAY_BED_ADVICE_MS = 8 * 60_000;
+const dayBedTolds = new Map<string, number>();
+/** True when the full explanation was said for this task within `DAY_BED_ADVICE_MS` (the caller then says the brief line); records the time when it is not. */
+export function dayBedAdviceTold(taskId: string | undefined, now: number = Date.now()): boolean {
+  if (!taskId) return false;
+  const last = dayBedTolds.get(taskId);
+  if (last !== undefined && now - last < DAY_BED_ADVICE_MS) return true;
+  dayBedTolds.set(taskId, now);
+  if (dayBedTolds.size > 32) dayBedTolds.delete(dayBedTolds.keys().next().value as string);
+  return false;
+}
+/** For tests. */
+export function forgetDayBedAdvice(): void { dayBedTolds.clear(); }
 
 export const STALE_FACT_KEY = 'stale_node:';
 
