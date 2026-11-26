@@ -75,7 +75,7 @@ function noteClock(taskId: string, frame: BodyObservation | null, clock: number)
   ticksSeen.set(taskId, { tick, at: clock });
   if (ticksSeen.size > 32) ticksSeen.delete(ticksSeen.keys().next().value as string);
 }
-/** The result of an act the queue ran (`resultJson`; `id`: the act's queue number): a `sleep` hand done is kept, and the clock is looked at (the jump may be inside this very act). */
+/** The result of an act the queue ran (`resultJson`): a `sleep` hand done is kept, and the clock is looked at (the jump may be inside this very act). */
 export function noteSleepResult(taskId: string, resultJson: string | undefined, frame: BodyObservation | null, clock: number = Date.now()): void {
   const result = readActResult(resultJson);
   if (result?.lines.some(line => line.do === 'sleep' && line.goal === 'done')) {

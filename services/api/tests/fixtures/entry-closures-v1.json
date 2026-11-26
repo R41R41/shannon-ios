@@ -869,6 +869,7 @@
     "surfaces/minecraft/minecraftEndEntry.ts",
     "surfaces/minecraft/minecraftEndFacts.ts",
     "surfaces/minecraft/minecraftEndGather.ts",
+    "surfaces/minecraft/minecraftEndPrepWords.ts",
     "surfaces/minecraft/minecraftEndView.ts",
     "surfaces/minecraft/minecraftEnderHunt.ts",
     "surfaces/minecraft/minecraftEndgame.ts",
