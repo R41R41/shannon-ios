@@ -32,7 +32,7 @@ export interface PrepStage { title: string; food: number; needs: readonly PrepNe
  * entry check read 「必須はそろっている」, and the piglins attacked for the rest of the stay): a goal that is missing says what its lack costs beside it. The entry
  * is still not held (owner, 11/13); the cost is a fact for the decision to weigh, the reason a goal that reads as optional is not a footnote.
  */
-export const PIGLIN_COST = 'ネザーのピグリンは金の防具を 1 つ着るまで襲う（群れ・砦の遺跡の近くに長居できず、パールの交換にも寄れない）。入るのは止めないが、着けるなら入る前が安い';
+export const PIGLIN_COST = 'ネザーのピグリンは金の防具を 1 つ着るまで襲う（群れ・砦の遺跡の近くに長居できず、パールの交換にも寄れない）。必須ではないが、着けるなら早いほど安い（ネザーに入る前なら特に）';
 
 /** Blocks to stand on and to wall with (the knowledge's 足場のブロック 64). */
 export const BLOCKS = new RegExp('^(?:cobblestone|cobbled_deepslate|netherrack|blackstone|stone|deepslate|dirt|andesite|diorite|granite|tuff'
