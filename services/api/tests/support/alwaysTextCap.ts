@@ -25,6 +25,6 @@
  * - 11/26 (the end-dragon run, the 6th: caught fire beside lava, ate while burning from 4.1 to 2.1 and burned to death; the urgent rules had no word of fire): one short urgent rule says a
  *   burning body loses 1 health a second and the Nether's water does not put it out (about 40 llmc). The text measures 10,828, the cap is 10,830.
  * - 11/27 (the 9th end-dragon run: the diamond pickaxe went 73 to 10 of 1561 while digging, and its 「1/3 を切っている」 was read as a tool to remake, dropped twice): the death rule's
- *   durability clause says to keep a spare stone pickaxe for digging and that the diamond one is kept for obsidian (about 49 llmc). The text measures 10,877, the cap is 10,880.
+ *   English durability clause says a short diamond pickaxe is kept for obsidian, not remade (about 29 llmc). The text measures 10,859, the cap is 10,860.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_880;
+export const ALWAYS_TEXT_CAP_LLMC = 10_860;
