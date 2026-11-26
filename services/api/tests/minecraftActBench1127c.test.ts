@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armourWorn, classifyAct, countBy, readPlan, spliceFrom, worldOfLive, worldOfPlanUser, type PlanNodeRow } from '../scripts/minecraft-act-bench-1127c.js';
+import { armourWorn, classifyAct, countBy, readPlan, spliceAroundGap, spliceFrom, worldOfLive, worldOfPlanUser, type PlanNodeRow } from '../scripts/minecraft-act-bench-1127c.js';
 
 const act = (input: Record<string, unknown>, name = 'mc_act') => [{ type: 'thinking', text: 'x' }, { type: 'tool_use', name, input }];
 
@@ -15,6 +15,16 @@ describe('act bench 1127c: spliceFrom', () => {
   });
   it('returns the text itself when the new part is the old one (a build in the base tree changes nothing)', () => {
     expect(spliceFrom('前。abc。後', 'abc', 'abc')).toBe('前。abc。後');
+  });
+});
+
+describe('act bench 1127c: spliceAroundGap', () => {
+  it('puts the new head and tail around a gap the rebuild cannot make, and nothing when the record is not shaped so', () => {
+    expect(spliceAroundGap('H1。GAP。M:T1', 'H1。M:T1', 'H2。M:T2', 'M:')).toBe('H2。GAP。M:T2');
+    expect(spliceAroundGap('H1。M:T1', 'H1。M:T1', 'H2。M:T2', 'M:')).toBe('H2。M:T2');
+    expect(spliceAroundGap('X。GAP。M:T1', 'H1。M:T1', 'H2。M:T2', 'M:')).toBeNull();
+    expect(spliceAroundGap('H1。GAP。M:T9', 'H1。M:T1', 'H2。M:T2', 'M:')).toBeNull();
+    expect(spliceAroundGap('H1。M:T1', 'H1。M:T1', 'H2。T2', 'M:')).toBeNull();
   });
 });
 

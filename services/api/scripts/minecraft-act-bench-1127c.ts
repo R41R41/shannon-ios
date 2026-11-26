@@ -52,6 +52,19 @@ export function spliceFrom(recorded: string, oldPart: string | null | undefined,
   return `${recorded.slice(0, at)}${newPart}${recorded.slice(at + oldPart.length)}`;
 }
 
+/**
+ * The recorded text holds lines the rebuild cannot make (the furnace line reads the map): it is `oldWhole` with a gap put in before `marker`. When it is shaped so (the head and the tail of
+ * `oldWhole` around the marker are its own), the gap is kept and the new head and tail go around it. Null otherwise.
+ */
+export function spliceAroundGap(recorded: string, oldWhole: string | null | undefined, newWhole: string | null | undefined, marker: string): string | null {
+  if (typeof oldWhole !== 'string' || typeof newWhole !== 'string' || !marker) return null;
+  const was = oldWhole.indexOf(marker), now = newWhole.indexOf(marker);
+  if (was < 0 || now < 0 || oldWhole.indexOf(marker, was + 1) >= 0) return null;
+  const head = oldWhole.slice(0, was), tail = oldWhole.slice(was);
+  if (recorded.length < oldWhole.length || !recorded.startsWith(head) || !recorded.endsWith(tail)) return null;
+  return `${newWhole.slice(0, now)}${recorded.slice(head.length, recorded.length - tail.length)}${newWhole.slice(now)}`;
+}
+
 const CROSSING_Z = 900;
 export interface ActRead { tool: string | null; first: string; node: string | null; klass: 'p1' | 'p2' | 'probe' | 'view' | 'plan_update' | 'wait' | 'other' | 'none'; tools: string[];
   /** The owner's three-way reading (a missing iron armour is rightly made before leaving, so p1 alone is not the success): good_stronghold / good_fill (a short fill from the pack) / bad_checklist (the End's checklist or the village trip) / neutral (a wait, a probe) / other. A first reading by words and places: read `why` by eye. */
@@ -237,7 +250,7 @@ async function build(recordsDir: string, options: { reps: number; planReps: numb
         const was = base!.acts?.[id], now = mine.acts[id]!;
         const planNow = typeof body.planNow === 'string' ? spliceFrom(body.planNow, was?.planNow, now.planNow) : null;
         // the whole shortage text when the run's is the one the rebuild makes; else only the preparation line (the other lines read the map and the furnaces, which the record does not hold)
-        const shortage = typeof body.shortage === 'string' ? spliceFrom(body.shortage, was?.shortage, now.shortage) ?? spliceFrom(body.shortage, was?.prep, now.prep) : null;
+        const shortage = typeof body.shortage === 'string' ? spliceFrom(body.shortage, was?.shortage, now.shortage) ?? spliceAroundGap(body.shortage, was?.shortage, now.shortage, 'エンドへ入る前に要る物のうち足りない分') ?? spliceFrom(body.shortage, was?.prep, now.prep) : null;
         if (planNow === null) notes.push(`${id}: planNow was not rebuilt (the base tree's planNow is not in the recorded one): left as recorded`);
         if (shortage === null) notes.push(`${id}: shortage was not rebuilt (the base tree's shortage is not in the recorded one): left as recorded`);
         const next = { ...live, body: { ...body, ...(planNow !== null ? { planNow } : {}), ...(shortage !== null ? { shortage } : {}) } };
