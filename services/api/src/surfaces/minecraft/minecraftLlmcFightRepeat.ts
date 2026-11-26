@@ -59,6 +59,18 @@ function targetOf(text: string, hand: Partial<ActHand> | undefined): { key: stri
 }
 
 /**
+ * The same target? Two ids are the same only when equal. A line that names no id (the body's 「届かない（元: …」 words do not always carry one) is
+ * the same hunt as the id of its own kind: the 11/26 run's stops alternated between the two shapes, and a reset per switch kept the count under the line.
+ */
+function sameTarget(streak: Streak, target: { key: string; label: string }): boolean {
+  if (streak.key === target.key) return true;
+  const isId = (key: string): boolean => key.startsWith('#');
+  if (isId(streak.key) === isId(target.key)) return false;
+  const [named, bare] = isId(streak.key) ? [streak.label, target.key] : [target.label, streak.key];
+  return named.startsWith(`${bare} #`);
+}
+
+/**
  * An act of the task ended: its fight lines, in order, counted as a streak at one target. A kill or a done fight, or a fight at another target, starts
  * the count again; a line that did not run (cut before it started) is not a try.
  */
@@ -71,14 +83,14 @@ export function noteFights(taskId: string, input: unknown, resultJson: string | 
     if (line.status === 'done' || line.code === 'target_killed') { tasks.delete(taskId); continue; }
     const target = targetOf(line.line, handOf(hands, line.i));
     let streak = tasks.get(taskId);
-    if (!streak || streak.key !== target.key || now - streak.lastAt > STALE_MS) {
+    if (!streak || !sameTarget(streak, target) || now - streak.lastAt > STALE_MS) {
       streak = { ...target, stops: 0, firstAt: now, lastAt: now, pearls0: pearlsOf(observation), landed: 0, landedSeen: false, code: null, codeCount: 0 };
       tasks.set(taskId, streak);
       if (tasks.size > 32) tasks.delete(tasks.keys().next().value as string);
     }
     streak.stops += 1;
     streak.lastAt = now;
-    streak.label = target.label;
+    if (target.key.startsWith('#') || !streak.key.startsWith('#')) { streak.key = target.key; streak.label = target.label; }
     const hit = /与えた打撃 (\d+)/u.exec(line.line);
     if (hit) { streak.landed += Number(hit[1]); streak.landedSeen = true; }
     const code = line.code ?? null;

@@ -42,6 +42,11 @@ describe('the fights at the same target, counted by the head', () => {
     expect(fightRepeatLines('t', frame(1, 0, [[58, 9]]), T(9))).toHaveLength(1);
     expect(fightRepeatLines('t', frame(1, 0, [[58, 9]]), T(30))).toEqual([]);
   });
+  it('keeps one count when the stops alternate between words with the id and words without it', () => {
+    const words = ['届かない（元: 屋根の蓋が #58 の目を隠し）', 'fight 止まった moved: enderman #58 屋根中央に留まれない', '届かない（元: 怒っているが 15 秒近づかない）'];
+    words.forEach((w, k) => noteFights('t', input, stopped(w), frame(0, 0, [[58, 9]]), T(k)));
+    expect(fightRepeatLines('t', frame(0, 0, [[58, 9]]), T(3))[0]).toContain('enderman #58 への fight が 3 回続けて止まった');
+  });
   it('does not count a hand that did not run', () => {
     const skipped = JSON.stringify({ v: 1, done: 0, of: 1, lines: [{ i: 0, do: 'fight', status: 'skipped', line: '未実行', goal: 'not_started', end: 'not_run' }] });
     for (let k = 0; k < 4; k++) noteFights('t', input, skipped, frame(0, 0, []), T(k));
