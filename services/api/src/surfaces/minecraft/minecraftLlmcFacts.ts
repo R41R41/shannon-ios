@@ -17,6 +17,7 @@ import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 import { agedScan } from './minecraftLlmcScanAge.js';
 import { scaffoldLine } from './minecraftLlmcDetour.js';
 import { AIRISH, readLayers, type Layers } from './minecraftLlmcPreflightMap.js';
+import { burnLine, lavaNearLine, routeEnemiesLine, type Goal } from './minecraftLlmcHazardFacts.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
 export type { Hit, HitWatch } from './minecraftLlmcHealth.js';
 /** The creatures that are food are listed within this many metres (the near words' own reach for food animals). */
@@ -469,6 +470,10 @@ export interface FactsContext {
   nowKinds?: readonly PlanKind[];
   /** The request is one thing (`planFacts.request`): the night line's limit is said beside the distance to the enemy. */
   request?: boolean;
+  /** A blow of fire or lava was taken within `BURN_WINDOW_MS` (`burnedRecently`): the burning line is said though the body does not send `onFire`. */
+  burning?: boolean;
+  /** Where the hands go (the queue's last go, else the plan's place): the enemies beside the line to it are said (`routeEnemiesLine`). */
+  goal?: Goal | null;
 }
 export interface InputFacts { lines: string[]; compressed: string[] }
 /**
@@ -481,7 +486,8 @@ export interface InputFacts { lines: string[]; compressed: string[] }
  */
 export function inputFacts(observation: BodyObservation | null, context: FactsContext, urgent: boolean): InputFacts {
   const ahead = context.ahead ?? [];
-  const head = [vitalsLine(observation), context.hits ?? null, holderLine(observation), ...fightLines(observation, context.request === true)];
+  const head = [vitalsLine(observation), context.hits ?? null, burnLine(observation, context.burning === true), lavaNearLine(observation), holderLine(observation),
+    routeEnemiesLine(observation, context.goal ?? null), ...fightLines(observation, context.request === true)];
   const promises = promiseLines(context.promises ?? [], { ...context.since ? { since: context.since } : {}, observation, limit: 4 });
   const stops = [...context.stops ?? []];
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];

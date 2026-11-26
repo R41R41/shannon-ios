@@ -22,5 +22,7 @@
  * - 11/26 (the end-dragon run, the 4th: three or four hoglins killed her from 20 in about 13 s; the urgent decision had been told to put attack untilDead first): the urgent rules say to count
  *   the fight (hits = health / damage per hit, about 0.6 s a hit, the enemies near keep hitting) before putting the attack first, and the route line says a stand on the enemy's side is no retreat
  *   (about 115 llmc, about 45 real). The text measures 10,788, the cap is 10,800.
+ * - 11/26 (the end-dragon run, the 6th: caught fire beside lava, ate while burning from 4.1 to 2.1 and burned to death; the urgent rules had no word of fire): one short urgent rule says a
+ *   burning body loses 1 health a second and the Nether's water does not put it out (about 40 llmc). The text measures 10,828, the cap is 10,830.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 10_800;
+export const ALWAYS_TEXT_CAP_LLMC = 10_830;

@@ -171,7 +171,9 @@ function extraProblem(object: Fields, properties: Fields, path: Path, here: stri
   if (path.length === 2 && path[0] === 'hands' && typeof object.do !== 'string') return noDoProblem(object, extra, here);
   const names = path.length === 2 && path[0] === 'hands' && typeof object.do === 'string' ? handFieldNames(object.do as HandKind) : [];
   const may = names.length ? `。${String(object.do)} の欄: ${names.join('・')}` : '';
-  return `${here}${here.endsWith('）') ? '' : ' '}の ${extra.join('・')} は無い欄${extra.includes('why') ? '（why は act に 1 つ）' : ''}${may}`;
+  // Run of 11/26 (6th): stopIf written inside a go (twice) and joined with & once; the go's fields are listed here, and stopIf is not one of them.
+  const stop = extra.includes('stopIf') ? '（stopIf は act の欄で、手の中には書かない。条件は & でつながない: stopIf=hostileWithin=8 hpBelow=10 か json の "stopIf":{"hostileWithin":8,"hpBelow":10}）' : '';
+  return `${here}${here.endsWith('）') ? '' : ' '}の ${extra.join('・')} は無い欄${extra.includes('why') ? '（why は act に 1 つ）' : ''}${stop}${may}`;
 }
 
 /**

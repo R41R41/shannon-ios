@@ -11,6 +11,7 @@ import { breathWords, clockStalledSeconds, timeWords } from './minecraftLlmcStat
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 import { furnaceLedgerLines } from './minecraftLlmcFurnaceWait.js';
 import { withStopCodes, type StopCode } from './minecraftLlmcRepeat.js';
+import { dropGuardWords } from './minecraftLlmcHazardFacts.js';
 
 /**
  * The body part of a decision's live state in the LLM-centric mode (design mb-llm-centric 2.2, 2.3, 2.6): the
@@ -203,7 +204,7 @@ const woolWords = (entity: Record<string, unknown>): string => typeof entity.woo
   : entity.wool === 'shorn' ? '(毛なし)' : `(毛 ${cleanText(entity.wool)})`;
 const seenName = (entity: Record<string, unknown>, mode: SeenMode): string => mode === 'near' && entity.name === 'item'
   ? `item${itemWords(entity) ? ` ${itemWords(entity)}` : ''}` : `${cleanText(entity.name as string)}${entity.name === 'sheep' ? woolWords(entity) : ''}`;
-function seen(value: unknown, limit: number, mode: SeenMode): string[] {
+function seen(value: unknown, limit: number, mode: SeenMode, w: Record<string, unknown> = {}): string[] {
   const items: Seen[] = (Array.isArray(value) ? value : []).flatMap(item => {
     const entity = record(item);
     if (!entity || typeof entity.name !== 'string') return [];
@@ -218,7 +219,7 @@ function seen(value: unknown, limit: number, mode: SeenMode): string[] {
     // 「殴らなければ来ない」 alone said the opposite of the hunt's way (review 11/9 07:40).
     const neutral = mode !== 'near' || entity.kind !== 'neutral' ? ''
       : entity.name === 'enderman' ? '・中立（目を合わせるか殴ると怒る）' : '・中立（殴らなければ来ない）';
-    return [{ line: `${id}${seenName(entity, mode)} ${round1(distance)}m${where}${mode === 'threat' ? reachSuffix(entity) : neutral}`, distance }];
+    return [{ line: `${id}${seenName(entity, mode)} ${round1(distance)}m${where}${mode === 'threat' ? reachSuffix(entity) : `${neutral}${entity.name === 'item' ? dropGuardWords(entity, w) : ''}`}`, distance }];
   });
   return items.sort((left, right) => left.distance - right.distance).slice(0, limit).map(item => item.line);
 }
@@ -404,7 +405,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(preparation ? { foodPreparation: preparation } : {}),
     inventory: shareStacks(stacks(world.inventory).slice(0, INVENTORY), parts.promises),
     threats,
-    near: seen(world.nearbyEntities, OTHERS + THREATS, 'near').filter(line => !taken(threats, line)).slice(0, OTHERS),
+    near: seen(world.nearbyEntities, OTHERS + THREATS, 'near', world).filter(line => !taken(threats, line)).slice(0, OTHERS),
     ...(parts.jobs !== undefined ? { jobs: furnaceLedgerLines(parts.jobs) ?? parts.jobs } : {}),
     ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-EVENTS)] } : {}),
   });

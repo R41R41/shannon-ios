@@ -63,6 +63,8 @@ const URGENT = [
   // Run of 11/26 (4th): the fixed urgent line said 「attack untilDead を先頭」 for a hoglin (40 health) with a wooden sword.
   '- Count a fight before attack untilDead: hits = enemy health / your sword\'s damage (wooden 3.4 measured), about 0.6 s a hit, and every enemy near you keeps hitting meanwhile.',
   '- A move away is one go or walk of 10 blocks or more: a move of 1 to 4 blocks leaves the enemy as near, and the next decision replaces it.',
+  // Run of 11/26 (6th): struck by an enderman beside lava, set on fire, ate while burning (4.1 to 2.1 in the meal) and burned to death.
+  '- 燃えている間は 1 秒に 1 減る。ネザーでは水で消せない。',
 ].join('\n');
 
 /**
@@ -481,7 +483,12 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 怒ったエンダーマンが 4m 内で打って来る時は、歩いて離れない・その場で食べない: テレポートで追い付き、背を向けた間と食べる 1.6 秒に打たれる'
       + '（end1109p05: 体力 12 から「離れる」「食べて離れる」「食べる」を続け、怒った 2 体に 11 秒で倒された）。急ぎでも、打って来る #id を fight target=#id で打ち返す（剣・盾）か、'
       + '2 マスの高さの天井の下（自分の屋根の下）へ 1〜2 歩入る。食べるのは倒した後か天井の下で。',
-    '- fight target=enderman と種類で呼ぶと、怒っている個体を先に、次に目が見える 8〜48m の個体（30m 以内を先）を選ぶ。',
+    // Run of 11/26 (6th, d0048): the go was sent again without hostileWithin because an enderman that was not angry was thought not to be counted; it is counted, and the go passed 3 m from it.
+    '- stopIf hostileWithin は怒っていないエンダーマンも数える（直前の go がそれで止まった）。外すと、すぐ脇を通っても止まらず、目が合うと怒って打たれる。エンダーマンは目が合うと怒る（距離だけでは決まらない）ので、外すより、live の「行き先の線の近く」の個体から離れた道へ変える。',
+    '- stopIf は act の欄で、go など手の中には書かない（act ごと断られる）。条件は & でつながない: json は "stopIf":{"hostileWithin":8,"hpBelow":10}。',
+    '- fight target=enderman と種類で呼ぶと、怒っている個体を先に、次に目が見える 8〜48m の個体（30m 以内を先）を選ぶ。穴の底に怒った個体が残っていると、それが選ばれて届かず、時間だけ過ぎる（live に「怒っているが来られない」と出ている個体）。',
+    // Run of 11/26 (6th): fight #4 (onFail continue) then pickup; the fight did not reach and the pickup went down into the hole, health 20 to 2.7.
+    '- 怒った個体が「足元より N 下」の穴に残っている時、その穴の落とし物は、先にその個体を倒すか離れてから拾う。fight の後ろに onFail continue で pickup を並べない（fight が届かないまま pickup が穴へ降り、その個体に打たれる。実走 11/26: 体力 20 から 2.7）。live の落とし物の行に「その 1m に怒った #id」と出ていたら、これに当たる。',
     '- 48m 内の全部が目を隠されている時は enderman_not_visible で、最寄りの個体と間の物が文に出る。'
       + 'その時は mc_probe kind=roofsite で、目の見える個体の多い屋根の場所を読み、そこへ go してから fight をもう一度呼ぶ（立った所で呼び続けると、見える個体が無いまま時間が過ぎる）。'
       + '壁や崖に囲まれた所から屋根の場所や開けた所へ出る go は、maxDig 40〜60・maxPlace 24〜30・canDig=[netherrack,basalt,blackstone]（足元の周りが丸石なら cobblestone も）で書く'

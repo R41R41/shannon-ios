@@ -28,6 +28,7 @@ import { wornItems } from './minecraftItems.js';
 import { waterNodeFacts } from './minecraftLlmcWaterNode.js';
 import { shiftFacts } from './minecraftLlmcShiftFacts.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
+import type { Goal } from './minecraftLlmcHazardFacts.js';
 import type { ActInput } from '../../contracts/minecraftActContract.js';
 import { normalizeActInput } from './minecraftLlmcShape.js';
 import { roofedInRock } from './minecraftOreRoute.js';
@@ -65,6 +66,9 @@ export interface JudgeParts {
   /** The node's go detour line (`detourLines`). */
   detour?: readonly string[];
   failures?: readonly string[];
+  /** A blow of fire within the window (`burnedRecently`), and where the hands go (`queueGoal`, else the plan's place). */
+  burning?: boolean;
+  goal?: Goal | null;
 }
 
 /** The facts' context from the plan's promises (the tree), and whether food is what she is short of (the near
@@ -85,6 +89,8 @@ export function factsContext(
   const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), nowKinds(planFacts).includes('pearl'));
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
+    ...(judge.burning ? { burning: true } : {}),
+    ...(judge.goal ? { goal: judge.goal } : {}),
     nowKinds: nowKinds(planFacts),
     ...requestFlag(planFacts),
     ...(endgame?.lines.length ? { endgame } : {}),

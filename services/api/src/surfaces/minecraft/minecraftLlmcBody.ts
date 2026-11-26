@@ -12,6 +12,7 @@ bodyAgeField,llmcPlanTokens,llmcTokens,minecraftLlmcLive,minecraftLlmcUrgentLive
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
 import { lookAtFooting } from './minecraftLlmcFooting.js';
+import { burnedRecently, inputAgeLine, posIn, queueGoal, type Goal } from './minecraftLlmcHazardFacts.js';
 import { approachingIds,nearMemory,newApproach,noteNear,planNowTitle,sameShooterBack,URGENT_NOTE } from './minecraftLlmcUrgent.js';
 import { createHitWatch,inputFacts,onceFor,queueNowLines,type HitWatch } from './minecraftLlmcFacts.js';
 import { llmcStoredResult } from './minecraftLlmc.js';
@@ -153,7 +154,17 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   const observeNoted = (): BodyObservation | null => { const frame = parts.observe();
     hitWatch.note(frame);
     return frame; };
+  /** Where the hands go: the queue's last go, else the place the plan's current node names. */
+  const goalNow = (): Goal | null => {
+    const queued = queueGoal(parts.queue?.ahead());
+    if (queued) return { at: queued, from: 'queue' };
+    let where: string | null = null;
+    try { where = r4.planWhere(); } catch { where = null; }
+    const planned = posIn(where);
+    return planned ? { at: planned, from: 'plan' } : null;
+  };
   const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops(),
+    ...(burnedRecently(hitWatch.recent(), now()) ? { burning: true } : {}), ...(goalNow() ? { goal: goalNow()! } : {}),
     detour: detourLines(parts.taskId, currentNodeOf(parts.llmc)?.id, now()), failures: [...events.failureFacts(observation), ...fightRepeatLines(parts.taskId, observation, now())] });
   const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
   // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from
@@ -180,6 +191,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   // does not throw the decision away); `thinnedFor` says the thinning once a decision in the log.
   const near = nearMemory();
   let thinnedFor: number | null = null;
+  /** How long the last urgent decision took (ms): what the next input's age line says the reply waits (`inputAgeLine`). */
+  let lastUrgentMs: number | null = null;
   const say = (line: string) => { try { (parts.log ?? (text => console.info(text)))(line); } catch { /* a log never fails a step */ } };
   /**
    * r8: the footing round her feet, from the map and the body's `column` probes for the gaps the map cannot
@@ -198,6 +211,11 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
         + ` by=${found.by ?? '-'} ms=${found.ms}`);
     }
   };
+  /** The input's age line, among the facts of an urgent state only (its reply is the one that arrives late). */
+  const ageFact = (frame: BodyObservation | null): string[] => {
+    const line = inputAgeLine(frame, now(), lastUrgentMs, hitWatch.recent().some(hit => hit.by?.startsWith('enderman') === true));
+    return line ? [line] : [];
+  };
   /** r8: the live state of an urgent decision (`minecraftLlmcUrgentLive`), made on the frame now; its tokens are
  * kept for the log of its seconds. */
   const urgentState = (minutes: number | null): Record<string, unknown> => {
@@ -210,7 +228,8 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
       recovery: readiness.recovery,
       ...(planTreeOf(parts.llmc)?.promises.length ? { promises: planTreeOf(parts.llmc)!.promises } : {}),
       ...(observation && observation.connected !== false
-        ? { facts: inputFacts(observation, factsContext(parts.llmc, observation, readiness, readiness.planFacts, judge()), true).lines } : {}),
+        ? { facts: [...inputFacts(observation, factsContext(parts.llmc, observation, readiness, readiness.planFacts, judge()), true).lines,
+          ...ageFact(observation)] } : {}),
       once: onceFor(parts.taskId, 'urgent').map(fact => fact.text) });
     urgentTokens = llmcTokens(JSON.stringify(live));
     // The knowledge of a stage is picked from the plan's kinds in the raw live state, urgent or not (the rewrite
@@ -336,6 +355,7 @@ beginContextRead();
       keep: text => events.keep(text) }, body),
     decided: ({ ms, aborted, thrownMs }: { ms: number; aborted: boolean; thrownMs: number }) => {
       if (urgentTokens !== null) {
+        lastUrgentMs = ms;
         say(`Shannon Minecraft urgent decision task=${parts.taskId} ms=${ms} aborted=${aborted ? 1 : 0} ctxTokens=${urgentTokens}`
           + `${aborted ? ` thrownMs=${thrownMs}` : ''}`);
       }

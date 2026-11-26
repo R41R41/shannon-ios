@@ -7,6 +7,7 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { blazeShutLong } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 import { whereCheckLine } from './minecraftLlmcWhereCheck.js';
+import { acquired } from './minecraftConditions.js';
 
 /**
  * mb-llmc r6 (run 29: the plan's "now" was 「p1.1 作業台と板を作る」 from 36 s to the end, and Sonnet went for the blazes
@@ -166,10 +167,26 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   // A preparation node that is not met says so beside its condition (the work for another node does not move it);
   // below the surface it is one not to be met now.
   const word = facts && undergroundInOverworld(facts) ? PREP_NOT_NOW : PREP_NOTE;
-  const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...node, note: node.note ? `${word} ${node.note}` : word } : node;
+  const spare = node.state !== 'done' && facts ? spareTargetNote(node.target, facts) : null;
+  const noted = spare ? { ...node, note: node.note ? `${node.note} ${spare}` : spare } : node;
+  const held = node.state !== 'done' && holdsNow(node) && status !== '満たしている' ? { ...noted, note: noted.note ? `${word} ${noted.note}` : word } : noted;
   // The place it names, read against her feet and the body's count of what is round her (`whereCheckLine`: said at the node, where the coordinate is).
   const check = node.state !== 'done' ? whereCheckLine(node, observation) : null;
   return `${currentNodeLine(held, shown?.path, status)}${check ?? ''}`;
+}
+
+/** The portal frame takes 12 eyes; a count above it holds a spare for eyes that break when thrown (`FRAME_EYES` of `minecraftPlanRequirements.ts`). */
+const SPARE_FROM = 12;
+/**
+ * Run of 11/26 (6th, d0041・d0044): the target was 14 eyes and 13 were made; `plan.update` refused 「done」 twice and about 76 s passed. At 12 or more of an
+ * eye or pearl target that is one or two short, the node says what is so and the way the refusal itself names: 「今 13、あと 1。13 で終わらせるなら目標を
+ * 13 に書き直す」. A count is not lowered by the head: this is the same fact and repair as the refusal's, said before the refusal.
+ */
+export function spareTargetNote(target: { item: string; count: number } | undefined, facts: DoneFacts): string | null {
+  if (!target || (target.item !== 'ender_eye' && target.item !== 'ender_pearl')) return null;
+  const have = acquired(facts.counts, target.item), short = target.count - have;
+  if (have < SPARE_FROM || short < 1 || short > 2) return null;
+  return `今 ${have}、あと ${short}。${have} で終わらせるなら目標を ${have} に書き直す`;
 }
 
 /** The work of the overworld, which is not what a body in the Nether or the End does now. */
