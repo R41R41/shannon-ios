@@ -408,6 +408,17 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
 export function stopFactsOf(resultJson: string | undefined, spotStops?: (at: unknown) => number): string[] {
   return stopFactLines(resultJson, spotStops).map(entry => typeof entry === 'function' ? entry() : entry);
 }
+/** A go that moved this many metres nearer before its search was cut: the way is not shut, the search ran out. */
+const SEARCH_CUT_HEADWAY_M = 8;
+/**
+ * Run 7 of 1126 (q60: 75 m nearer over water, then 'search_timeout 道の有無は不明'): the head read it as no way and cut the rest into 25 m hops.
+ * A go that came nearer and then had its search cut says so in numbers, and what follows from it.
+ */
+function searchCutWithHeadway(line: { do?: string; code?: string; progress?: { done: number } }): string {
+  const done = line.progress?.done ?? 0;
+  if (line.do !== 'go' || line.code !== 'search_timeout' || !(done >= SEARCH_CUT_HEADWAY_M)) return '';
+  return `。この go で行き先へ ${Math.round(done)} m 近づいた（道が無いのではない。進んだが道探しが打ち切られた。刻まず、同じ行き先へそのまま go を続けて出せば、止まった位置から探し直して進む）`;
+}
 /**
  * The same, with the sentence of a stuck go left to be said when the decision reads it (a function): the count
  * of stops in the same place is the stall watch's, and it has counted
@@ -435,7 +446,8 @@ export function stopFactLines(resultJson: string | undefined, spotStops?: (at: u
       });
     } else if (progress.unit === 'meter' && progress.fromStopM !== undefined && (line.do === 'go' || line.do === 'walk')) {
       out.push(`${line.do} の止まり: ${progress.at ? `止まった位置 ${cell(progress.at)} から` : '止まった位置から'}行き先まで ${num(progress.fromStopM)} m`
-        + `${progress.searchEndM !== undefined ? `（道探しの先端からは ${num(progress.searchEndM)} m）` : ''}`);
+        + `${progress.searchEndM !== undefined ? `（道探しの先端からは ${num(progress.searchEndM)} m）` : ''}`
+        + searchCutWithHeadway(line));
     } else if (line.do === 'vertical') {
       const verticalStopWords = () => (`vertical の止まり: ${progress.at ? `${cell(progress.at)} で止まった・` : ''}今も有効な段 ${num(
         progress.done)}${progress.left === null ? '・残りは分からない' : `・残り ${num(progress.left)} 段`}${line.code ? `（${line.code}）` : ''}`);

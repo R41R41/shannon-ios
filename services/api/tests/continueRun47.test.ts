@@ -86,3 +86,21 @@ describe('the held act a resume with --skip-replay does not send again is told w
     expect(requests.heldActWords('skill:none', 'go_stuck')).toContain('前の結果: go_stuck');
   });
 });
+
+describe('a go whose search was cut after it came nearer says it came nearer (1126 run 7, q60)', () => {
+  const cut = (done: number, code = 'search_timeout') => JSON.stringify({ v: 1, ok: false, done: 0, of: 1, at: { x: 208, y: 62, z: -17 }, hp: 20, food: 20, ms: 60_000,
+    lines: [{ i: 1, do: 'go', status: 'stopped', line: 'go 止まった', goal: 'partial', end: 'finished', code,
+      progress: { unit: 'meter', done, left: 57.9, at: { x: 208, y: 62, z: -17 }, fromStopM: 57.9, searchEndM: 49.5 } }] });
+  it('a search cut after 75 m of headway says the way is not shut and to go on to the same place', () => {
+    const [fact] = stopFactsOf(cut(75));
+    expect(fact).toContain('から行き先まで 57.9 m（道探しの先端からは 49.5 m）');
+    expect(fact).toContain('この go で行き先へ 75 m 近づいた');
+    expect(fact).toContain('道が無いのではない');
+    expect(fact).toContain('同じ行き先へそのまま go を続けて');
+  });
+  it('a search cut with no real headway, or another stop with headway, says nothing more', () => {
+    expect(stopFactsOf(cut(3))[0]).not.toContain('近づいた');
+    expect(stopFactsOf(cut(0))[0]).not.toContain('近づいた');
+    expect(stopFactsOf(cut(75, 'limit_time'))[0]).not.toContain('近づいた');
+  });
+});
