@@ -9,7 +9,8 @@ import { foodPreparation } from './minecraftFoodPreparation.js';
 import { itemWords, reachSuffix } from './minecraftLlmcReachWords.js';
 import { breathWords, clockStalledSeconds, timeWords } from './minecraftLlmcStateWords.js';
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
-import { furnaceLedgerLines } from './minecraftLlmcFurnaceWait.js';
+import { furnaceLedgerLines, ledgerContextOf } from './minecraftLlmcFurnaceWait.js';
+import { furnaceFoodOf, fullnessMarginWords } from './minecraftFoodWords.js';
 import { withStopCodes, type StopCode } from './minecraftLlmcRepeat.js';
 import { dropGuardWords } from './minecraftLlmcHazardFacts.js';
 
@@ -385,6 +386,10 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   parts.trend.note(finite(world.food), finite(world.saturation));
   const food = carriedFood(world, observation.facts), threats = seen(world.nearbyThreats, THREATS, 'threat');
   const preparation = foodPreparation(carriedItemCounts(world, observation.facts), food.points, FOOD_POINTS);
+  // 11/26: what a furnace is cooking is food outside the pack; and how long the fullness lasts, from the measured loss.
+  const inFurnace = furnaceFoodOf(parts.jobs ?? world.jobs, FOOD_POINTS);
+  const lostIn5min = 'fullness' in state ? parts.trend.lostIn5min() : null;
+  const margin = typeof state.fullness === 'number' ? fullnessMarginWords(state.fullness, lostIn5min, finite(world.health)) : null;
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
   const look = lookHint(world, parts.healthLost ?? 0);
   const bodyFields = () => ({
@@ -399,14 +404,14 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
     ...(parts.scan?.length ? { scan: parts.scan.slice(0, 10) } : {}),
     stops: withStopCodes(strings(world.recentStops, STOPS), parts.stopCodes ?? []),
     ...(look ? { look } : {}),
-    state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: parts.trend.lostIn5min() } : {}),
+    state: { ...state, ...('fullness' in state ? { fullnessLostIn5min: lostIn5min, ...(margin ? { fullnessMargin: margin } : {}) } : {}),
       ...(parts.elapsedMinutes !== null ? { minutes: round1(parts.elapsedMinutes) } : {}) },
-    foodPoints: { total: food.points, items: food.items },
+    foodPoints: { total: food.points, items: food.items, ...(inFurnace ? { inFurnace: `${inFurnace.words}（パックの点には入っていない）` } : {}) },
     ...(preparation ? { foodPreparation: preparation } : {}),
     inventory: shareStacks(stacks(world.inventory).slice(0, INVENTORY), parts.promises),
     threats,
     near: seen(world.nearbyEntities, OTHERS + THREATS, 'near', world).filter(line => !taken(threats, line)).slice(0, OTHERS),
-    ...(parts.jobs !== undefined ? { jobs: furnaceLedgerLines(parts.jobs) ?? parts.jobs } : {}),
+    ...(parts.jobs !== undefined ? { jobs: furnaceLedgerLines(parts.jobs, ledgerContextOf(world, parts.planNow)) ?? parts.jobs } : {}),
     ...(parts.events.length || parts.once?.length ? { events: [...(parts.once ?? []), ...parts.events.slice(-EVENTS)] } : {}),
   });
   const live: Record<string, unknown> = bodyFields();

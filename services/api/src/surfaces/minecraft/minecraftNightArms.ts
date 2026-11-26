@@ -41,6 +41,16 @@ export function canSleepNow(world: Record<string, unknown>): boolean {
   return tick !== null && tick >= BED_FROM && tick < NIGHT_TO;
 }
 
+/**
+ * 11/26 (run 7): afloat in deep water at dusk, the bed's long lines and the sleep gate (which held the furnace's take for a sleep that could not come: no_bed_spot, 107 s idle) both said
+ * 「寝る」. The body's own line about where she is (`world.inside`: 「深い水の中（足の下も水で床が無い…）。近くの呼吸できる足場は未確認」, said when no side cell could be a floor) is the fact:
+ * a bed is put on a floor. One line then replaces the sleep's explanation (the way to take the sleep back stays in the skip's and the booking's lines). Null on land, or when a
+ * floor candidate is named. Not in `canSleepNow` (a clock check others use).
+ */
+const AFLOAT_NO_FLOOR = /^深い水の中.*近くの呼吸できる足場は未確認/u;
+export const AFLOAT_NO_SLEEP = '今は水の上で寝られない（足元が深い水で、隣に床にできる所が無い。寝るなら先に足場を作る）';
+export const noSleepSpot = (world: Record<string, unknown>): boolean => typeof world.inside === 'string' && AFLOAT_NO_FLOOR.test(world.inside);
+
 const carriedNames = (counts: ReadonlyMap<string, number>, pattern: RegExp): string[] =>
   [...counts].filter(([name, count]) => pattern.test(name) && count > 0).map(([name]) => name.replace(/^minecraft:/u, ''));
 
@@ -124,6 +134,7 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
   if (tick === null) return null;
   const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
   if (!bed || tick >= NIGHT_TO || tick < BED_FROM - BED_NEAR_TICKS) return null;
+  if (noSleepSpot(world)) return AFLOAT_NO_SLEEP;
   const name = bed[0].replace(/^minecraft:/u, '');
   if (enemyNear(world)) {
     return tick < BED_FROM ? null
@@ -145,6 +156,7 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   const tick = dayTick(world);
   if (tick === null || tick >= BED_FROM - BED_NEAR_TICKS) return null;
   if (![...counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
+  if (noSleepSpot(world)) return AFLOAT_NO_SLEEP;
   const left = BED_FROM - tick;
   return `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない`
     + `${netherShare(left, nether)}。今の節を進め、夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）。ケーキ・羊毛・道具づくりなど夜を使わない依頼（昼でも夜でもできる作業）も、入れてよい。理由: 夜の地上は敵が増えて危なく、寝れば夜を飛ばして朝まで安全に過ごせる。夜を使う依頼（夜に湧く敵を倒す・夜のうちに急ぐ節）や、人が寝ないと言った時は入れない（理由: 寝ると夜が消え、その依頼の材料が来ない。入れた後は ${SLEEP_SKIP} で予約を消せる）。ただし${SLEEP_COST}。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
@@ -283,6 +295,7 @@ export function nightChoiceLine(world: Record<string, unknown>, counts: Readonly
 function stormBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): string | null {
   const bed = [...counts].find(([name, count]) => BED.test(name) && count > 0);
   if (!bed) return null;
+  if (noSleepSpot(world)) return AFLOAT_NO_SLEEP;
   const have = `雷雨: ベッドを持っている（${bed[0].replace(/^minecraft:/u, '')}）。`;
   return enemyNear(world)
     ? have + '時刻に関係なく寝られるが、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。'
