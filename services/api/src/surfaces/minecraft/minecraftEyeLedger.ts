@@ -291,6 +291,8 @@ export function createEyeLedger(saved: unknown) {
   const raw = saved && typeof saved === 'object' ? (saved as { v?: unknown; throws?: unknown }) : null;
   let state: LedgerState = { v: 1, throws: raw?.v === 1 && Array.isArray(raw.throws)
     ? raw.throws.map(storedOf).filter((item): item is StoredThrow => item !== null).slice(-KEEP_THROWS) : [] };
+  // The body's eyes are read in at most once per ledger, and never after the ledger was cleared (the room found or the End entered: they would come back as a point to walk to).
+  let spent = false;
   return {
     /** An act's result came back: its thrown eye (if it threw one in the overworld) goes in the ledger once. True when it was added. */
     note(id: string | undefined, resultJson: string | undefined, dimension: string | null, now: number): boolean {
@@ -310,9 +312,10 @@ export function createEyeLedger(saved: unknown) {
      * checkpoint, and is not doubled). True when they were taken in.
      */
     seed(rawThrows: unknown, now: number): boolean {
-      if (state.throws.length) return false;
+      if (spent || state.throws.length) return false;
       const seeded = alive(throwsFromBody(rawThrows), now);
       if (!seeded.length) return false;
+      spent = true;
       state = { v: 1, throws: [...seeded] };
       return true;
     },
@@ -321,6 +324,7 @@ export function createEyeLedger(saved: unknown) {
     lines: (feet: { x: number; z: number } | null, now: number): string[] => ledgerLines(alive(state.throws, now), feet, now),
     /** The room was found or the End entered: the throws are of no more use. */
     clear(): void {
+      spent = true;
       state = { v: 1, throws: [] };
     },
     checkpoint: () => ({ minecraftEyes: { v: state.v, throws: state.throws.map(item => ({ ...item })) } }),

@@ -164,6 +164,13 @@ describe('(4) the eyes run 7 threw reach the head as its ledger, and as a fact o
     expect(ledger.seed(run7, NOW)).toBe(false);
     expect(ledger.throws(NOW)).toHaveLength(2);
   });
+  it("a cleared ledger (room found or End entered) does not take the body's old throws back in", () => {
+    const ledger = createEyeLedger(undefined);
+    ledger.seed(run7, NOW);
+    ledger.clear();
+    expect(ledger.seed(run7, NOW)).toBe(false);
+    expect(ledger.throws(NOW)).toEqual([]);
+  });
   it('a task restarted with its own checkpoint (a ledger that holds throws) is not doubled, and the Nether\'s and malformed records are left out', () => {
     const mine = createEyeLedger(undefined);
     mine.seed(run7, NOW);
