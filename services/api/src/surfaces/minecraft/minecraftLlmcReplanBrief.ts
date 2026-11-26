@@ -90,7 +90,7 @@ const topOf = (tree: PlanTree): string | null => {
  * It says what one stop was, not what is known; the plan made again read it as the cause of a different stop (11/26: a roof-lid line stood as the reason
  * for a walled one 5 below).
  */
-export const isFailureCopy = (text: string): boolean => /^(?:(-?d+,-?d+,-?d+) の )?[a-z_]+: /u.test(text);
+export const isFailureCopy = (text: string): boolean => /^(?:\(-?\d+,-?\d+,-?\d+\) の )?[a-z_]+: /u.test(text);
 
 /**
  * The plan: the done top-level nodes on one line; the open ones, the one she is in with its whole subtree and its rules; the promises still open.

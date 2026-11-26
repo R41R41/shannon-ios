@@ -8,7 +8,7 @@ import type { ActHand } from '../src/contracts/minecraftActTypes.js';
 import { mergeEnemies } from '../src/surfaces/minecraft/minecraftLlmcLiveEnemies.js';
 import { reachSuffix } from '../src/surfaces/minecraft/minecraftLlmcReachWords.js';
 import { fightRepeatLines, forgetFightRepeats, noteFights, REPEAT_SECONDS } from '../src/surfaces/minecraft/minecraftLlmcFightRepeat.js';
-import { planLines, replanBrief, type BriefInput } from '../src/surfaces/minecraft/minecraftLlmcReplanBrief.js';
+import { isFailureCopy, planLines, replanBrief, type BriefInput } from '../src/surfaces/minecraft/minecraftLlmcReplanBrief.js';
 import { REPLAN_SYSTEM } from '../src/surfaces/minecraft/minecraftLlmcReplan.js';
 
 describe('a walled and angry hostile is said as one that cannot come, with its height against her feet (11/26 end run 5)', () => {
@@ -70,6 +70,10 @@ describe('the plan made again is not handed a stop line as a caution, unless the
     expect(text).toContain('足元より 5 下の穴の中の個体');
     expect(replanBrief(input('same_spot_stops'))).toContain('自分の屋根の蓋');
     expect(planLines(tree).join('\n')).toContain('自分の屋根の蓋');
+  });
+  it('also leaves out a copy that has its place first (cautionFact writes 「(x,y,z) の fight: …」)', () => {
+    expect(isFailureCopy('(150,69,-342) の fight: 届かない（元: 蓋が目を隠し…')).toBe(true);
+    expect(isFailureCopy('足元より 5 下の穴の中の個体は歩いて届かない')).toBe(false);
   });
   it('tells the plan maker to write what was found, with the reason', () => {
     expect(REPLAN_SYSTEM).toContain('何が分かったか 1 文');
