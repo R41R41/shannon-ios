@@ -537,7 +537,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- ストロングホールドへの道は地上とネザー経由の 2 つ。',
     // end1108b S9 (11/8): the intersection lay 1,375 m away across a sea; she took the sea for a wall (「海の上は渡れない」「橋で届く量ではない」),
     // tunnelled and bridged in 30 m legs at 0.5-0.8 m/s, and went for a gate, flint and gold instead. The same body swam the sea at about 3 m/s.
-    '- 海・川・湖は泳いで渡れる。go に waterOk を付けると、体は水面を泳いで進む（速さは水の割合で変わる。海は 0.5〜1 m/s（7 回目の実測）で、歩きの 2〜2.5 m/s より遅いが、橋を架けるより速い）。'
+    '- 海・川・湖は泳いで渡れる。go に waterOk を付けると、体は水面を泳いで進む（速さは水の割合で変わる。海は 0.5〜1 m/s（7 回目の実測）で、歩きの 2〜2.5 m/s より遅いが、go の橋の数の上限で止まらない）。'
       + 'waterOk の無い go は水を避けて足場を置く道（橋）を探し、置く数の上限で止まる。海に橋を架けない・海の下を掘って進まない。walk は泳がない。',
     '- 交点が海の向こうにあることは、地上の道をやめる理由にならない。ゲート・火打ち金・金の防具がそろっていないなら、ネザー経由へ切り替えず、go waterOk で交点へ向かう。',
     // end1109s02 S9 (11/9): the first legs toward the sea went without waterOk (replay of the captured decision: 0/5 with waterOk);
