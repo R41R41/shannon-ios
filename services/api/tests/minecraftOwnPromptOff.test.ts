@@ -16,8 +16,9 @@ const GOLDEN = {
   transient_summaries: ['cefd022ea195c63b', 'a18be46624e2719f', '3b333f5a78d51a3e', '9d5f17a5ad455dad', '9c94b7baa2696ed5', 'b1d496550a37b67e', 'da0f3794f0e640a6', '599e7912fdc9cbfb', 'abe0da50ea78e553', 'e648b0c5cf6424ff', '8b428776da55eec7', 'e240f8dafd26a74d', '04007d5b4c2638b0', 'dec1d414901a7466', 'ae790211cd5e2a5d', '3762a605f44c0c17', '3769e2798c0e3cc8', 'c734cbeed7d5bae2', 'fd9837f5974d7864', '17c1d3bdd6876355', '3029327bcc6258fd', 'c38e7fd6c6f56e87', '12876f36955c8edb', 'b69d2987792f76db', '496c6a0a27760f99', 'd44fe2763007fd71', '2a9ec0fd3476b8ea', '985a737b14e74acc', '93c11cff5e712840', '7c7e4965b0efdc5b'],
   // Flow 1113 (e8665813): the body summary's instruction says its size (within 4,000 tokens), so its digest is new.
   body_summary: ['3c26e85291bd8deb'],
+  // 11/27 (run 7 of 11/26): the first plan's R9 words order the End's check before the entry and write a where with its dimension.
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
-  first_plan: ['259ec259c36d009b'],
+  first_plan: ['debd18b12cb9786e'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });

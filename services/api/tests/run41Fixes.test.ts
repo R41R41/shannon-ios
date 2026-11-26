@@ -68,12 +68,12 @@ describe('the preparation is a milestone of the meter, with its seconds and its 
 describe('the road keeps a node that was passed over', () => {
   it('writes an open node before the one she is in with 「（未・飛ばした）」, and a done one with ✓ as before', () => {
     const road = roadLine(withState(['p1', 'p2'], 'p4.1'))!;
-    expect(road).toContain('木と石の道具✓ 村を回る✓ 食料とベッド（未・飛ばした） → 鉄◀今');
+    expect(road).toContain('p1 木と石の道具✓ p2 村を回る✓ p3 食料とベッド（未・飛ばした） → p4 鉄◀今[p4.1]');
     expect(road).not.toContain('済み ');
   });
   it('does not count it among the done nodes of 「済み n 節」, and shows it when the done ones are many', () => {
     const road = roadLine(withState(['p1', 'p2', 'p4', 'p5', 'p6', 'p7'], 'p8.1'))!;
-    expect(road).toContain('食料とベッド（未・飛ばした）');
+    expect(road).toContain('p3 食料とベッド（未・飛ばした）');
     expect(road).toContain('済み 3 節');
   });
 });

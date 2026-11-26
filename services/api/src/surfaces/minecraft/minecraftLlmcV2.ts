@@ -102,12 +102,14 @@ const PLAN_WORDS: ReadonlyArray<readonly [string, string]> = [
     '消費して無くなる物（板・棒など）の子は、作った時に set state=done で自分で閉じる。'],
   ['体の手と同じ応答で出してよい。', '同じ応答で mc_act を続けてよい（plan_update を先に書く。書いた順に実行される）。'],
 ];
+/** Run 7 of 11/26: a where from the Nether stayed in the overworld's next list with no dimension beside it. A coordinate is written with its dimension after it (the reader of a where takes the place it begins with). */
+const WHERE_DIMENSION = '\nwhere の座標のあとに次元を添える（例「177,63,-398（ネザー）」「196,-34,-244（現世）」）。同じ数字でも次元が違えば別の場所で、ネザーの x・z は現世の 1/8。';
 function planWords(tool: FcaToolDefinition): FcaToolDefinition {
   if (tool.name !== 'plan.update') return tool;
   let description = tool.description;
   // The plain definition (without the probe's rules) has no r9 lines: each is changed where it stands.
   for (const [from, to] of PLAN_WORDS) description = description.replace(from, () => to);
-  return { ...tool, description };
+  return { ...tool, description: `${description}${WHERE_DIMENSION}` };
 }
 const DRAGON_PLAIN = '完了の証明は、体がエンドラの死を見届けたことだけ（条件 witnessed-dragon: 体の記録 mc.goal-evidence の boss.verified が true。'
   + 'あなたが呼ぶ道具ではない）。計画の節が済んだ・完了を要求した・自分で報告した、だけでは完了にならない。';

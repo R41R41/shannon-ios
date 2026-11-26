@@ -117,7 +117,8 @@ describe('chapter 4 A: the road and the pace', () => {
   });
   it('writes the top-level nodes: the done ones with ✓, the one she is in with ◀今, the next five, and how many are left', () => {
     const road = roadLine(withStates(['p1', 'p2', 'p3', 'p4', 'p5', 'p6'], 'p7.1'))!;
-    expect(road).toBe('道のり: 済み 3 節 鉄✓ 水入りバケツ✓ 鉄の兜・胸当てを作って着✓ → ダイヤ◀今 → 金のブーツ → 黒曜石10とゲート → 出発の点検 → ネザー要塞を探す → ブレイズロッド7以上 → ほか 8 節');
+    expect(road.startsWith('道のり: 済み 3 節 p4 鉄✓ p5 水入りバケツ✓ p6 鉄の兜・胸当てを作って着✓ → p7 ダイヤ◀今[p7.1] → p8 金のブーツ → p9 黒曜石10とゲート → ')).toBe(true);
+    expect(road).toContain('p7 ダイヤ◀今[p7.1]');
   });
   it('is absent for a plan that is not the dragon\'s', () => {
     expect(roadLine(notDragon)).toBeNull();

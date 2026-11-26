@@ -400,7 +400,7 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     const near = frame({ inventory: merged, freeSlots: 2 });
     const go = { do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone', 'cobbled_deepslate'], maxDig: 200 } as ActHand;
     const line = digPackLine(near, [go], [], 'run47-dig')!;
-    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
+    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。拾える見込みは約 262 個まで・この act の掘る上限は合わせて 200（足りる）。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
     expect(line).not.toMatch(/しなさい|してください|すること|べき|しろ/u);
     // the same count is not said again; another count is
     expect(digPackLine(near, [go], [], 'run47-dig')).toBeNull();

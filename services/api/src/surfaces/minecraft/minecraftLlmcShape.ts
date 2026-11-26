@@ -176,6 +176,25 @@ function extraProblem(object: Fields, properties: Fields, path: Path, here: stri
   return `${here}${here.endsWith('）') ? '' : ' '}の ${extra.join('・')} は無い欄${extra.includes('why') ? '（why は act に 1 つ）' : ''}${stop}${may}`;
 }
 
+/** A hand's two counts that the schema caps (a go's or vertical's `maxDig` and `maxPlace`). */
+const COUNT_KEYS = ['maxDig', 'maxPlace'] as const;
+/**
+ * Run 7 of 11/26 (a go with maxDig 250 and maxPlace 120 was refused for maxDig alone, and the retry with maxDig 200 was refused for maxPlace: the refusal names the
+ * first field only, and says what the cap is, not what it is for): a count over its cap says what the cap is (the most one hand digs or places; a longer way is
+ * a go cut in parts and stacked) and the other cap beside it, so a retry looks at both before it is sent. Only the first field is named; no second one is
+ * judged here.
+ */
+function limitNote(problem: string, value: unknown, node: Schema, path: Path, parent: Schema | undefined): string {
+  const key = path[2];
+  if (path[0] !== 'hands' || path.length !== 3 || typeof key !== 'string' || !(COUNT_KEYS as readonly string[]).includes(key)
+    || typeof value !== 'number' || !outside(value, node.minimum, node.maximum)) return problem;
+  const other = COUNT_KEYS.filter(name => name !== key).flatMap(name => {
+    const cap = plainRecord(parent?.[name])?.maximum;
+    return typeof cap === 'number' ? [`${name} は ${cap} まで`] : [];
+  });
+  return `${problem}。上限は 1 手で掘る・置く数の最大で、足りない道は go を区切って続けて積む。同じ手の ${other.join('・') || 'ほかの数'} も上限を確かめてから出し直す`;
+}
+
 /**
  * Where an input leaves the schema, in one line (closed words, Japanese): the first field that does not fit, by its place
  * (`手3（chest）の at`), what it must be and what it is now. Null when it fits. For the subset the tools' schemas use (object, array,
@@ -184,10 +203,10 @@ function extraProblem(object: Fields, properties: Fields, path: Path, here: stri
 export function schemaProblem(input: unknown, schema: Schema): string | null {
   const record = plainRecord(input);
   const hands = Array.isArray(record?.hands) ? record!.hands as unknown[] : [];
-  const walk = (value: unknown, node: Schema, path: Path): string | null => {
+  const walk = (value: unknown, node: Schema, path: Path, parent?: Schema): string | null => {
     const here = placeOf(path, hands);
     const own = ownProblem(value, node, here);
-    if (own) return own;
+    if (own) return limitNote(own, value, node, path, parent);
     const items = plainRecord(node.items);
     if (Array.isArray(value)) {
       return items ? value.reduce<string | null>((found, item, index) => found ?? walk(item, items, [...path, index]), null) : null;
@@ -203,7 +222,7 @@ export function schemaProblem(input: unknown, schema: Schema): string | null {
     }
     if (missing) return `${here} に ${missing} が要る`;
     return Object.entries(properties).reduce<string | null>((found, [key, child]) => found
-      ?? (object[key] === undefined || !plainRecord(child) ? null : walk(object[key], child as Schema, [...path, key])), null);
+      ?? (object[key] === undefined || !plainRecord(child) ? null : walk(object[key], child as Schema, [...path, key], properties)), null);
   };
   return walk(input, schema, []);
 }
