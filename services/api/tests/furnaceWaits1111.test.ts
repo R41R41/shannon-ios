@@ -180,3 +180,19 @@ describe('sleeping is one hand, not a wait', () => {
     expect(line).toContain('夜になり次第、体が次の手の前で寝る。待たなくてよい');
   });
 });
+
+describe('a furnace with little left (run of 11/26: 30 s left, she left to mine and lost about 3 minutes)', () => {
+  const short = (left: number) => frame({ jobs: [job({ remainingEstimateMs: left * 1000, input: 'raw_iron', count: 4 })] });
+  const counts = new Map([['stone_pickaxe', 1]]);
+  it('says that waiting the remainder is the sure hand and what leaving costs, while still naming the hands', () => {
+    const line = furnaceMeanwhileLine(world({ jobs: [job({ remainingEstimateMs: 30_000 })] }), counts, [node({ id: 'p6', title: '鉄の胸当て' })], 'p6', 't')!;
+    for (const word of ['あと約 30 秒', '残りが短いので wait（30 秒）して take するのが最も確実', '戻りの歩きが残りを超え', '離れた手: A) ', 'furnace 253,37,-121 take']) expect(line, word).toContain(word);
+    expect(line).not.toContain('なにも進まない');
+  });
+  it('does not hold a wait that fits the remainder, and still holds a long stand with much left', () => {
+    expect(furnaceStandHold(act(wait(30)), short(30), 'sa')).toBeNull();
+    expect(furnaceStandHold(act(wait(40)), short(30), 'sb')).toBeNull();
+    expect(furnaceStandHold(act(wait(90)), short(30), 'sc')).toMatchObject({ kind: 'wait' });
+    expect(furnaceStandHold(act(wait(30)), short(88), 'sd')).toMatchObject({ kind: 'wait' });
+  });
+});

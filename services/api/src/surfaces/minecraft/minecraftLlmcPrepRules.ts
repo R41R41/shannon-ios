@@ -22,10 +22,17 @@ import { REQUEST_SCOPE_EN } from './minecraftRequestSteps.js';
  * (a diamond pickaxe stands for three iron ones).
  */
 /** `materials`: what the pack holds toward a missing or short need, said beside its label (the bow's string, the arrows' feathers). */
-export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean; goal?: boolean; weight?: (name: string) => number;
+export interface PrepNeed { label: string; count: number; pattern: RegExp; slots?: boolean; worn?: boolean; goal?: boolean; cost?: string; weight?: (name: string) => number;
   materials?: (counts: ReadonlyMap<string, number>) => string }
 /** `risk`: what going on without the required needs costs, said beside the lack (a stage that has one says its lack as a required part and a goal part). */
 export interface PrepStage { title: string; food: number; needs: readonly PrepNeed[]; risk?: string }
+
+/**
+ * Run of 11/26 (the Nether entered with no golden piece after four failed gold digs; the line said only 「目標（そろえば。必須ではない）— 金のブーツが無い」, the
+ * entry check read 「必須はそろっている」, and the piglins attacked for the rest of the stay): a goal that is missing says what its lack costs beside it. The entry
+ * is still not held (owner, 11/13); the cost is a fact for the decision to weigh, the reason a goal that reads as optional is not a footnote.
+ */
+export const PIGLIN_COST = 'ネザーのピグリンは金の防具を 1 つ着るまで襲う（群れ・砦の遺跡の近くに長居できず、パールの交換にも寄れない）。入るのは止めないが、着けるなら入る前が安い';
 
 /** Blocks to stand on and to wall with (the knowledge's 足場のブロック 64). */
 export const BLOCKS = new RegExp('^(?:cobblestone|cobbled_deepslate|netherrack|blackstone|stone|deepslate|dirt|andesite|diorite|granite|tuff'
@@ -55,7 +62,7 @@ const ARMOUR: PrepNeed = { label: '鉄の兜・胸当て', count: 2, pattern: UP
 // the rest of the gate's list is required.
 // A goal of the table, and only a goal (run 8, 11/13: the hand that held the gate while no golden piece was worn stopped a lit gate; it is gone).
 // In the Nether, a golden piece carried is put on before the search (`goldFirstHold`).
-const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true };
+const BOOTS: PrepNeed = { label: '金のブーツ（金 4 がそろう時）', count: 1, pattern: GOLDEN_BOOTS, worn: true, goal: true, cost: PIGLIN_COST };
 /** The portal's frame (four wide, five high, no corners). */
 export const GATE_OBSIDIAN = 10;
 /**

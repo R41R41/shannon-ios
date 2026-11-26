@@ -5,7 +5,7 @@ import { BED_ITEM, carriedItemCounts, countMatching, wornItems, type ItemCounts 
 import { carriedFood } from './minecraftLlmcLive.js';
 import {
   BEFORE_DIAMONDS, BEFORE_GATE, BLOCKS, END_BEDS, END_FALLBACK_WEAPONS, END_GATHER_MS, END_MIN_FOOD, END_OBSIDIAN, END_WEAPONS, endGatherSince,
-  FIGHT_OBSIDIAN_LABEL, RETURN_TO_END,
+  FIGHT_OBSIDIAN_LABEL, PIGLIN_COST, RETURN_TO_END,
   type PrepNeed, type PrepStage,
 } from './minecraftLlmcPrepRules.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
@@ -40,7 +40,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: s
   nether_deep: { title: 'ネザーの奥へ', food: 100, needs: [
     // The section audit of 11/5: the slabs left the check (they held the fortress's search), and the golden piece is a goal here (the gate asks it).
     { label: '作業台', count: 1, pattern: /^crafting_table$/u },
-    { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u, goal: true },
+    { label: '盾', count: 1, pattern: /^shield$/u }, { label: '金の防具', count: 1, pattern: /^golden_(?:helmet|chestplate|leggings|boots)$/u, goal: true, cost: PIGLIN_COST },
     { label: '足場のブロック', count: 64, pattern: BLOCKS }] },
   // end1108h11 S7 (11/8): at the fortress with a bow, 30 arrows, a shield and 478 food points, the check of the way in said 「作業台が無い」 at
   // every decision, the knowledge said 「ブレイズは準備（shortage が空）の後」, and the head hid from a lone blaze at 14 m for 6 minutes at
@@ -199,8 +199,13 @@ function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; 
 
 /** Goals are facts of a missing fallback, never requirements of the entry gate. */
 function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonly string[] }): string {
-  const wanted = gapWords(gapsOf(table.needs.filter(need => need.goal), parts));
-  return wanted.length ? `目標（そろえば。必須ではない）— ${wanted.join('。')}` : '';
+  const goals = table.needs.filter(need => need.goal);
+  const wanted = gapWords(gapsOf(goals, parts));
+  if (!wanted.length) return '';
+  // What a lacking goal costs (`PrepNeed.cost`), said after the list: a goal that reads as optional is not left without its reason.
+  const costs = [...new Set(goals.filter(need => need.cost && (held(parts.counts, need) < need.count
+    || (need.worn && parts.worn && [...parts.counts.keys()].some(name => need.pattern.test(name) && !parts.worn!.includes(name))))).map(need => need.cost!))];
+  return `目標（そろえば。必須ではない）— ${wanted.join('。')}${costs.length ? `。欠けた目標の代償: ${costs.join('。')}` : ''}`;
 }
 
 /**

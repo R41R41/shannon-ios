@@ -18,6 +18,12 @@ const STONE_PICK = /(?:^|:)(?:stone|iron|diamond|netherite)_pickaxe$/u;
 const ANY_PICK = /(?:^|:)(?:wooden|stone|iron|diamond|netherite)_pickaxe$/u;
 /** A mark farther than this (blocks) is not "while it burns" work. */
 export const MEANWHILE_NEAR = 24;
+/**
+ * Run of 11/26 (a chestplate's make stopped 4 ingots short with the furnace 30 s from done; 25 s later she went to mine coal, the way back was a dead end and about
+ * 3 minutes went, the chestplate unmade): with this little left waiting is the cheap hand, and a hand that takes her away costs its walk back too. Said with the line
+ * (a fact and its reason; the hand is still hers).
+ */
+export const SHORT_LEFT_SECONDS = 45;
 const IRON_COUNT = 3;
 const COAL_COUNT = 4;
 
@@ -110,6 +116,9 @@ export function furnaceMeanwhileLine(world: Rec | null, counts: ItemCounts, node
   const choices = meanwhileChoices(world, counts, plan);
   if (!choices.length) return null;
   const letters = choices.map((_text, index) => 'ABC'[index]).join('・');
+  if (first.left <= SHORT_LEFT_SECONDS) return `かまど (${first.cell}) の ${first.what} は あと約 ${first.left} 秒。残りが短いので wait（${Math.max(5, first.left)} 秒）して take するのが最も確実で、`
+    + `その鉄で次の節（作る手）が進む。離れる手を足すなら、残りの内に戻れる近さ（行き 10m 以内の目安）だけ。洞窟・行き止まりの先へは行かない（戻りの歩きが残りを超え、`
+    + `実走では 30 秒待つ所を 3 分失った）。離れた手: ${letteredChoices(choices)}。時間が来たら furnace ${first.cell} take`;
   return `かまど (${first.cell}) の ${first.what} は あと約 ${first.left} 秒。ここで待てば ${first.left} 秒 なにも進まない。その間の次の 1 手はどれか: ${letteredChoices(choices)}。`
     + `時間が来たら furnace ${first.cell} take（早めに足してもよい。残りが短ければ体が待って取り、長ければ「まだ」と返る）。wait は ${letters} のどれもできない時だけ`;
 }

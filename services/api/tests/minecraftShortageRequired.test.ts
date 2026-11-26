@@ -10,7 +10,7 @@ import { doneFacts } from '../src/surfaces/minecraft/minecraftPlanDone.js';
 import { llmcModelRouter } from '../src/wiring/minecraftLlmcConfiguration.js';
 import type { FcaModel } from '../src/mind/action/fca/fcaPorts.js';
 import { heldOfFrame, heldTail, holdV2, sentPart } from '../src/surfaces/minecraft/minecraftLlmcPartial.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, SAFETY_FIRST, SAFETY_FIRST_EN } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, PIGLIN_COST, PREP_RULES_WORDS, SAFETY_FIRST, SAFETY_FIRST_EN } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { gateHold, preparationShortage, readinessOf, requiredLack } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { dropAdvice, packFacts, packLines } from '../src/surfaces/minecraft/minecraftLlmcPack.js';
 import { stageKnowledge, stageTextsForKind, V2_ALWAYS, V2_STAGES } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -36,7 +36,8 @@ const FOOD: Array<[string, number]> = [['cooked_beef', 3]];
 const GATE_REST: Array<[string, number]> = [['iron_sword', 1], ['cobblestone', 64], ['iron_ingot', 2], ['oak_planks', 16], ...FOOD];
 const KIT: Array<[string, number]> = [['iron_pickaxe', 3], ['shield', 2], ...GATE_REST];
 const WORN_PIECES = ['iron_helmet', 'iron_chestplate', 'iron_leggings'];
-const GOAL_ONLY = '準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い';
+const COST = `。欠けた目標の代償: ${PIGLIN_COST}`;
+const GOAL_ONLY = `準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い${COST}`;
 const gateLine = (items: Array<[string, number]>) => preparationShortage({ dimension: 'overworld', counts: owned(items, WORN), food: 50, nowKinds: ['portal'], worn: WORN_PIECES });
 
 describe('the pickaxe for the Nether: one diamond one or three iron ones', () => {
@@ -52,7 +53,7 @@ describe('the pickaxe for the Nether: one diamond one or three iron ones', () =>
   });
   it('counts a diamond or netherite pickaxe for three, and the two kinds together', () => {
     // One diamond pickaxe is the main one's three; the spares are two more of stone or better (run59 leg 2's plan 7.1).
-    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toBe(`${GOAL_ONLY}。石以上のツルハシ（予備 2 本を含め 3 本） 1/3`);
+    expect(gateLine([...rest, ['diamond_pickaxe', 1]])).toBe(`${GOAL_ONLY.slice(0, -COST.length)}。石以上のツルハシ（予備 2 本を含め 3 本） 1/3${COST}`);
     expect(gateLine([...rest, ['diamond_pickaxe', 1], ['stone_pickaxe', 2]])).toBe(GOAL_ONLY);
     expect(gateLine([...rest, ['netherite_pickaxe', 1], ['stone_pickaxe', 3]])).toBe(GOAL_ONLY);
     expect(gateLine([...rest, ['iron_pickaxe', 1], ['stone_pickaxe', 4]])).toContain('ツルハシ（ダイヤ 1 か鉄 3） 1/3');
@@ -65,7 +66,7 @@ describe('a stage that says what its lack costs says it in two parts; the others
   it('puts the golden boots apart from what is required, and says nothing when all of it is there', () => {
     expect(gateLine(KIT)).toBe(GOAL_ONLY);
     const boots = [...KIT, ['golden_boots', 1]] as Array<[string, number]>;
-    expect(gateLine(boots)).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 持っているが着ていない: golden_boots');
+    expect(gateLine(boots)).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 持っているが着ていない: golden_boots' + COST);
     expect(preparationShortage({ dimension: 'overworld', counts: owned(boots, WORN), food: 50, nowKinds: ['portal'], worn: [...WORN_PIECES, 'golden_boots'] })).toBeNull();
     const noShield = gateLine(KIT.filter(([name]) => name !== 'shield'))!;
     expect(noShield.startsWith(`準備の不足（ネザーに入る前）: 必須（ネザーに入る前に必ず）— 盾が無い。欠けたまま進むと: ${BEFORE_GATE.risk}。`)).toBe(true);
@@ -557,5 +558,16 @@ describe('the words that were wrong (the coordinator, 2026-11-03): go makes no w
       expect(words).toContain('満たすと、体は射線の外の安全な足場へ寄ってから止まって返す（止める線は頭が決める）');
       expect(words).not.toContain('満たしたら全体を止めて返す');
     }
+  });
+});
+
+describe('a missing golden piece says what it costs beside it (run of 11/26: entered the Nether with none and read 「必須はそろっている」)', () => {
+  it('says the piglin cost once with the goals, still never holds the entry, and says nothing of it when worn', () => {
+    const line = gateLine(KIT)!;
+    expect(line).toContain(`欠けた目標の代償: ${PIGLIN_COST}`);
+    expect(line).not.toContain('必須（');
+    expect(line.split(PIGLIN_COST).length).toBe(2);
+    const worn = [...KIT, ['golden_boots', 1]] as Array<[string, number]>;
+    expect(preparationShortage({ dimension: 'overworld', counts: owned(worn, WORN), food: 50, nowKinds: ['portal'], worn: [...WORN_PIECES, 'golden_boots'] })).toBeNull();
   });
 });

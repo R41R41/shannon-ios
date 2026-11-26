@@ -8,7 +8,7 @@ import { carriedItemCounts } from '../src/surfaces/minecraft/minecraftItems.js';
 import { currentNodeLine } from '../src/surfaces/minecraft/minecraftLlmcNode.js';
 import { lavaPools, obsidianWays } from '../src/surfaces/minecraft/minecraftLlmcObsidianWays.js';
 import { BODY_RULES, mapView, readLayers } from '../src/surfaces/minecraft/minecraftLlmcPreflightMap.js';
-import { BEFORE_DIAMONDS, BEFORE_GATE, PREP_RULES_WORDS, type PrepStage } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
+import { BEFORE_DIAMONDS, BEFORE_GATE, PIGLIN_COST, PREP_RULES_WORDS, type PrepStage } from '../src/surfaces/minecraft/minecraftLlmcPrepRules.js';
 import { preparationShortage } from '../src/surfaces/minecraft/minecraftLlmcReadiness.js';
 import { candidateMenuTools } from '../src/surfaces/minecraft/minecraftLlmcV2.js';
 import { stageKnowledge, V2_ALWAYS } from '../src/surfaces/minecraft/minecraftLlmcV2Knowledge.js';
@@ -55,7 +55,7 @@ describe('the armour: iron helmet, chestplate and leggings before the diamonds, 
     const gate: Array<[string, number]> = [['iron_pickaxe', 3], ['shield', 2], ['iron_sword', 1], ['cobblestone', 64], ['iron_helmet', 1],
       ['iron_chestplate', 1], ['iron_leggings', 1], ['iron_boots', 1], ['iron_ingot', 2], ['oak_planks', 16]];
     const parts = { dimension: 'overworld', food: 50, nowKinds: ['portal' as const], v2: true };
-    expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い');
+    expect(preparationShortage({ ...parts, counts: owned(gate) })).toBe('準備の不足（ネザーに入る前）: 目標（そろえば。必須ではない）— 金のブーツ（金 4 がそろう時）が無い。欠けた目標の代償: ' + PIGLIN_COST);
     expect(preparationShortage({ ...parts, counts: owned([...gate, ['golden_boots', 1]]) })).toBeNull();
     // Worn counts: the worn line of the frame is read as carried.
     expect(owned([], '頭: iron_helmet(残り 160/165)、足: golden_boots(残り 91/91)').get('golden_boots')).toBe(1);
