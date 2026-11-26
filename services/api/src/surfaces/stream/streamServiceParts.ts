@@ -3,6 +3,7 @@ import type { ShannonChatModel } from '../../infra/models/chatModelContract.js';
 import type { StreamFeeling } from '../../mind/emotion/streamFeeling.js';
 import type { CommentaryFactory } from './streamContract.js';
 import type { StreamGate } from './streamGate.js';
+import type { StreamFeed } from './streamFeed.js';
 import type { StreamMouth } from './streamMouth.js';
 
 /** What the stream place (`StreamService`) is made of: every model, the feeling, the clock and the game are handed in (`wiring/streamWiring.ts`). */
@@ -27,6 +28,8 @@ export interface StreamServiceParts {
   /** The salt of the viewers' digests (the install's). */
   salt?: string;
   mouth?: StreamMouth;
+  /** The comment feed for the stage; made by the service when not handed in (tests hand one in to set its keepalive). */
+  feed?: StreamFeed;
   log?: (line: string) => void;
   /** The wiring's timer calls `tick` every this many ms; none while 0 (tests). */
   tickMilliseconds?: number;

@@ -30,8 +30,11 @@ async function readSse(base: string, path: string, until: (events: SseEvent[], r
   let raw = '';
   const events: SseEvent[] = [];
   const stopAt = Date.now() + milliseconds;
+  // One read stays pending across the polls: a read dropped by the timeout would swallow the next chunk.
+  let pending = reader.read();
   while (Date.now() < stopAt) {
-    const read = await Promise.race([reader.read(), new Promise<null>(resolve => setTimeout(() => resolve(null), 50))]);
+    const read = await Promise.race([pending, new Promise<null>(resolve => setTimeout(() => resolve(null), 50))]);
+    if (read) pending = reader.read();
     if (read && read.value) raw += decoder.decode(read.value);
     events.length = 0;
     for (const block of raw.split('\n\n')) {
@@ -40,6 +43,7 @@ async function readSse(base: string, path: string, until: (events: SseEvent[], r
     }
     if (until(events, raw) || read?.done) break;
   }
+  void pending.catch(() => undefined);
   controller.abort();
   return { events, raw };
 }
@@ -158,6 +162,43 @@ describe('the desktop\'s routes (contract §1)', () => {
       if (!next) break;
       expect(await call('POST', `/v1/stream/lines/${next.id}/receipt`, { outcome: 'skipped', reason })).toMatchObject({ status: 204 });
     }
+  });
+});
+
+describe('every comment as Server-Sent Events (contract §1, /v1/stream/feed)', () => {
+  const comments = (events: SseEvent[]) => events.filter(item => item.event === 'comment').map(item => JSON.parse(item.data) as Record<string, any>);
+
+  it('is for the owner\'s paired device only, as /lines is', async () => {
+    const place = makePlace();
+    const none = await serveRoutes(place, null);
+    opened.push(() => none.close());
+    const other = await serveRoutes(place, { deviceId: 'd2', scopeKey: 'someone-else', displayName: 'x' });
+    opened.push(() => other.close());
+    for (const path of ['/v1/stream/lines', '/v1/stream/feed']) {
+      expect(await none.call('GET', path)).toMatchObject({ status: 401, json: { error: 'STREAM_PAIRING_REQUIRED' } });
+      expect(await other.call('GET', path)).toMatchObject({ status: 403, json: { error: 'STREAM_OWNER_ONLY' } });
+    }
+    expect((await (await ready()).call('POST', '/v1/stream/feed', {})).status).toBe(405);
+  });
+
+  it('sends the state, then the comments the ear brought in order, and resumes after a seq', async () => {
+    const { place, base, call } = await ready();
+    const streamId = (await call('POST', '/v1/stream/start', {})).json!.stream.streamId as string;
+    await place.service.settle();
+    const body = { streamId, comments: [place.comment('こんにちは'), place.comment('シャノン、元気？'), place.comment('やあ')] };
+    expect((await call('POST', '/v1/platform/stream/comments', body)).status).toBe(202);
+    const all = await readSse(base, '/v1/stream/feed', list => comments(list).length >= 3);
+    expect(all.events[0]!.event).toBe('state');
+    expect(JSON.parse(all.events[0]!.data)).toEqual({ streamId, live: true, seq: 3 });
+    expect(comments(all.events).map(item => item.seq)).toEqual([1, 2, 3]);
+    expect(all.raw).toContain('id: 3\nevent: comment');
+    const after = await readSse(base, '/v1/stream/feed?after=2', list => comments(list).length >= 1);
+    expect(comments(after.events).map(item => item.commentId)).toEqual(['c3']);
+    const live = readSse(base, '/v1/stream/feed?after=3', list => comments(list).length >= 1);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    await call('POST', '/v1/platform/stream/comments', { streamId, comments: [place.comment('あとから')] });
+    const got = await live;
+    expect(comments(got.events).map(item => [item.seq, item.text])).toEqual([[4, 'あとから']]);
   });
 });
 

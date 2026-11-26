@@ -97,6 +97,35 @@ data: {"stream":{…}}            (sent on connect and on every phase change)
 **One line at a time.** The head hands the next line only after the previous one's receipt (or 30 s without one). At most 2 lines wait
 behind it; a new `reply` pushes out a waiting `topic`, never another reply; `notice` goes to the front.
 
+### `GET /v1/stream/feed` — every comment, for the stage (Server-Sent Events)
+
+Added 2026-11-27. For the desktop's stage, which wants every comment the ear brought, not only the ones
+she answers. Same auth as `/lines` (the owner's paired device). `?after=<seq>` resumes; with no `after`, `0`, or a number past the last one
+(the head started again) all that is kept is sent. Events:
+
+```
+event: state
+data: {"streamId":"st-…"|null,"live":true,"seq":128}    (on connect, and when the stream starts or ends)
+
+id: 128
+event: comment
+data: {"seq":128,"streamId":"st-…","commentId":"…","viewer":"<digest>","authorName":"…","text":"…","kind":"text|superchat|…",
+       "amount":{"display":"¥1,000","micros":1000000000,"currency":"JPY"},"roles":["member"],"first":true,
+       "status":"new|skipped|ignored","tags":[],"synthetic":true,"at":1764200000000}
+
+: keepalive                                              (every 15 s)
+```
+
+- One `comment` per accepted comment (a repeated id is not sent again), including those the ledger took as `skipped` (stale, a crowd's
+  reaction) or `ignored`; `status` is what it was when it came in. `amount` only for a paid one; `synthetic` only when the ear made the
+  words; `at` is when YouTube says it was written.
+- `seq` rises for as long as the head runs (it does not go back when a stream changes) and starts again from 1 when the head does:
+  a reader that sees `state.seq` below the number it holds reads again without `after`.
+- Relation to §0: the words stay in memory only (the last 2,000 of this stream; the end of the stream drops them and sends `state` with
+  `live: false`), the author's account id is never sent (only the ledger's `viewer` digest), and only the owner's own device can read it.
+  A listener that does not keep up is closed, never waited for (at most 8 at once, the oldest is closed for a ninth); the feed can never
+  slow or fail `POST /v1/platform/stream/comments`.
+
 ### `POST /v1/stream/lines/{id}/receipt`
 
 `{ "outcome": "spoken" | "skipped" | "failed", "startedAt": "…", "endedAt": "…", "reason": "expired|stopped|tts_failed|…" }` → 204.

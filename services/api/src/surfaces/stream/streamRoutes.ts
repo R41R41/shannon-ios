@@ -10,7 +10,7 @@ import type { StreamService } from './streamService.js';
 /**
  * The stream's routes (`docs/stream-contract.md` §1 and §2).
  * - For the owner's paired device (the desktop, her mouth and the console): `POST /v1/stream/start`, `POST /v1/stream/end`, `GET /v1/stream`,
- *   `GET /v1/stream/lines` (Server-Sent Events), `POST /v1/stream/lines/{id}/receipt`, `POST /v1/stream/controls`.
+ *   `GET /v1/stream/lines` (Server-Sent Events), `GET /v1/stream/feed` (every comment, Server-Sent Events), `POST /v1/stream/lines/{id}/receipt`, `POST /v1/stream/controls`.
  * - For the ear (the bridge token, checked by the caller): `GET /v1/platform/stream/state`, `POST /v1/platform/stream/broadcast`,
  *   `POST /v1/platform/stream/comments`, `POST /v1/platform/stream/chat-posts/{id}/receipt`.
  * Neither is behind a switch; with no stream started they answer as if nothing happened (state null, comments 409).
@@ -54,6 +54,13 @@ function desktopRoutes(service: StreamService): Record<string, { method: 'GET' |
       answer: (_request, response, url) => {
         const after = Number(url.searchParams.get('after'));
         service.mouth.subscribe(response, Number.isInteger(after) && after > 0 ? after : 0);
+      },
+    },
+    [`${STREAM_PATH}/feed`]: {
+      method: 'GET',
+      answer: (_request, response, url) => {
+        const after = Number(url.searchParams.get('after'));
+        service.feed.subscribe(response, Number.isInteger(after) && after > 0 ? after : 0);
       },
     },
     [`${STREAM_PATH}/start`]: {

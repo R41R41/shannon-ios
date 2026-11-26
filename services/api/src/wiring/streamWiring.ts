@@ -13,6 +13,7 @@ import type { MinecraftLive } from '../surfaces/minecraft/minecraftLive.js';
 import { StreamGate } from '../surfaces/stream/streamGate.js';
 import { createStreamRoute, handleStreamBridge } from '../surfaces/stream/streamRoutes.js';
 import { streamCommentary } from './streamCommentaryWiring.js';
+import type { StreamFeed } from '../surfaces/stream/streamFeed.js';
 import type { StreamMouth } from '../surfaces/stream/streamMouth.js';
 import { StreamService } from '../surfaces/stream/streamService.js';
 
@@ -46,6 +47,8 @@ export interface StreamWiringParts {
   tickMilliseconds?: number;
   /** Tests: a mouth with its own keepalive and receipt times. */
   mouth?: StreamMouth;
+  /** Tests: a comment feed with its own keepalive time. */
+  feed?: StreamFeed;
 }
 
 /** Her feeling toward the stream: the port's, one over the port's events, or one over a table in memory. */
@@ -73,7 +76,7 @@ export function configuredStream(parts: StreamWiringParts) {
     gate: new StreamGate({ jev: parts.jev, scopeKey: parts.scopeKey }), identity, persona,
     body: () => parts.live?.()?.block({ alone: false }) ?? null, commentary: streamCommentary(() => parts.live?.() ?? null),
     ...(parts.salt ? { salt: parts.salt } : {}),
-    ...(parts.log ? { log: parts.log } : {}), ...(parts.mouth ? { mouth: parts.mouth } : {}), tickMilliseconds: parts.tickMilliseconds ?? 500,
+    ...(parts.log ? { log: parts.log } : {}), ...(parts.mouth ? { mouth: parts.mouth } : {}), ...(parts.feed ? { feed: parts.feed } : {}), tickMilliseconds: parts.tickMilliseconds ?? 500,
   });
   const route = createStreamRoute({ service, ownerScope: parts.scopeKey });
   return {

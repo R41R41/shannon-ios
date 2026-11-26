@@ -37,6 +37,8 @@ export interface BenchOptions {
   streamList?: boolean;
   outDir?: string;
   log?: (line: string) => void;
+  /** Called with the head's base URL once it listens (a stage's reader can be pointed at the bench: `--print-head`). */
+  onHead?: (url: string) => void;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -80,6 +82,7 @@ export async function runBench(options: BenchOptions): Promise<BenchReport> {
   const head = await startBenchHead({ clock, models: options.models, fakeLatencyMilliseconds: options.fakeLatencyMilliseconds,
     ...(options.maxModelCalls ? { maxModelCalls: options.maxModelCalls } : {}), ...(options.log ? { log: options.log } : {}),
     ...(game ? { live: () => game.live as never } : {}) });
+  options.onHead?.(head.url);
   const youtube = new FakeYoutube({ chat, speed: options.speed, now: () => clock.now(), epochMs, ...(options.streamList === false ? { streamList: false } : {}) });
   const youtubeBase = await youtube.start();
   const mouth = new BenchMouth({ base: head.url, clock });
@@ -130,6 +133,7 @@ function parse(argv: readonly string[]): BenchOptions {
     ...(value('ear-cmd') ? { earCommand: value('ear-cmd')! } : {}), ...(value('ear-cwd') ? { earCwd: value('ear-cwd')! } : {}),
     ...(Number.isFinite(maxModelCalls) && maxModelCalls > 0 ? { maxModelCalls } : {}), minecraft: argv.includes('--minecraft'), chatWrites: argv.includes('--chat-writes'), streamList: !argv.includes('--no-stream-list'),
     outDir: resolve(value('out') ?? join(here, 'out')), log: argv.includes('--verbose') ? line => console.error(line) : () => undefined,
+    ...(argv.includes('--print-head') ? { onHead: (url: string) => console.error(`head ${url}`) } : {}),
   };
 }
 

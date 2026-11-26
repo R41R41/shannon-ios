@@ -13,6 +13,7 @@ import { StreamChatPosts } from './streamChatPosts.js';
 import { StreamGameTalk } from './streamGameTalk.js';
 import { StreamLedger, type CommentRecord } from './streamLedger.js';
 import { ModelBudget, StreamMeasure, percentiles } from './streamMeasure.js';
+import { StreamFeed } from './streamFeed.js';
 import { StreamMouth, type MouthEnd } from './streamMouth.js';
 import { STREAM_CLOSINGS, STREAM_GREETINGS, nextTopicSubject } from './streamTopics.js';
 import type { WriterComment, WriterPurpose } from './streamWriter.js';
@@ -42,6 +43,8 @@ const ZERO_COUNTERS = { lines: 0, notices: 0, declined: 0, answered: 0, spoken: 
 
 export class StreamService {
   readonly mouth: StreamMouth;
+  /** Every comment the ear brought, for the stage (`GET /v1/stream/feed`). A side output: it never changes what the stream does. */
+  readonly feed: StreamFeed;
   private session: Session | null = null;
   private ledger = new StreamLedger();
   private readonly budget: ModelBudget;
@@ -64,6 +67,7 @@ export class StreamService {
 
   constructor(private readonly parts: StreamServiceParts) {
     this.mouth = parts.mouth ?? new StreamMouth({ now: parts.now });
+    this.feed = parts.feed ?? new StreamFeed();
     this.budget = new ModelBudget(parts.now);
     this.author = new StreamAuthor({
       scopeKey: parts.scopeKey, now: parts.now, model: parts.model, feeling: parts.feeling, snapshot: parts.snapshot, budget: this.budget,
@@ -96,6 +100,7 @@ export class StreamService {
     this.commentary?.stop();
     this.commentary = null;
     this.mouth.closeAll();
+    this.feed.closeAll();
   }
 
   private crowdLine(): string {
@@ -125,6 +130,7 @@ export class StreamService {
     this.mouth.begin(view.streamId);
     this.startCommentary(session);
     this.mouth.announceState();
+    this.feed.state(view.streamId, true);
     this.track(this.greet(session));
     this.log(`Shannon stream started id=${view.streamId} minecraft=${view.minecraft} chatWrites=${view.chatWrites}`);
     return { created: true, stream: view };
@@ -166,6 +172,7 @@ export class StreamService {
     this.ownLines = [];
     this.chatPosts.clear();
     this.mouth.announceState();
+    this.feed.state(streamId, false);
     this.log(`Shannon stream ended id=${streamId} comments=${summary.comments} answered=${summary.answered} lines=${summary.lines}`);
     return { stream: session.view, summary };
   }
@@ -198,6 +205,8 @@ export class StreamService {
         continue;
       }
       accepted += 1;
+      // The stage gets every comment, whatever becomes of it (the feed swallows its own errors).
+      this.feed.comment(streamId, record, incoming);
       // Every comment moves her at once (closed tags and a digest); a reaction of the crowd is the crowd's, not a viewer's. An event is no speech.
       if (record.event) continue;
       this.parts.feeling.comment(this.parts.scopeKey, {
