@@ -28,7 +28,7 @@ const BLADE = /^(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
 /** Flow design: a part of the request's facts the plan says (`planFacts.request`) for the context of the facts. */
 export const requestFlag = (planFacts: PlanFacts | undefined): { request?: true } => planFacts?.request === true ? { request: true } : {};
 
-interface Seen { id: string; name: string; distance: number; at: { x: number; y: number; z: number } | null }
+interface Seen { id: string; name: string; distance: number; at: { x: number; y: number; z: number } | null; health: number | null }
 const pointOf = (value: unknown): Seen['at'] => {
   const at = rec(value), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
   return x !== null && y !== null && z !== null ? { x, y, z } : null;
@@ -37,7 +37,7 @@ function hostilesOf(world: Record<string, unknown>): Seen[] {
   return (Array.isArray(world.nearbyThreats) ? world.nearbyThreats : []).flatMap(raw => {
     const item = rec(raw), distance = finite(item?.distance);
     if (!item || distance === null || typeof item.name !== 'string') return [];
-    return [{ id: String(item.id ?? ''), name: item.name, distance, at: pointOf(item.position) }];
+    return [{ id: String(item.id ?? ''), name: item.name, distance, at: pointOf(item.position), health: finite(item.health) }];
   });
 }
 const apart = (a: NonNullable<Seen['at']>, b: NonNullable<Seen['at']>): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -62,6 +62,7 @@ export function packLine(world: Record<string, unknown>, night: boolean, request
 
 const WORD_NO_WEAPON = '→ 武器が無いので体は斬らない（体の反射は武器なしの戦いを飛ばす）';
 const WORD_SHORT = '→ 射手へ詰める目安（剣と、盾か鉄の防具 3 部位・体力 10 以上）に届かない';
+const WORD_FIT = '→ 射手 1 体へ詰める目安に届く（群れや体力の多い敵は「打撃数」の行で見る）';
 /** The best sword or axe carried, as 「剣 石」, or null. */
 function weaponOf(counts: ReadonlyMap<string, number>): string | null {
   const blades = [...counts].filter(([name, n]) => n > 0 && BLADE.test(name)).map(([name]) => name);
@@ -94,9 +95,61 @@ export function gearLine(observation: BodyObservation | null, world: Record<stri
   const iron = pieces.filter(name => /^(?:iron|diamond|netherite)_/u.test(name)).length;
   const held = worn.includes('shield'), shield = held ? '構えている' : (counts.get('shield') ?? 0) > 0 ? '持っているが構えていない' : 'なし';
   const health = finite(world.health), fit = !!weapon && (held || iron >= 3) && (health === null || health >= FIGHT_HEALTH);
-  const verdict = !weapon ? WORD_NO_WEAPON : fit ? '→ 射手 1 体へ詰める目安に届く' : WORD_SHORT;
+  const verdict = !weapon ? WORD_NO_WEAPON : fit ? WORD_FIT : WORD_SHORT;
   const exact = carriedFood(world, observation?.facts ?? {}).points, food = Math.round(exact);
   return `戦う装備: ${weapon ?? '武器 なし'}${swordGap(counts, weapon)}・防具 ${pieces.join('・') || 'なし'}（${pieces.length}/4）・盾 ${shield}・食べ物 ${food} 点${cookedWords(counts, exact)} ${verdict}`;
+}
+
+
+/**
+ * 11/26 (the fourth run of the day: four hoglins at once, a wooden sword, health 20 to 0 in about 15 s; the gear line read 「射手 1 体へ詰める目安に届く」 for a wooden sword
+ * and a shield, and no line said how many blows a hoglin takes): what one blow of the sword in the pack takes (the body's table, `SituationScanner.WEAPON_STATS`: wooden and golden 4,
+ * stone 5, iron 6, diamond 7, netherite 8; a bare hand 1) and, for each hostile within `STRIKE_METERS`, its health and the blows that takes. The health is the body's
+ * reading when the row carries one (`health`: the watched kinds, hoglin among them), else the usual full health of the kind (marked 「表」). A measured case: five blows of a wooden
+ * sword took a hoglin from 40 to 22.8. Facts only; what to do with them is the decision's.
+ */
+export const STRIKE_METERS = 16;
+const BLOW: Record<string, number> = { wooden_sword: 4, golden_sword: 4, stone_sword: 5, iron_sword: 6, diamond_sword: 7, netherite_sword: 8,
+  wooden_axe: 7, golden_axe: 7, stone_axe: 9, iron_axe: 9, diamond_axe: 9, netherite_axe: 10 };
+const FULL_HEALTH: Record<string, number> = { zombie: 20, husk: 20, drowned: 20, skeleton: 20, stray: 20, bogged: 16, creeper: 20, spider: 16, cave_spider: 12, witch: 26,
+  hoglin: 40, zoglin: 40, piglin: 16, piglin_brute: 50, zombified_piglin: 20, blaze: 20, wither_skeleton: 20, ghast: 10, enderman: 40, vindicator: 24, pillager: 24 };
+/** The weapon the body takes up (its order: swords first, the best of them; an axe only when there is no sword), as the id; null for none. */
+function blowOf(counts: ReadonlyMap<string, number>): string | null {
+  const have = [...counts].filter(([name, n]) => n > 0 && name in BLOW).map(([name]) => name).sort((a, b) => BLOW[b]! - BLOW[a]!);
+  return have.find(name => name.endsWith('sword')) ?? have[0] ?? null;
+}
+/** Per hostile within `STRIKE_METERS`: 「hoglin #12 体力 40 → 10 打撃」; null when none is near. */
+export function strikeLine(observation: BodyObservation | null, world: Record<string, unknown>): string | null {
+  const near = hostilesOf(world).filter(e => e.distance <= STRIKE_METERS).sort((a, b) => a.distance - b.distance);
+  if (!near.length) return null;
+  const weapon = blowOf(carriedItemCounts(world, observation?.facts));
+  const damage = weapon ? BLOW[weapon]! : 1;
+  const hand = weapon ? `${weaponWords(weapon)}の 1 打撃 ${damage}${weapon.endsWith('axe') ? '（斧は打てる間隔が長い）' : ''}` : '武器なし（素手の 1 打撃 1）';
+  const each = near.slice(0, 5).map(e => {
+    const health = e.health ?? FULL_HEALTH[e.name] ?? null, name = `${e.name}${e.id ? ` #${e.id}` : ''} ${Math.round(e.distance)}m`;
+    if (health === null) return { text: `${name} 体力不明`, hits: 0 };
+    const hits = Math.ceil(health / damage);
+    return { text: `${name} 体力 ${Math.round(health * 10) / 10}${e.health === null ? '（表）' : ''} → ${hits} 打撃`, hits };
+  });
+  const hits = each.reduce((sum, item) => sum + item.hits, 0);
+  const words = each.map(item => item.text).join('・');
+  const rest = near.length > 5 ? `（ほか ${near.length - 5} 体）` : '';
+  const measured = weapon === 'wooden_sword' ? '。実測: 木の剣 5 打撃でホグリン 40 → 22.8（1 打撃約 3.4）' : '';
+  return `打撃数（${hand}）: ${words}${rest}${each.length > 1 ? `・合わせて ${hits} 打撃` : ''}${measured}`;
+}
+const weaponWords = (id: string): string => `${id.endsWith('sword') ? '剣' : '斧'} ${MATERIAL[id.split('_')[0]!] ?? ''}`;
+
+/** A shield below a third of its life is said as 「盾 残り 22/336」; the worn one (the off hand, `worn`: 「左手: shield(残り 22/336)」) first, else a carried one (耐久 in the pack). */
+export const SHIELD_LOW_FRACTION = 1 / 3;
+export function shieldLine(world: Record<string, unknown>): string | null {
+  const worn = /左手:\s*(?:minecraft:)?shield\(残り(\d+)\/(\d+)\)/u.exec(typeof world.worn === 'string' ? world.worn : '');
+  const packed = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
+    const item = rec(raw), durability = rec(item?.durability), left = finite(durability?.left), max = finite(durability?.max);
+    return item && /^(?:minecraft:)?shield$/u.test(String(item.name)) && left !== null && max !== null ? [{ left, max }] : [];
+  })[0];
+  const shield = worn ? { left: Number(worn[1]), max: Number(worn[2]), held: true } : packed ? { ...packed, held: false } : null;
+  if (!shield || shield.max <= 0 || shield.left >= shield.max * SHIELD_LOW_FRACTION) return null;
+  return `盾 残り ${shield.left}/${shield.max}（${shield.held ? '構えている盾' : '持っている盾'}。1/3 を切っている）`;
 }
 
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */
@@ -191,5 +244,5 @@ export function waterLine(world: Record<string, unknown>): string | null {
 export function fightLines(observation: BodyObservation | null, request: boolean): string[] {
   const world = rec(observation?.state.world);
   if (!world) return [];
-  return [packLine(world, nightly(world), request), gearLine(observation, world), waterLine(world)].filter((line): line is string => !!line);
+  return [packLine(world, nightly(world), request), gearLine(observation, world), strikeLine(observation, world), shieldLine(world), waterLine(world)].filter((line): line is string => !!line);
 }
