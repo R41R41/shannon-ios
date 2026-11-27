@@ -205,7 +205,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         maxPlace: { type: 'integer', minimum: 0, maximum: 100 },
         seconds: { type: 'number', minimum: 0.5, maximum: 300, description: SECONDS_LIMITS },
         charge: { type: 'number', minimum: 0.2, maximum: 3 },
-        n: { type: 'integer', minimum: 1, maximum: 16 },
+        n: { type: 'integer', minimum: 1, maximum: 32, description: 'pillarUp: 登る段（32 まで。体は 32 に丸める）。shoot: 本数（8 に収める）。jump: 回数' },
         sprint: { type: 'boolean' },
         range: { type: 'number', minimum: 0, maximum: 48, description: RANGE_LIMITS },
         slot: { type: 'string', enum: [...EQUIP_SLOTS] },
