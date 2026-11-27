@@ -41,12 +41,14 @@ describe('the height line on a wide obsidian top with no footing line', () => {
   it('says the ground, the steps and the three ways down with their costs, with caged crystals 2 and a drop of 40', () => {
     const line = linesOf(true).find(item => item.startsWith('高所:'))!;
     expect(line).toContain('足の下は y=102 の黒曜石（幅の広い天辺。地図の範囲で 81 マス以上）、地面は約 y=64（待ち場の高さからの見積もり）で 39 段');
-    expect(line).toContain('(a) 飛び降り＝go に maxDrop=42 を付けて');
-    expect(line).toContain('実走で着水を確かめた最大は総落差 25m で被害 0、ラボは 90m');
+    expect(line).toContain('(a) 飛び降り＝go 4,65,11 range=3 maxDrop=42（待ち場の候補か地面の足場へ');
+    expect(line).toContain('実走 3 回（総落差 25・17・13m）はすべて被害 0、ラボは垂直 10・25・90m を各 1 回で成功。今の 39m はラボの範囲内で、実走ではこの高さは未経験');
+    expect(line).toContain('水で止められなかった時（水を置けない・外れ。実績は 0 回）は約 36 の被害');
+    expect(line).toContain('火の玉が飛んでいる入力（「火の玉:」の行がある間）と、息の雲が足元にある入力では出さず、行が無い次の入力で出す');
     expect(line).toContain('(b) 掘って降りる＝vertical down shaft y=64 dig=obsidian liquid=stop で 38 段・約 357 秒');
     expect(line).toContain('黒曜石は 1 段 1 使いで足りない（必要 38・残り 3）');
     expect(line).toContain('降りる・逃げる命が先: 降りるのに使ってよい');
-    expect(line).toContain('(c) 待つ＝その場で受けた被害の実績');
+    expect(line).toContain('(c) 待つ＝高所に長居した実走 2 回はどちらも死んだ（落下 1・息の雲 1）');
     expect(line).not.toContain('最後の手');
     // The line leads the fight lines, and the wait line says the feet are above the waiting cells.
     expect(linesOf(true)[0]).toBe(line);
@@ -64,7 +66,7 @@ describe('the height line on a wide obsidian top with no footing line', () => {
   it('a bucket in the pack or hand changes the sentence: no bucket says water cannot stop the fall', () => {
     const withBucket = linesOf(true).find(item => item.startsWith('高所:'))!;
     const without = linesOf(false).find(item => item.startsWith('高所:'))!;
-    expect(withBucket).toContain('水バケツが手か hotbar（荷にあるだけなら先に equip）');
+    expect(withBucket).toContain('先に同じ act の頭に equip water_bucket');
     expect(without).toContain('(a) 飛び降り＝水バケツが荷に無いので水で止められない');
     expect(without).not.toContain('maxDrop=');
   });

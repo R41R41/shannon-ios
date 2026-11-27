@@ -524,9 +524,12 @@ export function descentLine(end: EndView | null, view: Pick<HeightView, 'basis' 
   const stay = view?.minutes !== null && view?.minutes !== undefined && (view.minutes >= 0.5 || view.hits > 0)
     ? `。ここに ${view.minutes} 分居て、体力が減った回数 ${view.hits}・合計 ${view.lost}（入力と入力の間で数えた）` : '';
   const cap = Math.min(MAX_DROP_CAP, drop + 3);
+  const cell = [...(end.dragon?.approach?.wait ?? [])].sort((x, y) => (x.walkMeters ?? Infinity) - (y.walkMeters ?? Infinity))[0];
+  const target = cell ? `${Math.floor(cell.x)},${Math.floor(cell.y)},${Math.floor(cell.z)} range=3` : '<地面の足場> range=3';
   const fall = ctx?.bucket
-    ? `(a) 飛び降り＝go に maxDrop=${cap} を付けて待ち場か地面の足場へ（水バケツを体が使う。約 3 秒。実走で着水を確かめた最大は総落差 ${FALL_SEEN_METRES}m で被害 0、ラボは ${FALL_LAB_METRES}m。`
-      + `条件: 水バケツが手か hotbar（荷にあるだけなら先に equip）・真下が固い床・体力が十分・火の玉や息の雲の最中でない。外れれば ${Math.max(0, drop - 3)} の被害で、20 を超えると即死）`
+    ? `(a) 飛び降り＝go ${target} maxDrop=${cap}（待ち場の候補か地面の足場へ。水バケツが手か hotbar に無ければ、先に同じ act の頭に equip water_bucket）。体が落ちる途中、地面の約 4m 手前で床へ水を置いて着水する（約 3 秒）。`
+      + `着水の実績: 実走 3 回（総落差 ${FALL_SEEN_METRES}・17・13m）はすべて被害 0、ラボは垂直 10・25・${FALL_LAB_METRES}m を各 1 回で成功。今の ${drop}m はラボの範囲内で、実走ではこの高さは未経験。`
+      + `水で止められなかった時（水を置けない・外れ。実績は 0 回）は約 ${Math.max(0, drop - 3)} の被害で、20 を超えると即死。条件: 真下が固い床・体力が十分。火の玉が飛んでいる入力（「火の玉:」の行がある間）と、息の雲が足元にある入力では出さず、行が無い次の入力で出す（竜が phase 1 のままでも、玉が飛んでいない入力は続く）`
     : '(a) 飛び降り＝水バケツが荷に無いので水で止められない（20 ブロックで被害 17、それ以上は死ぬ）';
   const steps = Math.max(1, drop - 1), obsidian = ctx?.underSymbol === 'O';
   const seconds = obsidian ? Math.round(steps * OBSIDIAN_SECONDS) : ctx?.underSymbol === 'E' ? Math.round(steps * END_STONE_SECONDS) : null;
@@ -535,7 +538,7 @@ export function descentLine(end: EndView | null, view: Pick<HeightView, 'basis' 
   const short = obsidian && (ctx?.pickaxe?.left ?? 0) < steps;
   const shaft = `(b) 掘って降りる＝vertical down shaft y=${ground}${dig ? ` dig=${dig}` : ''} liquid=stop で ${steps} 段${seconds !== null ? `・約 ${seconds} 秒` : ''}（${pick}`
     + `${short ? `。黒曜石は 1 段 1 使いで足りない（必要 ${steps}・残り ${ctx?.pickaxe?.left ?? 0}）` : ''}）。ダイヤの残りは黒曜石用だが、降りる・逃げる命が先: 降りるのに使ってよい`;
-  const wait = `(c) 待つ＝その場で受けた被害の実績（${view?.minutes ?? 0} 分で ${view?.hits ?? 0} 回・合計 ${view?.lost ?? 0}）。この天辺にも火の玉と息の雲は来る（雲の中から歩いて出る道が無い時がある）`;
+  const wait = `(c) 待つ＝高所に長居した実走 2 回はどちらも死んだ（落下 1・息の雲 1）。今回はここに ${view?.minutes ?? 0} 分居て、体力が ${view?.hits ?? 0} 回減り合計 ${view?.lost ?? 0}。この天辺にも火の玉と息の雲は来て、雲の中から歩いて出る道が無い時がある。ここからは座りに間に合わず剣もベッドも届かない`;
   return `${head}${stay}。降りる手と費用: ${fall}／${shaft}／${wait}`;
 }
 
