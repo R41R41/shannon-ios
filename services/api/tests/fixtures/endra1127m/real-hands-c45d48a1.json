@@ -1,0 +1,100 @@
+[
+  {
+    "decision": "d0090",
+    "model": "claude-haiku-5-5",
+    "recordedRefusal": "引数が mc.act の形に合わない: 手2（go）の maxDrop は 0〜10（今は 32）",
+    "input": {
+      "hands": [
+        {
+          "do": "equip",
+          "slot": "hand",
+          "item": "water_bucket"
+        },
+        {
+          "do": "go",
+          "maxDrop": 32,
+          "range": 3,
+          "seconds": 40,
+          "canPlace": [
+            "end_stone",
+            "cobblestone"
+          ],
+          "to": {
+            "x": 3,
+            "y": 66,
+            "z": -12
+          }
+        }
+      ],
+      "why": "[p2] 結晶は矢が無く柱登りは遠い。竜が止まり木へ降りる今、待ち場へ降りて座りに間に合わせる",
+      "thought": "柱の上から地面の待ち場へ水バケツで着水して降りる。竜は遠い。",
+      "stopIf": {
+        "hpBelow": 12
+      }
+    }
+  },
+  {
+    "decision": "d0097",
+    "model": "claude-haiku-5-5",
+    "recordedRefusal": "引数が mc.act の形に合わない: 手1（go）の canDig は 1〜12 個（今は 0 個）",
+    "input": {
+      "hands": [
+        {
+          "do": "go",
+          "maxDrop": 10,
+          "maxPlace": 40,
+          "range": 4,
+          "seconds": 90,
+          "canDig": [],
+          "canPlace": [
+            "end_stone",
+            "cobblestone"
+          ],
+          "to": {
+            "x": 7,
+            "y": 65,
+            "z": -10
+          }
+        }
+      ],
+      "why": "[n1] 降りる道を地面の待ち場へ。竜は 68m で周回中のうちに、置く石で段を作って下りる",
+      "thought": "竜が遠い今のうちに、石を置きながら地面へ下りる。",
+      "stopIf": {
+        "hpBelow": 12
+      }
+    }
+  },
+  {
+    "decision": "d0102",
+    "model": "claude-haiku-5-5",
+    "recordedRefusal": "引数が mc.act の形に合わない: 手2（go）の maxDrop は 0〜10（今は 36）",
+    "input": {
+      "hands": [
+        {
+          "do": "equip",
+          "item": "water_bucket"
+        },
+        {
+          "do": "go",
+          "range": 3,
+          "maxDrop": 36,
+          "seconds": 60,
+          "canPlace": [
+            "end_stone",
+            "cobblestone"
+          ],
+          "to": {
+            "x": 3,
+            "y": 66,
+            "z": -12
+          }
+        }
+      ],
+      "why": "[n1] 矢0のため結晶#1は登れず、弓も無い。水バケツで地面の待ち場へ飛び降り、止まり木の竜の座りに備える",
+      "thought": "水バケツを手に持ち、地面の待ち場へ降りる。",
+      "stopIf": {
+        "hpBelow": 12
+      }
+    }
+  }
+]

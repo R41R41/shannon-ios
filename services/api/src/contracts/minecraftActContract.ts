@@ -95,7 +95,7 @@ export const ACT_DESCRIPTION = [
   '体に小さな手を最大12個まとめて頼む。体は順に動かし、手ごとに思ったとおりか確かめ、外れたら（失敗・反射・stopIf・満杯）そこで止めて、手ごとの1行と新しい地図を返す。',
   '体は自分で決めない: 回り道・置き場所・道具作り・片づけ・夜の睡眠・戦うかどうかは、あなたが地図と状態を見て手で出す。',
   '手（do）と引数: walk(to か path, sprint, range: 掘らない・置かない。段差1と泳ぎだけ。地図の外の遠い点は64mごとに区切って歩き、掘る所で止まる) / '
-    + ("go(to か goals: 行き先（goals は候補のマス 2〜8、どれか 1 つに着けば済み）, canDig: 掘ってよい物, canPlace: 置いてよい物, maxDrop, waterOk, " +
+    + ("go(to か goals: 行き先（goals は候補のマス 2〜8、どれか 1 つに着けば済み）, canDig: 掘ってよい物, canPlace: 置いてよい物, maxDrop（10 まで。11 以上はエンドだけで、水バケツ・体力 18 以上・竜の攻撃が届いていない時。70 まで）, waterOk, " +
 "seconds, maxDig, maxPlace: これらは上限で、既定は 60 秒・掘る 40・置く 24。長い道や厚い石では足す。上限に届くと着かずに止まって返る。")
     + '道は体が引く。許した物だけ掘り・置いて着くまで歩く。溶岩は避ける) / '
     + ("dig(at: 順に掘る（草・サトウキビ・花も指せば壊す。落ちた物は拾う）, tool, collect, exposeOk: 敵に見られても掘る, takeOk: 村の物も掘る) / place(block, at, face) / pillarUp(n: " +
@@ -190,7 +190,7 @@ export const ACT_INPUT_SCHEMA = Object.freeze({
         goals: { type: 'array', minItems: 2, maxItems: 8, items: pos('行き先の候補'), description: 'go の行き先の候補（どれか 1 つに着けば済み）' },
         canDig: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string', maxLength: 40 }, description: 'go で掘ってよい物（id か stone・dirt・sand・wood）' },
         canPlace: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', maxLength: 40 }, description: 'go で置いてよい物（足場・橋・柱）' },
-        maxDrop: { type: 'integer', minimum: 0, maximum: 10 },
+        maxDrop: { type: 'integer', minimum: 0, maximum: 70, description: 'go: 一度に落ちてよい段（10 まで）。11 以上はエンドだけ: 水バケツが hotbar か手に有り・体力 18 以上・竜の火の玉や息の雲が体に届いていない時に、着水で止まる見込みで 70 まで降りる。条件が欠けると降りずに欠けた条件を返す。現世・ネザーは 10 まで' },
         waterOk: { type: 'boolean' },
         den: { type: 'object', additionalProperties: false, required: ['entrance', 'direction'], description: DEN_DESCRIPTION, properties: {
           entrance: { type: 'object', additionalProperties: false, required: ['x', 'y', 'z'],

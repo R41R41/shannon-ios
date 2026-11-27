@@ -29,7 +29,7 @@ describe('the End fallback alongside the main bed plan', () => {
     const messages = JSON.stringify(calls[0]!.messages);
     for (const fact of ['手か hotbar に水バケツがあり', '実走で水を置いて被害 0 だった最大は総落差 25m', '垂直 10・25・90m を各 1 回',
       'pack の水バケツは落ちる間に出せないので、先に equip', '未確認: 虚空・未読地形・横の押し・敵との接触',
-      'go の目録の maxDrop が 10 までなら体は旧版', '計画的に降りる手は 3 つ', '飛び降りを最後の手とも、避ける手とも決めつけず']) expect(messages).toContain(fact);
+      'go の目録の maxDrop に「11 以上はエンドだけ」の書きが無く 10 までなら体は旧版', '降りずに欠けた条件を返す', '計画的に降りる手は 3 つ', '飛び降りを最後の手とも、避ける手とも決めつけず']) expect(messages).toContain(fact);
     expect(messages).not.toContain('今は働かない前提');
   });
 
