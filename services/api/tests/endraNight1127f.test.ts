@@ -37,6 +37,16 @@ describe('(1) the pearl fact stands up from the gap, not from the node\'s kind',
     // the bed's own night line (the endgame's) is given the same fact
     expect(nightBedLine({ ...world({ timeOfDay: 14000 }) }, counts(PACK), 'overworld', true)).toContain(WORD);
   });
+  it('(a1) the brief day line (said most of the time; the full one once in 8 minutes) carries the word too', () => {
+    const brief = dayBedLine(world(), counts(PACK), 'overworld', true, false, true)!;
+    expect(brief).toContain(WORD);
+    expect(brief).toContain('夜に地表で待つ時の事実');
+    expect(dayBedLine(world(), counts(PACK), 'overworld', false, false, true)).not.toContain(WORD);
+    // while the pearls are short the sentence that asks for a sleep booking ("be on the surface at night: book it") is not said; the sleep-only hands stay refused
+    expect(brief).not.toContain('夜に地上で動く予定なら sleep');
+    expect(brief).toContain('sleep だけの手（drop；sleep など作業の無い手）を入れない');
+    expect(dayBedLine(world(), counts(PACK), 'overworld', false, false, true)).toContain('夜に地上で動く予定なら sleep');
+  });
   it('(a2) the gap is the empty frames (the frames seen less the eyes in them) less the pearls and eyes carried: 11 empty, 10 eyes, 1 pearl is no gap', () => {
     expect(parts(renamed(), world({ inventory: inventory({ ...PACK, ender_pearl: 1 }) })).planNow).not.toContain(WORD);
   });
@@ -72,7 +82,7 @@ describe('(2) the day line gives the reason and what the day has shown', () => {
     notePearlWatch('t', world(), 'overworld', t0 + 20_000);
     expect(enderSeenWords('t')).toBeNull();
     for (let i = 2; i <= 12; i += 1) notePearlWatch('t', world(), 'overworld', t0 + i * 20_000);
-    expect(enderSeenWords('t')).toBe('この実走で昼に見えたエンダーマン: 0 体（昼の観測 約 4 分。見える範囲だけの数）');
+    expect(enderSeenWords('t')).toBe('この実走で昼に見えたエンダーマン: 0 体（昼の観測 約 4 分。見える範囲だけの数。地上のエンダーマンは夜に出るので、昼に見えないのは普通）');
     notePearlWatch('t', world({ nearbyEntities: [{ id: 9, name: 'enderman', kind: 'neutral', distance: 20, position: { x: 1, y: 70, z: 1 } }] }), 'overworld', t0 + 13 * 20_000);
     expect(enderSeenWords('t')).toContain('1 体');
     const seen = enderSeenWords('t');
@@ -91,8 +101,9 @@ describe('(3) while the night is near: the shortages that can be moved, from the
   it('gives no estimate of time and does not say these replace the wait; they are the checks that are fine behind the stronghold', () => {
     expect(line).not.toMatch(/間に合|足りる|余裕|十分|で済む|何分/u);
     expect(line).not.toMatch(/代わりに|やるべき|先にやる/u);
-    expect(line).toContain('要塞の後ろ・道中で取れる分でよい');
-    expect(line).toContain('待つ以外の手として進められる不足');
+    expect(line).toContain('要塞の後ろ・道中で取れる分でよく');
+    expect(line).toContain('この待ちの間に進められる不足');
+    expect(line).toContain('パールはエンダーマンが湧く夜まで入らず');
   });
   it('is silent when the pearls are not the now, the night is far, it is night already, or nothing is short', () => {
     expect(nightMeanwhileLine(world({ timeOfDay: 8200 }), counts(PACK), 'overworld', false)).toBeNull();
@@ -102,7 +113,7 @@ describe('(3) while the night is near: the shortages that can be moved, from the
   });
   it('is in the live now of the renamed pearl node while the dusk comes', () => {
     const planNow = parts(renamed(), world({ timeOfDay: 8200 })).planNow!;
-    expect(planNow).toContain('待つ以外の手として進められる不足');
+    expect(planNow).toContain('この待ちの間に進められる不足');
     expect(planNow).toContain('パールの主な入手先は、エンダーマンが湧く夜の地上');
   });
 });
@@ -117,6 +128,11 @@ describe('(4) the animals last seen, and the body\'s reply to the same refusal',
     expect(line).toContain('羊 (530,70,1620) 約 3 分前・ここから 32 m');
     expect(line).toContain('豚 (500,70,1580) 約 3 分前・ここから 19 m');
     expect(animalsLine('nobody', world(), t0)).toBeNull();
+    // a cow seen 1,000 m away or a sheep seen 25 minutes ago is not a place to look for one now
+    notePearlWatch('far', world({ nearbyEntities: [{ id: 3, name: 'cow', distance: 5, position: { x: 508 + 1000, y: 70, z: 1597 } }] }), 'overworld', t0);
+    expect(animalsLine('far', world(), t0 + 1000)).toBeNull();
+    notePearlWatch('old', seen, 'overworld', t0);
+    expect(animalsLine('old', world(), t0 + 25 * 60_000)).toBeNull();
     const out = parts(renamed(), world(), {});
     expect(out.animals).toBeUndefined();
   });

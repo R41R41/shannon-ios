@@ -186,6 +186,12 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
  * now and then (the caller decides), and the rule against a sleep standing in for work is in both, with its reason.
  */
 const NO_SLEEP_FOR_WORK = '寝られるまで 7 分以上ある間は、sleep だけの手（drop；sleep など作業の無い手）を入れない（理由: 昼は sleep だけでは寝られず、その分作業が進まない）。夜に地上で動く予定なら sleep を作業の act の先頭か末尾に 1 手入れる（夜になり次第、体が次の手の前で寝る。待たなくてよい）';
+/**
+ * 11/27 (bench of the pearl night, Haiku): with the pearl word at the tail of this paragraph, 3 of 6 inputs still booked `sleep seconds=45` for the night the pearl was to be hunted in: the
+ * paragraph's own sentence just before it (「夜に地上で動く予定なら sleep を…入れる」) reads as 「be on the surface at night → book the sleep」, the opposite of the hunt. While the pearls are short the
+ * word comes first, right after the node, and the sentence that asks for a booking is not said (the sleep-only hands stay refused, with their reason).
+ */
+const NO_SLEEP_ONLY = '寝られるまで 7 分以上ある間は、sleep だけの手（drop；sleep など作業の無い手）を入れない（理由: 昼は sleep だけでは寝られず、その分作業が進まない）';
 export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow = false, nether = true, brief: boolean | (() => boolean) = false): string | null {
   if (dimension !== 'overworld' || thunderstorm(world)) return null;
   const tick = dayTick(world);
@@ -194,8 +200,11 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   if (noSleepSpot(world)) return AFLOAT_NO_SLEEP;
   const left = BED_FROM - tick;
   const facts = `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない${netherShare(left, nether)}`;
+  // 11/27: the brief line had no pearl word (the full one is said once in 8 minutes), so the night's "not asleep" fact was out of most inputs; it is said in both while the pearls are short.
+  const pearl = pearlNightWord(world, counts, pearlNow);
+  if (pearl) return `${facts}。今の節を進める${pearl}。${NO_SLEEP_ONLY}`;
   if (typeof brief === 'function' ? brief() : brief) return `${facts}。今の節を進める。${NO_SLEEP_FOR_WORK}。夜を使う依頼や人が寝ないと言った時は予約しない`;
-  return `${facts}。${NO_SLEEP_FOR_WORK}。今の節を進める。予約の理由: 夜の地上は敵が増えて危なく、寝れば夜が飛んで朝になる。夜を使う依頼・節（夜に湧く敵を倒す・夜に急ぐ）や、人が寝ないと言った時は入れない（${SLEEP_SKIP} で予約を消せる）。夜を使わない依頼（ケーキ・羊毛・道具づくり）は入れてよい。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒）${pearlNightWord(world, counts, pearlNow)}`;
+  return `${facts}。${NO_SLEEP_FOR_WORK}。今の節を進める。予約の理由: 夜の地上は敵が増えて危なく、寝れば夜が飛んで朝になる。夜を使う依頼・節（夜に湧く敵を倒す・夜に急ぐ）や、人が寝ないと言った時は入れない（${SLEEP_SKIP} で予約を消せる）。夜を使わない依頼（ケーキ・羊毛・道具づくり）は入れてよい。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒）`;
 }
 
 /**

@@ -69,11 +69,14 @@ export function notePearlWatch(taskId: string | undefined, world: Record<string,
 export function forgetPearlWatch(): void { watches.clear(); }
 
 const MIN_WATCH_MS = 3 * 60_000;
+/** An animal seen farther than this from where she stands, or longer ago than this, is not a place to look for one now. */
+const ANIMAL_NEAR_M = 200, ANIMAL_FRESH_MS = 20 * 60_000, ANIMALS_SHOWN = 3;
 /** What the day has shown of endermen: how many were seen, over how long the daytime was watched. Null until 3 minutes of day were watched. */
 export function enderSeenWords(taskId: string | undefined): string | null {
   const watch = taskId ? watches.get(taskId) : undefined;
   if (!watch || watch.dayMs < MIN_WATCH_MS) return null;
-  return `この実走で昼に見えたエンダーマン: ${watch.dayEnderIds.size} 体（昼の観測 ${minutes(watch.dayMs / 50)}。見える範囲だけの数）`;
+  // Bench of 11/27 (Haiku): said bare, 「昼に 0 体」 was read as 「there are none, so sleep」; it is a fact about the day, and the game's rule it fits (they come out at night) goes with it.
+  return `この実走で昼に見えたエンダーマン: ${watch.dayEnderIds.size} 体（昼の観測 ${minutes(watch.dayMs / 50)}。見える範囲だけの数。地上のエンダーマンは夜に出るので、昼に見えないのは普通）`;
 }
 
 /**
@@ -110,7 +113,10 @@ export function nightMeanwhileLine(world: Record<string, unknown>, counts: Reado
   const arrows = countMatching(counts, ARROWS.pattern);
   if (arrows < ARROWS.count) parts.push(`矢 あと ${ARROWS.count - arrows}（今 ${arrows}/${ARROWS.count}。材料 羽根 ${carried(counts, 'feather')}・火打石 ${carried(counts, 'flint')}・棒 ${carried(counts, 'stick')}）`);
   if (!parts.length) return null;
-  return `夜まで ${minutes(NIGHT_FROM - tick)}。待つ以外の手として進められる不足（材料の手持ちを添える）: ${parts.join('・')}。どれも点検物で、要塞の後ろ・道中で取れる分でよい（遠くへ往復して取る物ではない）`;
+  // The bench of 11/27 (Haiku, 6 each): said as 「点検物で…遠くへ往復して取る物ではない」 alone the line was read as 「not needed」 and 18 of 18 inputs waited or booked a sleep; the pearls
+  // is held by the night, which is the reason a hand outside the node is not off the plan, and that is said first. The owner's decision (checks behind the stronghold are enough) stays in the line.
+  return `夜まで ${minutes(NIGHT_FROM - tick)}。パールはエンダーマンが湧く夜まで入らず、待つだけでは なにも進まない。この待ちの間に進められる不足（材料の手持ちを添える）: ${parts.join('・')}。`
+    + '節の外の手でも計画から外れない（待ち時間に進められる分）。点検物なので要塞の後ろ・道中で取れる分でよく、遠くへ往復する物ではない';
 }
 
 /**
@@ -124,7 +130,9 @@ export function animalsLine(taskId: string | undefined, world: Record<string, un
   if (inView || !watch.animals.size) return null;
   const at = world.position && typeof world.position === 'object' ? world.position as Record<string, unknown> : null;
   const px = finite(at?.x), pz = finite(at?.z);
-  const seen = [...watch.animals.values()].sort((a, b) => b.at - a.at).map(animal => {
+  const fresh = [...watch.animals.values()].filter(animal => nowMs - animal.at <= ANIMAL_FRESH_MS && (px === null || pz === null || Math.hypot(animal.x - px, animal.z - pz) <= ANIMAL_NEAR_M));
+  if (!fresh.length) return null;
+  const seen = fresh.sort((a, b) => b.at - a.at).slice(0, ANIMALS_SHOWN).map(animal => {
     const far = px !== null && pz !== null ? `・ここから ${Math.round(Math.hypot(animal.x - px, animal.z - pz))} m` : '';
     return `${ANIMAL_JA[animal.name] ?? animal.name} (${animal.x},${animal.y},${animal.z}) ${minutes((nowMs - animal.at) / 50)}前${far}`;
   });
