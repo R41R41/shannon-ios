@@ -27,9 +27,9 @@ describe('the End fallback alongside the main bed plan', () => {
     expect(system).toContain('for a wither skeleton 3 levels');
     expect(system).toContain('Also check the headroom for a jump');
     const messages = JSON.stringify(calls[0]!.messages);
-    for (const fact of ['対応版で有効な時だけ', '手・hotbar の水', '垂直 10・25・90m を各 1 回',
-      'pack からの自動装備はしない', '虚空・未読地形・横の押し・敵との接触・実戦での救命は未保証',
-      '旧無効版や有効状態が未確認なら頼らない', '計画的な下降', '水を置かずに跳び降りない']) expect(messages).toContain(fact);
+    for (const fact of ['手か hotbar に水バケツがあり', '実走で水を置いて被害 0 だった最大は総落差 25m', '垂直 10・25・90m を各 1 回',
+      'pack の水バケツは落ちる間に出せないので、先に equip', '未確認: 虚空・未読地形・横の押し・敵との接触',
+      'go の目録の maxDrop が 10 までなら体は旧版', '計画的に降りる手は 3 つ', '飛び降りを最後の手とも、避ける手とも決めつけず']) expect(messages).toContain(fact);
     expect(messages).not.toContain('今は働かない前提');
   });
 

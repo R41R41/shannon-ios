@@ -266,7 +266,9 @@ function wearProblem(form: Form, seen: Seen, need: number | null, tier: number, 
   const kept = tier < 4 && picks.some(stack => stack.name === 'diamond_pickaxe') ? 'ダイヤは黒曜石用に残る（黒曜石を壊せるのはダイヤだけ）。' : '';
   const reach = fit.length ? `この${label}は${TIER_WORD[level]}の階級以上で足りる（見込み ${need} 回）が、その階級の残りは合わせて ${left}。`
     : `この${label}は${TIER_WORD[level]}のツルハシ以上が要る（見込み ${need} 回）が、荷にその階級が無い。`;
-  return { code: 'pickaxe_wear', line: `荷のツルハシ: ${packPicks(picks)}。${reach}${kept}${how}` };
+  // 11/27: a dig down that the diamond pickaxe cannot finish (3 of 1561 left for 38 obsidian) said only to make a spare, and the head copied 「降りられない」 for 30 decisions: the other ways down stand in the same sentence.
+  const other = label === '下りの掘り' && String(form.world.dimension ?? '').replace(/^minecraft:/u, '') === 'the_end' ? `。掘って降りるには足りない（必要 ${need}・残り ${left}）。別の降り方: 水バケツで着水する飛び降り（go に maxDrop。水バケツは手か hotbar に）・待つ（降りる手の費用は live の「高所:」の行）。ダイヤの残りは降りる・逃げる命が先で、黒曜石でなく降りるのに使ってよい` : '';
+  return { code: 'pickaxe_wear', line: `荷のツルハシ: ${packPicks(picks)}。${reach}${kept}${how}${other}` };
 }
 
 /** An eat while the hunger bar is full (20/20), when no hand before it in the act uses the bar up. */

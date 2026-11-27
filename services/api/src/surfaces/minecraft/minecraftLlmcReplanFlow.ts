@@ -148,7 +148,8 @@ export function createReplanFlow(deps: ReplanDeps) {
     const last = [...ledger.last].reverse().find(item => item.node === node);
     const since = last ? `（最後の立て直しから ${Math.max(0, Math.round((deps.clock() - last.at) / 60_000))} 分、まだ進んでいない）` : '';
     offer(deps.taskId, `replan_node:${node}:${Math.floor(deps.clock() / NODE_RETELL_MS)}`, `節 ${node} の立て直しは上限 ${REPLAN.perNode} 回を使い切った${since}。`
-      + 'この節にはもう新しい計画は来ない。同じ手を続けず、直近の結果から進まない理由を考え、自分で plan.update で節を割り直すか別の手段の節に替えるか、blocked にして別の節へ移る');
+      + 'この節にはもう新しい計画は来ない（動かなくてよいという意味ではない: 手は自分で選ぶ）。同じ手（待つ・同じ go の出し直し）を続けない。次のどれかを選ぶ: ①今の入力にある別の手を出す（高所なら「高所:」の行の降りる手、地上なら待ち場・近づく手）、'
+      + '②直近の結果から進まない理由を書き、plan.update で節を割り直すか別の手段の節に替える、③blocked にして別の節へ移る');
   };
   /**
    * The hour's count is used up (`REPLAN.perHour`): the decision is told when the next new plan can come and that until then the plan is hers to

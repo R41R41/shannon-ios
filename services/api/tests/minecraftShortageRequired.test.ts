@@ -262,15 +262,15 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(lines('stronghold')).toContain('cover_none');
     const end = lines('end');
     for (const word of ['go to=島の上のマス canPlace=["cobblestone"] maxPlace=100 seconds=120', 'go 止まった dead_end: 道の先が竜の息の雲の中で', 'dragonBreath が空になる',
-      '高い足場で待つか、別の側から', '表彰台から 5〜12m', '水の入ったバケツ（鉄 3）', '20 ブロックで被害 17、それ以上で死ぬ', '対応版で有効な時だけ', '手・hotbar の水', '垂直 10・25・90m を各 1 回', '計画的な下降',
+      '高い足場で待つか、別の側から', '表彰台から 5〜12m', '水の入ったバケツ（鉄 3）', '20 ブロックで被害 17、それ以上で死ぬ', '手か hotbar に水バケツがあり', '実走で水を置いて被害 0 だった最大は総落差 25m', '垂直 10・25・90m を各 1 回', '計画的に降りる手は 3 つ',
       '144 秒で死んだ', '3 回積んで上がり（96→99）被害 0', '柱と足場はエンドストーンか丸石で積み、黒曜石では積まない', '柱の上に居る時間を短くする',
       '水の入ったバケツ（鉄 3）を hotbar（最初の 9 スロット）に持つ', '島への橋（幅 1）の先端は、竜の玉が落ちる向きによっては、体の避けが「道なし」になる']) expect(end, word).toContain(word);
     expect(end).not.toContain('落下を水バケツで止めた');
     expect(end).not.toContain('荷の中でもよい');
     expect(end).toContain('attack ender_dragon は今の手持ちで打ち、体は剣を持ち直さない。');
     expect(end).toContain('打つ前に equip で剣（か斧）を手に持つ');
-    expect(STRATEGY_KNOWLEDGE_V2).toContain('自動の落下止めは対応版で有効な時だけ手・hotbar の水を使う');
-    expect(STRATEGY_KNOWLEDGE_V2).toContain('下りは事前に水を置くか vertical で');
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('体の落下止めは、エンドで手か hotbar の水バケツと真下の固い床がある時に水で着水する');
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('下りは vertical で掘るか、go に maxDrop を付けた飛び降りか');
     expect(STRATEGY_KNOWLEDGE_V2).not.toContain('体の落下止めは働かない前提');
   });
   it('tells the blaze platform\'s rule: accept on every act there, or the floor reflex digs the platform (S2, c1 hold trial)', () => {
