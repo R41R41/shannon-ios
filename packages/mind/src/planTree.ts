@@ -19,8 +19,9 @@ export type { PlanNodeState, PlanKind, PrepState, PlanPrep, PlanCondition, Promi
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$/u;
 
-/** A done condition on what is held (`have:物` / `food>=点`, the Minecraft head's predicate words): the frame closes such a node, its children do not. */
-const heldCondition = (doneWhen: string | undefined): boolean => typeof doneWhen === 'string' && /(?:^|[&|])\s*(?:have:|food>=)/u.test(doneWhen);
+/** A done condition on what is held (`have:物` / `food>=点`) or on a count that only goes one way (`crystals<=n`, the end crystals left; the Minecraft head's predicate words): the frame
+ * closes such a node (or the head's op), its children do not. */
+const heldCondition = (doneWhen: string | undefined): boolean => typeof doneWhen === 'string' && /(?:^|[&|])\s*(?:have:|food>=|crystals<=)/u.test(doneWhen);
 
 export function emptyPlanTree(): PlanTree { return { schema: PLAN_TREE_SCHEMA, revision: 0, current: null, nodes: [], promises: [] }; }
 
@@ -329,7 +330,9 @@ class PlanEdit {
    * children. end1109o02 (11/9): Haiku's first plan put only 「バケツを作る」「水を汲む」 under 「鉄の道具と防具」 (doneWhen
    * have:iron_pickaxe&have:shield&…); the two closed the parent with no iron pickaxe or armour, and the plan went on to the diamonds with a
    * stone pickaxe (the bed's parent, food>=40&have:bed, closed with no bed the same way). Now such a parent becomes the open node, its
-   * condition still to meet. Only a condition on what is held (`have:` / `food>=`, the head's predicate words) keeps it so: a place or a
+   * condition still to meet. Only a condition on what is held (`have:` / `food>=`) or on the crystals left (`crystals<=`: a plan's
+   * 「クリスタルを壊す」 was closed at 10/10 by a done child) keeps it so; `see:` (a mark in view now) and `stock:` are not listed and close with
+   * the children as before. A place or a
    * dimension (`at:` / `dim:`) is reached after the children, and closes with them as before (run 33's p4 `dim:overworld`). */
   settleParents(): void {
     for (const node of orderedPlan([...this.nodes.values()]).reverse()) {

@@ -157,4 +157,43 @@ describe('plan tree', () => {
     const plain = planFromSeeds([{ id: 'p', title: '道具', children: [{ id: 'c', title: 'バケツ' }] }])!;
     expect(applyPlanUpdate(plain, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
   });
+
+  it('a parent whose doneWhen is crystals<=n stays open when its children are done; a done child cannot close it', () => {
+    const crystals = () => planFromSeeds([{ id: 'p4', title: 'クリスタルを壊す', doneWhen: 'crystals<=2', children: [{ id: 'p4.1', title: '柱の下へ', doneWhen: 'at:12,63,1' }] },
+      { id: 'p5', title: '竜を倒す', doneWhen: 'crystals<=0&dim:the_end' }])!;
+    const arrived = applyPlanUpdate({ ...crystals(), current: 'p4.1' }, { ops: [{ op: 'set', id: 'p4.1', state: 'done' }] }).tree;
+    expect(arrived.nodes.find(node => node.id === 'p4')?.state).not.toBe('done');
+    expect(arrived.current).toBe('p4');
+    // the head's own op closes it (the frame closes it by the crystals left, minecraftPlanDone.ts)
+    const closed = applyPlanUpdate(arrived, { ops: [{ op: 'set', id: 'p4', state: 'done' }] }).tree;
+    expect(closed.nodes.find(node => node.id === 'p4')?.state).toBe('done');
+    expect(closed.current).toBe('p5');
+    // an alternative with spaces reads the same
+    const either = planFromSeeds([{ id: 'a', title: '結晶', doneWhen: 'have:bow | crystals<=2', children: [{ id: 'a1', title: '足場', doneWhen: 'at:1,2,3' }] }])!;
+    expect(applyPlanUpdate({ ...either, current: 'a1' }, { ops: [{ op: 'set', id: 'a1', state: 'done' }] }).tree.nodes.find(node => node.id === 'a')?.state).not.toBe('done');
+  });
+
+  it('a crystals<= parent left open with every child done is not a dead end: replan can add under it, rewrite it, set it aside or drop it', () => {
+    const crystals = planFromSeeds([{ id: 'p4', title: 'クリスタルを壊す', doneWhen: 'crystals<=2', children: [{ id: 'p4.1', title: '足場', doneWhen: 'at:12,63,1' }] },
+      { id: 'p5', title: '竜を倒す' }])!;
+    const stalled = applyPlanUpdate({ ...crystals, current: 'p4.1' }, { ops: [{ op: 'set', id: 'p4.1', state: 'done' }] }).tree;
+    expect(stalled.current).toBe('p4');
+    expect(applyPlanUpdate(stalled, { ops: [{ op: 'add', parent: 'p4', title: '弓を作る', id: 'p4.2' }], current: 'p4.2' }).tree.current).toBe('p4.2');
+    expect(applyPlanUpdate(stalled, { ops: [{ op: 'set', id: 'p4', doneWhen: 'at:12,63,1' }] }).tree.nodes.find(node => node.id === 'p4')?.state).toBe('done');
+    expect(applyPlanUpdate(stalled, { ops: [{ op: 'set', id: 'p4', state: 'blocked', reason: '結晶に届かない' }] }).tree.current).toBe('p5');
+    const dropped = applyPlanUpdate(stalled, { ops: [{ op: 'drop', id: 'p4' }] }).tree;
+    expect(dropped.nodes.map(node => node.id)).toEqual(['p5']);
+    expect(dropped.current).toBe('p5');
+  });
+
+  it('see:, stock:, at: and dim: parents still close with their children as before; have: and food>= still hold', () => {
+    for (const doneWhen of ['see:fortress', 'stock:wood', 'at:1,2,3', 'dim:the_end']) {
+      const tree = planFromSeeds([{ id: 'p', title: '節', doneWhen, children: [{ id: 'c', title: '子' }] }])!;
+      expect(applyPlanUpdate(tree, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).toBe('done');
+    }
+    for (const doneWhen of ['have:bed', 'food>=40', 'dim:the_nether&have:bed']) {
+      const tree = planFromSeeds([{ id: 'p', title: '節', doneWhen, children: [{ id: 'c', title: '子' }] }])!;
+      expect(applyPlanUpdate(tree, { ops: [{ op: 'set', id: 'c', state: 'done' }] }).tree.nodes.find(node => node.id === 'p')?.state).not.toBe('done');
+    }
+  });
 });
