@@ -109,6 +109,9 @@ export const FURNACE_TAKE_WAIT_SECONDS = 15;
 const furnaceWalks = (hand: ActHand) => hand.do === 'furnace' && (hand.op === 'take' || Boolean(hand.canDig?.length));
 const furnaceMostMs = (hand: ActHand, metres: number) => 5_000 + (hand.op === 'take' ? 1_000 * FURNACE_TAKE_WAIT_SECONDS + 700 : 0)
   + (metres > 0 ? 3_000 + 2 * walkMs(hand, metres) + (hand.canDig?.length ? 1_000 * Math.min(30, hand.maxDig ?? 10) : 0) : 0);
+/** shoot: the arrow's flight is part of the shot, for the body waits for it to land (a lobbed shot at a far target measured 6.2 s, 4.2 s of it in the air; the
+ * ceiling without it cut 7 of 19 acts at the 5 s floor). The ceiling takes 5 s of flight a shot; the expected time is left as it was. */
+export const SHOOT_FLIGHT_MS = 5_000;
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
   fill: mostMs,
@@ -117,7 +120,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   make: hand => 3_000 + 1_000 * blocksOf(hand),
   dig: hand => 10_000 * cells(hand), place: hand => 1_500 * cells(hand),
   pillarUp: hand => 1_200 * times(hand), attack: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
-  shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1)) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
+  shoot: hand => (1_500 + 1_000 * (hand.charge ?? 1) + SHOOT_FLIGHT_MS) * times(hand), wait: hand => 1_000 * (hand.seconds ?? 1) + 500,
   pickup: hand => 3_000 + 1_000 * (hand.range ?? 6), use: useMostMs, craft: hand => 2_000 + 300 * Math.min(64, hand.count ?? 1),
   jump: hand => 1_000 * times(hand) + 500, chest: () => 6_000, furnace: furnaceMostMs, eat: () => 4_000,
   // The sleep hand (S4, 11/5): its seconds (10–60, 45 when not written) to place, sleep, wait for the morning and take the bed up.
