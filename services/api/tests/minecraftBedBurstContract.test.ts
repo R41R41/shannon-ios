@@ -12,13 +12,13 @@ const burst = (): ActHand => ({ do: 'bed_burst', at: [{ x: 0, y: 67, z: 2 }, { x
 const input = (hand = burst()): ActInput => ({ hands: [hand, { do: 'go', to: { x: 8, y: 64, z: 8 }, seconds: 10 }], accept: ['ender_dragon'] });
 
 describe('the head is told when and how to use it (run 16: the text sat behind skill_read and was never read)', () => {
-  it('accepts seconds up to 40 like the body, and refuses 41', () => {
-    expect(actProblem(input({ ...burst(), seconds: 40 }))).toBeNull();
-    expect(actProblem(input({ ...burst(), seconds: 41 }))).not.toBeNull();
+  it('accepts seconds up to 60 like the body, and refuses 61', () => {
+    expect(actProblem(input({ ...burst(), seconds: 60 }))).toBeNull();
+    expect(actProblem(input({ ...burst(), seconds: 61 }))).not.toBeNull();
   });
-  it('passes the real head check for the act the text describes: go, place, bed_burst with 35 s, retreat go', () => {
+  it('passes the real head check for the act the text describes: go, place, bed_burst with 50 s, retreat go', () => {
     const expanded = expandShortAct({ hands: ['go 3,65,3 range=0.5 seconds=8', 'place obsidian at=3,65,2 4,65,2',
-      'json {"do":"bed_burst","at":[{"x":4,"y":66,"z":0},{"x":4,"y":66,"z":1}],"target":"#13","count":5,"seconds":35,"onFail":"continue"}', 'go -6,66,10 seconds=10'], accept: ['ender_dragon'] });
+      'json {"do":"bed_burst","at":[{"x":4,"y":66,"z":0},{"x":4,"y":66,"z":1}],"target":"#13","count":5,"seconds":50,"onFail":"continue"}', 'go -6,66,10 seconds=10'], accept: ['ender_dragon'] });
     expect(expanded.errors).toEqual([]);
     expect(llmcInputProblem('mc.act', expanded.input)).toBeNull();
   });
@@ -27,6 +27,12 @@ describe('the head is told when and how to use it (run 16: the text sat behind s
     expect(SHORT_ACT_DESCRIPTION).toContain('座るのを待たずにすぐ mc_probe kind=bedsite');
     expect(SHORT_ACT_DESCRIPTION).toContain('"do":"bed_burst"');
     expect(SHORT_ACT_DESCRIPTION).toContain('go（stand）→ place（黒曜石）→ bed_burst → 退避 go');
+  });
+  it('tells that the one call keeps firing at the seated dragon (not "unusable on a seated dragon") and recommends 50 s', () => {
+    expect(BED_BURST_DESCRIPTION).toContain('座った竜（phase 5〜7）へ撃ち続け');
+    expect(BED_BURST_DESCRIPTION).toContain('1〜60秒（50を書く');
+    expect(SHORT_ACT_DESCRIPTION).toContain('着地後も座った竜へ撃ち続ける');
+    expect(SHORT_ACT_DESCRIPTION).toContain('"seconds":50}');
   });
 });
 
@@ -62,7 +68,7 @@ describe('the head can request a bounded burst and its own immediate retreat', (
     ['relative', { rel: true }], ['target name', { target: 'ender_dragon' }], ['negative id', { target: '#-1' }], ['noncanonical id', { target: '#0012' }],
     ['unsafe id', { target: '#99999999999999999999' }],
     ['zero beds', { count: 0 }], ['too many beds', { count: 6 }], ['fractional beds', { count: 1.5 }],
-    ['too short', { seconds: 0.5 }], ['too long', { seconds: 41 }], ['nonfinite seconds', { seconds: Infinity }],
+    ['too short', { seconds: 0.5 }], ['too long', { seconds: 61 }], ['nonfinite seconds', { seconds: Infinity }],
     ['unrelated strategy permission', { canDig: ['end_stone'] }],
   ] as const)('refuses %s before the body sees it', (_name, delta) => {
     expect(actProblem(input({ ...burst(), ...delta } as ActHand))).not.toBeNull();

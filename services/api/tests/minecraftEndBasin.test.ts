@@ -227,10 +227,11 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
   it('names the probe, the hands in order and the cut-off at the sit, with the dragon id', () => {
     const line = burstOf(endFightLines(view(approach(), 2), 'white_bed'))!;
     expect(line).toContain('mc_probe kind=bedsite target=#90');
-    expect(line).toContain('{"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#90","count":5,"seconds":35}');
+    expect(line).toContain('{"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#90","count":5,"seconds":50}');
     expect(line.indexOf('bedsite')).toBeLessThan(line.indexOf('place'));
     expect(line.indexOf('place')).toBeLessThan(line.indexOf('"do":"bed_burst"'));
     expect(line).toContain('座ってからでは bedsite が読めない');
+    expect(line).toContain('着地後も座った竜へ撃ち続け');
   });
   it('shows nothing without a held bed, while sitting, in other phases and with no dragon id; says not now with three crystals standing', () => {
     expect(burstOf(endFightLines(view(approach(), 2), null))).toBeUndefined();

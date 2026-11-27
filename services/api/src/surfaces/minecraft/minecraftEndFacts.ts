@@ -327,8 +327,8 @@ export function dragonBurstLine(end: EndView | null, bedItem: string | null = nu
   const standing = end?.crystals.remaining ?? null;
   if (standing !== null && standing >= 1) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。ベッドは檻つきも含めて結晶を 0 本にしてから。先に結晶を壊す）`;
   return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中。座るのを待たない）: すぐ mc_probe kind=bedsite target=#${dragon.id}（packet_history_pending なら 1 秒後にもう一度）`
-    + ` → 返った stand へ go → footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":35}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
-    + `座ってからでは bedsite が読めない。座りの place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。`;
+    + ` → 返った stand へ go → footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
+    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */

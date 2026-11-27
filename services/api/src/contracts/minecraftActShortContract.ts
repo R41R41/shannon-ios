@@ -34,11 +34,11 @@ const manualPage = (id: string, title: string, lines: readonly string[]): ShortA
 const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   // 11/27 (run 16): the full bed_burst text sat behind skill_read, Haiku never read it and built place+use by hand. The use and one example stay in the body.
   '- 竜のベッド（エンド）: 竜が止まり木へ降りてくる途中（live の竜の行が phase 2）が見えたら、座るのを待たずにすぐ mc_probe kind=bedsite target=#竜id を読み、'
-    + '返った stand・黒曜石のマス・足側/枕側で 1 つの act を組む: go（stand）→ place（黒曜石）→ bed_burst → 退避 go（分けると間に合わない。ベッドは体が置いて使うので、頭が place するのは黒曜石だけ）。座ってからは bedsite が読めない（current_phase2_required）。'
-    + 'bed_burst は短い書式の行では書けない（「知らない手」で断られる）。必ず json の行で書く。例: json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":35}。詳しい書き方は契約目次の bed_burst。',
+    + '返った stand・黒曜石のマス・足側/枕側で 1 つの act を組む: go（stand）→ place（黒曜石）→ bed_burst → 退避 go（分けると間に合わない。ベッドは体が置いて使うので、頭が place するのは黒曜石だけ）。座ってからは bedsite が読めない（current_phase2_required）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続ける（seconds は 50）。'
+    + 'bed_burst は短い書式の行では書けない（「知らない手」で断られる）。必ず json の行で書く。例: json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":50}。詳しい書き方は契約目次の bed_burst。',
   manualPage('special', 'bed_burst（エンドのベッド連爆）・fill（指定範囲の充填）・shield_rush（ブレイズ用の盾突進）', [
   BED_BURST_DESCRIPTION,
-  'bed_burst は json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":35} の行で書く。',
+  'bed_burst は json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":50} の行で書く。',
   FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION
   ]),
