@@ -212,7 +212,7 @@ describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
 
   it('says the arrival, the dragon in flight and the dragon on the perch out of reach and in reach', () => {
     expect(dragonLine(view('arrival'))).toBeNull();
-    expect(crystalLine(view('arrival'))).toContain('エンドクリスタル: 残り 10/10（まだ見ていない台座 10）。見えている結晶は 0 本。');
+    expect(crystalLine(view('arrival'))).toContain('エンドクリスタル: 残り 10/10（まだ見ていない台座 10）。いま見えている結晶は 0 本。');
     expect(perchLine(view('arrival'))).toBeNull();
     expect(dragonLine(view('dragon_flying'))).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (-39,93,39) 自分から 53m・#53');
     expect(dragonLine(view('dragon_perched_out_of_reach'))).toBe(

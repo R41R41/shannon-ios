@@ -6,7 +6,7 @@ import { createBlazeWatch, footingLine } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createDeathWatch, deathReturnLine, givenUpBy, type DeathKnown } from './minecraftDeathReturn.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
-import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
+import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitSpanLine, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
@@ -48,7 +48,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const shooting = facts.counts.size ? (facts.counts.get('bow') ?? 0) > 0 && arrows > 0 : null;
   // 11/27: the height line and the wait streak lead the fight lines (and stay in the short set): from a top 10 m or more up, the ways down are the first thing the input says.
   const height = watched.height ?? null;
-  const descent = some(descentLine(end, height, heightCtxOf(world, facts.counts))), streak = some(waitStreakLine(height, aloftBy(end) !== null));
+  const descent = some(descentLine(end, height, heightCtxOf(world, facts.counts))), streak = [...some(waitStreakLine(height, aloftBy(end) !== null)), ...some(waitSpanLine(height, end))];
   const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting, facts.counts.size ? arrows : null,
     { lead: [...descent, ...streak], sit: height?.sit ?? null });
   const stall = some(watched.climb?.(shooting) ?? null);
@@ -125,7 +125,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
       ledger.note(id, resultJson, doneFacts(observation)?.dimension ?? null, now());
       const acted = readActResult(resultJson);
-      if (acted) height.noteActs(acted.lines.map(line => line.do));
+      if (acted) height.noteActs(acted.lines.map(line => line.do), now());
       deaths.note(worldOf(observation), doneFacts(observation), now());
       blaze.note(id, resultJson, now());
       hunt.note(id, resultJson, now());
