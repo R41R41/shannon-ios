@@ -92,14 +92,17 @@ describe('(b) a tool under a third of its life is said as the shield is', () => 
 describe('(c) a digging hand against a full pack says how many it can take and how many the act may dig', () => {
   const inventory = [{ name: 'cobbled_deepslate', count: 98 }, { name: 'cobblestone', count: 54 }, ...Array.from({ length: 34 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))];
   const go = (maxDig: number) => ({ do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone'], maxDig } as ActHand);
-  it('d0085: free 0, the room is what the part-filled stacks hold; a go past it says it stops full', () => {
+  it('d0085: free 0, the room is what the part-filled stacks hold; digging by go or vertical is said not to stop on a full pack, a collecting dig past it is', () => {
     const line = digPackLine(frame({ inventory, freeSlots: 0 }), [go(40)], [], 'plan1127-c1')!;
-    expect(line).toContain('空き 0/36：掘って出る石・深層岩・土は 1 つも拾えない。拾える見込みは約 40 個まで・この act の掘る上限は合わせて 40（足りる）');
-    expect(digPackLine(frame({ inventory, freeSlots: 0 }), [go(100)], [], 'plan1127-c2')).toContain('上限まで掘ると途中で満杯になり止まる');
+    expect(line).toContain('空き 0/36：掘って出る石・深層岩・土は 1 つも拾えない。拾える見込みは約 40 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）');
+    // a go's maxDig past the room is no stop on a full pack (the body's packStops names only the hands that take things into it)
+    expect(digPackLine(frame({ inventory, freeSlots: 0 }), [go(100)], [], 'plan1127-c2')).not.toContain('途中で満杯になり止まる');
+    const cells = Array.from({ length: 100 }, (_, index) => ({ x: index, y: 2, z: 3 }));
+    expect(digPackLine(frame({ inventory, freeSlots: 0 }), [{ do: 'dig', at: cells } as ActHand], [], 'plan1127-c2b')).toContain('この act の拾う dig は合わせて 100（途中で満杯になり止まる');
   });
   it('counts the drop in the same act, and the free slots at 64 a slot', () => {
     const line = digPackLine(frame({ inventory, freeSlots: 2 }), [{ do: 'drop', items: [{ item: 'cobbled_deepslate', count: 34 }] } as unknown as ActHand, go(150)], [], 'plan1127-c3')!;
-    expect(line).toContain('拾える見込みは約 202 個まで（この act の drop 34 個を含む）・この act の掘る上限は合わせて 150（足りる）');
+    expect(line).toContain('拾える見込みは約 202 個まで（この act の drop 34 個を含む）。go・vertical の掘りは満杯でも止まらない');
   });
 });
 

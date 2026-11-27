@@ -1,4 +1,5 @@
 import type { BodyObservation, BodyTaskContext } from '../../contracts/bodyControlContract.js';
+import { forgetGoAltitude,type GoHop } from './minecraftLlmcAltitude.js';
 import type { ActCondition } from '../../contracts/minecraftActCondition.js';
 import { type ActInput, type ActPos, type ActTimeTuning } from '../../contracts/minecraftActContract.js';
 import { type ItemOutcome, type MadeIn, type OperationState, type StageRow, type TraceIds } from '../../contracts/continueContract.js';
@@ -33,7 +34,7 @@ export const decisionTimes = new Map<string, number[]>();
 export const counters = new Map<string, number>();
 
 /** try1124b stall: the metres of the last go hands that arrived, by task (newest last), for the line that says how far her moves have been. */
-export const recentGos = new Map<string, number[]>();
+export const recentGos = new Map<string, GoHop[]>();
 export const GO_HOPS_KEPT = 6;
 
 /** When the head stopped a running item of the task by `replace` (newest last, at most 12), for the line that says how often it has done it. */
@@ -58,6 +59,7 @@ export function forgetLlmcQueues(): void {
   decisionTimes.clear();
   counters.clear();
   recentGos.clear();
+  forgetGoAltitude();
   reissues.clear();
   verticalSpeeds.clear();
 }

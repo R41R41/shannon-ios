@@ -59,7 +59,7 @@ describe('what the plan made again is given of the last results and of the body\
     expect(replanBrief(input())).not.toContain('直近の go は');
     expect(queueBriefLines(['列に項目なし', HOPS], 'same_spot_stops')).toEqual(['列に項目なし', HOPS]);
     const spot = replanBrief(input({ stall: { kind: 'same_spot_stops', why: '同じ所で止まった', node: 'n3' } }));
-    expect(spot).toContain('直近の go は 42・14・5・2・2 m');
+    expect(spot).toContain(HOPS);
   });
 
   it('tells the strong model to name the cause from the results, and that a child with its parent\'s condition cannot end alone, each with its reason', () => {

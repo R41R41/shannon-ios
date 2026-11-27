@@ -571,7 +571,7 @@ describe('the owner\'s words while the running item only waits (play 1124: 3.5 m
 describe("her recent moves are told back to her (hopsLine through the queue)", () => {
   const goResult = (metres: number) => JSON.stringify({ v: 1, ok: true, done: 1, of: 1, ms: 1600, at: { x: 1, y: 64, z: 1 }, hp: 20, food: 20,
     lines: [{ i: 1, do: "go", status: "done", line: "go 着いた", progress: { unit: "meter", done: metres, left: 0 } }] });
-  it("keeps the metres of done gos only, and says them once three have arrived and all were short", async () => {
+  it("keeps the gos that came back, and says them once three have come back and the last was short", async () => {
     const f = setup();
     for (const metres of [5, 7, 6]) {
       await f.queue.add(f.spec([{ do: "go" as const, to: { x: 5, y: 64, z: 0 } }]));
@@ -584,16 +584,42 @@ describe("her recent moves are told back to her (hopsLine through the queue)", (
     }
     const said = f.queue.lines(null);
     expect(said[0]).toBe("列に項目なし");
-    expect(said[1]).toContain("5・7・6 m");
+    expect(said[1]).toContain("行き先 5 m に対し進んだ 5 m（着いた）・行き先 7 m に対し進んだ 7 m（着いた）・行き先 6 m に対し進んだ 6 m（着いた）");
     expect(said[1]).toContain("判断 1 回に約");
   });
-  it("does not count a wait, or a go that did not arrive", async () => {
+  const stoppedResult = (code: string, done: number, left: number) => JSON.stringify({ v: 1, ok: false, done: 0, of: 1, ms: 40_000, at: { x: 1, y: 64, z: 1 }, hp: 20, food: 20,
+    lines: [{ i: 1, do: "go", status: "stopped", code, line: "go 止まった", progress: { unit: "meter", done, left, fromStopM: left, at: { x: 1, y: 30, z: 1 } } }] });
+  it("counts a long go that stopped with the distance of its goal, and says nothing of short moves when the last go was a long one (the run of 11/27)", async () => {
+    const f = setup();
+    for (const metres of [5, 7, 6]) {
+      await f.queue.add(f.spec([{ do: "go" as const, to: { x: 5, y: 64, z: 0 } }]));
+      f.take(); f.end("completed", goResult(metres)); f.poll(); await settle(); f.handed.length = 0;
+    }
+    expect(f.queue.lines(null)[1]).toContain("直近の go は ");
+    // a go of 112 m that ran out of its seconds after 4 m: the median of the last five is still small, and the line is not said
+    await f.queue.add(f.spec([{ do: "go" as const, to: { x: 5, y: 64, z: 400 } }]));
+    f.take(); f.end("failed", stoppedResult("limit_time", 4, 108)); f.poll(); await settle(); f.handed.length = 0;
+    expect(f.queue.lines(null)).toEqual(["列に項目なし"]);
+  });
+  it("says how a short go ended when the last go was short, and keeps the old warning for gos that all arrived short", async () => {
+    const f = setup();
+    for (const [code, done, left] of [["dead_end", 2, 6], ["stuck", 3, 5], ["limit_time", 4, 6]] as const) {
+      await f.queue.add(f.spec([{ do: "go" as const, to: { x: 5, y: 64, z: 0 } }]));
+      f.take(); f.end("failed", stoppedResult(code, done, left)); f.poll(); await settle(); f.handed.length = 0;
+    }
+    const said = f.queue.lines(null)[1]!;
+    expect(said).toContain("行き先 8 m に対し進んだ 2 m（道が行き止まり）");
+    expect(said).toContain("行き先 8 m に対し進んだ 3 m（体が進めず止まった）");
+    expect(said).toContain("行き先 10 m に対し進んだ 4 m（秒数の上限）");
+    expect(said).toContain("次の手が届くまで体は止まっている");
+  });
+  it("does not count a wait, or a go that stopped without saying how far its goal was", async () => {
     const f = setup();
     for (const [hand, status] of [["wait", "done"], ["go", "stopped"], ["go", "stopped"]] as const) {
       await f.queue.add(f.spec(hand === "go" ? [{ do: "go" as const, to: { x: 5, y: 64, z: 0 } }] : wait1));
       f.take();
       f.end("completed", JSON.stringify({ v: 1, ok: true, done: 1, of: 1, ms: 1000, at: { x: 1, y: 64, z: 1 }, hp: 20, food: 20,
-        lines: [{ i: 1, do: hand, status, line: "x", progress: { unit: "meter", done: 3, left: 0 } }] }));
+        lines: [{ i: 1, do: hand, status, line: "x", progress: { unit: "meter", done: 3 } }] }));
       f.poll();
       await settle();
       f.handed.length = 0;

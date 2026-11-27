@@ -385,11 +385,13 @@ export function digPackLine(observation: BodyObservation | null, hands: readonly
 function digRoomWords(hands: readonly ActHand[] | undefined, filler: ReadonlyArray<[string, number]>, free: number): string {
   const dropped = (hands ?? []).filter(hand => hand.do === 'drop').reduce((sum, hand) => sum + (hand.items ?? []).reduce((all, item) => all + (item.count ?? 0), 0), 0);
   const room = free * 64 + filler.reduce((sum, [name, count]) => sum + slotsOf(name, count) * 64 - count, 0) + dropped;
-  const digs = (hands ?? []).filter(diggingHand).map(hand => hand.do === 'dig' ? (hand.collect === false ? 0 : hand.at?.length ?? 0)
-    : typeof hand.maxDig === 'number' ? hand.maxDig : 0);
-  const most = digs.reduce((sum, count) => sum + count, 0);
-  if (!most) return `拾える見込みは約 ${room} 個まで${dropped ? `（この act の drop ${dropped} 個を含む）` : ''}。`;
-  return `拾える見込みは約 ${room} 個まで${dropped ? `（この act の drop ${dropped} 個を含む）` : ''}・この act の掘る上限は合わせて ${most}（${most > room ? '上限まで掘ると途中で満杯になり止まる。先に drop で空けるか、上限を下げる' : '足りる'}）。`;
+  // Only the hands that take things into the pack stop on a full one (the body's `packStops`): a dig that collects. A go's or vertical's digging leaves what it digs at her feet and goes on.
+  const taking = (hands ?? []).filter(hand => hand.do === 'dig' && hand.collect !== false).reduce((sum, hand) => sum + (hand.at?.length ?? 0), 0);
+  const walking = (hands ?? []).some(hand => (hand.do === 'go' || hand.do === 'vertical') && diggingHand(hand));
+  const base = `拾える見込みは約 ${room} 個まで${dropped ? `（この act の drop ${dropped} 個を含む）` : ''}`;
+  const takes = taking ? `・この act の拾う dig は合わせて ${taking}（${taking > room ? '途中で満杯になり止まる。先に drop で空けるか、数を下げる' : '足りる'}）` : '';
+  const goes = walking ? 'go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）' : '';
+  return `${base}${takes}。${goes ? `${goes}。` : ''}`;
 }
 /** Free slots at or under this: the line also says what fills the pack. */
 const NEAR_FULL = 3;
@@ -446,6 +448,11 @@ function searchCutWithHeadway(line: { do?: string; code?: string; progress?: { d
  * there, and the same go was sent again; a stuck go is
  * said as what it is: the way is found, the body cannot move on it, and the nth time at this place.
  */
+/**
+ * threat_exposed (a vertical stopped before opening a cell that would show her to an enemy she cannot reach): a fight does not shorten the distance to an enemy that cannot be
+ * reached, and the stop does not choose a way round. The three ways are said; the model picks (nothing here goes round it).
+ */
+export const THREAT_EXPOSED_WORDS = 'threat_exposed の止まり: 届かない所の敵は fight しても縮まらない。選ぶのは (1) exposeOk を付けた vertical など別の掘り方 (2) canPlace で射線を切る (3) 敵が来るのを待つ';
 export function stopFactLines(resultJson: string | undefined, spotStops?: (at: unknown) => number): Array<string | (() => string)> {
   const result = readActResult(resultJson);
   if (!result) return [];
@@ -472,6 +479,7 @@ export function stopFactLines(resultJson: string | undefined, spotStops?: (at: u
       const verticalStopWords = () => (`vertical の止まり: ${progress.at ? `${cell(progress.at)} で止まった・` : ''}今も有効な段 ${num(
         progress.done)}${progress.left === null ? '・残りは分からない' : `・残り ${num(progress.left)} 段`}${line.code ? `（${line.code}）` : ''}`);
       out.push(verticalStopWords());
+      if (line.code === 'threat_exposed') out.push(THREAT_EXPOSED_WORDS);
     }
   }
   return out;

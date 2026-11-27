@@ -107,9 +107,9 @@ export function bedsIn(lines: readonly string[]): number {
  * run 8 (11/27): nine drops, none of them freed room (near water the body threw sideways under 3 m and the thrown stack was picked up again, dirt 0 -> 22), tidy never used, and the
  * same iron stopped four times on a full pack. Said beside the free count while it is under 10: why 10, what fills a slot, and which way of freeing room holds.
  */
-export const digRoomWords = (free: number): string => '掘り進む手（go の dig・mine・dig）の前に空きを 10 以上にする（掘る岩の種類ごとに 1 マス埋まる: 丸石・深層岩・土・安山岩など。理由: 満杯だと掘った物が入らず止まる）。'
+export const digRoomWords = (free: number): string => 'mine と拾う dig の前に空きを 10 以上にする（掘る岩の種類ごとに 1 マス埋まる: 丸石・深層岩・土・安山岩など。理由: 満杯だと拾う手が止まる）。go・vertical で掘り進む手は満杯でも止まらないので、その前に drop を足さなくてよい（掘った石は足元に落ちるだけ）。'
   + `drop は水が近い所や 3 m 以内では投げた物を拾い直すので、体が「拾い直された」と返したら続けず、${free <= FULL_SOON ? 'tidy にするか、' : ''}3 m 以上離れてから drop する`;
-export const FULL_COST = 'これ以上拾えない（黒曜石・鉱石・落とし物も。dig・pickup・make の物も入らず止まる）';
+export const FULL_COST = 'go・vertical は止まらない（掘った石は足元に落ちるだけ。canPlace 用の石は残す）。これ以上拾えない（黒曜石も）ので mine・pickup・make・かまどの取り出しは止まる';
 /**
  * What of the filler can be dropped: each kind less what the plan's promises hold back of it (`held`), the most carried kind also
  * less one stack kept for pillars and bridges. The kinds
