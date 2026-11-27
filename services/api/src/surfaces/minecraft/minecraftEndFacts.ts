@@ -591,7 +591,7 @@ function cagedWords(end: EndView | null, caged: number, sit: string | null): str
     return `${crystal.id === null ? '' : `#${crystal.id} `}${place(crystal.position)}${rise === null ? '' : `（地面から約 ${rise} 段・材料 ${rise + 3} 個）`}${barsOf(end, crystal.id)}`;
   }).join('・');
   return `檻つき ${caged} 本${names ? `: ${names}` : ''}。壊す理由: 1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）、ベッドの傷が次の座りまでに戻る`
-    + `。登り方は檻なしと同じで、上端の 1〜2 段下で dig（格子の座標）→ attack target=end_crystal → 降りる。実測: 柱を登って殴るのは 2.5〜6.5 分（檻なし）、飛び降りは 16 回目に通った、格子を掘る所は実走でまだ（隔離ラボは 2 基成功）`
+    + `。登り方: 檻なしと同じ柱で、${'格子ごしにそのまま殴る（格子は掘らない。格子の壁が爆風をほぼ遮るので損は 0〜1。掘って覆わずに殴ると爆風が直に来て 7 回中 7 回死んだ）'}。attack が blast_unsafe で断られた時だけ、dig at=[格子 2 マス] collect=false → place block=obsidian で同じ 2 マスを覆う → attack。実測: 柱を登って殴るのは 2.5〜6.5 分（檻なし）、格子ごしの殴りは隔離ラボで 8/8（1 本約 30 秒）、飛び降りは 16 回目に通った`
     + `${sit ? `。${sit}` : ''}`;
 }
 
@@ -604,33 +604,34 @@ export function noBowLine(end: EndView | null, sit: string | null = null): strin
   const name = target ? `${target.id === null ? '' : `#${target.id} `}${place(target.position)}${target.distance === null ? '' : ` 自分から ${metres(target.distance)}`}` : null;
   const rise = target && end?.feet ? Math.round(target.position.y - end.feet.y) - 2 : null;
   // e04e (11/9): 17 minutes for two crystals, the climb, the strike and the way down each its own decision. One decision now queues all four.
-  const chain = '。この 4 手は 1 つの判断の hands に続けて並べ、stopIf は hpBelow だけ（hostileWithin を付けると周りのエンダーマンで止まる）';
+  const chain = '。この 4 手は 1 つの判断の hands に続けて並べ、stopIf は hpBelow だけ（hostileWithin を付けると周りのエンダーマンで止まる）。列に待ちが走っていても、この手を足す（足した手は待ちの後ろに付く）';
   const cagedTarget = target?.caged === true;
   const kind = cagedTarget ? '檻つき' : '檻なし';
-  const bars = cagedTarget ? ` → dig で鉄格子${barsOf(end, target?.id ?? null) || '（行の格子の座標）'}` : '';
+  const bars = '';
+  const hit = cagedTarget ? '（格子ごしにそのまま。格子は掘らない）' : '';
   const climb = name
-    ? `${kind}で竜から遠く低い ${name} の柱の脇へ walk → vertical pillar up で上端の 1〜2 段下まで${rise !== null && rise > 0 ? `（約 ${rise} 段）` : ''}${bars} → attack target=end_crystal → すぐ vertical down shaft で降りる${chain}`
-    : `${kind}の結晶の柱の脇へ walk → vertical pillar up${bars} → 上端の少し下から attack → すぐ vertical down shaft で降りる${chain}`;
+    ? `${kind}で竜から遠く低い ${name} の柱の脇へ walk → vertical pillar up で${cagedTarget ? '結晶と同じ高さ' : '上端の 1〜2 段下'}まで${rise !== null && rise > 0 ? `（約 ${rise} 段）` : ''}${bars} → attack target=end_crystal${hit} → すぐ vertical down shaft で降りる${chain}`
+    : `${kind}の結晶の柱の脇へ walk → vertical pillar up${bars} → 結晶と同じ高さから attack${hit} → すぐ vertical down shaft で降りる${chain}`;
   const foot = name ? `${name} の柱の根` : `${kind}の結晶の柱の根`;
   // Caged crystals count too (11/27): named whenever one stands, as the reason and the measures; the climb itself is the line's own.
   const cagedCount = end?.crystals.list.filter(crystal => crystal.caged === true).length ?? 0;
-  const cagedNote = cagedLeft(end) !== null ? `。${cagedWords(end, cagedLeft(end)!, sit)}` : cagedCount > 0 ? `。檻つき ${cagedCount} 本も全部壊す（檻なしの後で、同じ登り方に格子の dig を挟む）` : '';
+  const cagedNote = cagedLeft(end) !== null ? `。${cagedWords(end, cagedLeft(end)!, sit)}` : cagedCount > 0 ? `。檻つき ${cagedCount} 本も全部壊す（檻なしの後で、結晶と同じ高さまで登って格子ごしに殴る。格子は掘らない）` : '';
   const tail = `${cagedNote}。柱の上で黒曜石を掘って材料にしない`;
   if (phase === 9) return `${head}${tail}`;
   // 11/27: the aloft words come before the climb words (from a pillar's top the head waited 13 minutes with no word of the height).
   const aloft = aloftBy(end);
   if (aloft !== null) {
     const atCage = cageAtFeet(end);
-    if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: dig で鉄格子${barsOf(end, atCage.id) || '（行の格子の座標）'} → attack target=end_crystal → すぐ降りる（降りる手と費用は「高所:」の行）。降りないで待たない${tail}`;
+    if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: 結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）→ すぐ降りる（降りる手と費用は「高所:」の行）。blast_unsafe で断られた時だけ dig at=[格子${barsOf(end, atCage.id) || '（行の格子の座標）'}] collect=false → place block=obsidian で覆い直してから attack。降りないで待たない${tail}`;
     return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
   }
   if (phase === 1 || phase === 8) {
     return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}。高所の橋で渡ることも同じ: 火の玉の線に立つ）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
   }
-  if (phase !== null && phase >= 3 && phase <= 7) return `${head}。今登れる（竜は止まり木）: ${climb}${tail}`;
+  if (phase !== null && phase >= 3 && phase <= 7) return `${head}。今登れる（竜は止まり木。計画の節がベッドや待ちでも、結晶が残る間はこれが先）: ${climb}${tail}`;
   if (far === null || far >= CLIMB_CLEAR_METRES) {
     const why = far === null ? '竜が見えない' : `竜は phase ${phase ?? '?'} で自分から ${metres(far)}、30m 以上`;
-    return `${head}。今登れる（${why}。座りや 60m を待たない）: ${climb}${tail}`;
+    return `${head}。今登れる（${why}。座りや 60m を待たない。計画の節がベッドや待ちでも、結晶が残る間はこれが先）: ${climb}${tail}`;
   }
   return `${head}。まだ登らない（竜が自分から ${metres(far)}、30m 未満）: ${foot}へ寄り、30m 以上になったらすぐ登る${tail}`;
 }

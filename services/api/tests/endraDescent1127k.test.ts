@@ -100,8 +100,8 @@ describe('the caged crystals are broken too (11/27: every crystal goes down befo
     const line = noBowLine(view(undefined), '前の座りで竜 200→140（傷 60）、次の座りの手前では 170（20 秒で +30）');
     expect(line).toContain('檻つき 1 本: #1016 (-42,83,-1)（地面から約 17 段・材料 20 個）');
     expect(line).toContain('1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）、ベッドの傷が次の座りまでに戻る');
-    expect(line).toContain('上端の 1〜2 段下で dig（格子の座標）→ attack target=end_crystal → 降りる');
-    expect(line).toContain('2.5〜6.5 分（檻なし）、飛び降りは 16 回目に通った、格子を掘る所は実走でまだ');
+    expect(line).toContain('格子ごしにそのまま殴る（格子は掘らない');
+    expect(line).toContain('2.5〜6.5 分（檻なし）、格子ごしの殴りは隔離ラボで 8/8（1 本約 30 秒）、飛び降りは 16 回目に通った');
     expect(line).toContain('前の座りで竜 200→140（傷 60）、次の座りの手前では 170（20 秒で +30）');
     expect(line).not.toContain('檻へは行かない');
     expect(line).not.toContain('後回し');
@@ -111,16 +111,16 @@ describe('the caged crystals are broken too (11/27: every crystal goes down befo
 
   it('the pillar to climb is the caged one when no uncaged crystal is left, with the bars in the chain', () => {
     const line = noBowLine({ ...view(undefined), dragon: { ...view(undefined).dragon!, phase: 4, distance: 5 } } as EndView);
-    expect(line).toContain('今登れる（竜は止まり木）: 檻つきで竜から遠く低い #1016');
-    expect(line).toContain('→ dig で鉄格子');
-    expect(line).toContain('→ attack target=end_crystal → すぐ vertical down shaft で降りる');
+    expect(line).toContain('今登れる（竜は止まり木。計画の節がベッドや待ちでも、結晶が残る間はこれが先）: 檻つきで竜から遠く低い #1016');
+    expect(line).toContain('attack target=end_crystal（格子ごしにそのまま。格子は掘らない）');
+    expect(line).toContain('→ attack target=end_crystal（格子ごしにそのまま。格子は掘らない） → すぐ vertical down shaft で降りる');
     expect(climbNow({ ...view(undefined), dragon: { ...view(undefined).dragon!, phase: 4, distance: 5 } } as EndView)).toBe(true);
   });
 
   it('on the pillar of a caged crystal the line says the bars, the strike and the way down', () => {
     const top = { ...view(40), feet: { x: -42, y: 81, z: -1 } } as EndView;
     const line = noBowLine(top);
-    expect(line).toContain('今は檻つき #1016 の柱の上（結晶の 2 段下）: dig で鉄格子');
+    expect(line).toContain('今は檻つき #1016 の柱の上（結晶の 2 段下）: 結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）');
     expect(line).toContain('降りないで待たない');
   });
 

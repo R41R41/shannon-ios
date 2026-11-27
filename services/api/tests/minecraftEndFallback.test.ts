@@ -48,7 +48,7 @@ describe('the End fallback alongside the main bed plan', () => {
     expect(crystals.title).toContain('檻つきも');
     expect(crystals.doneWhen).toBe('crystals<=0');
     expect(crystals.note).toContain('本数に比例しない');
-    expect(crystals.note).toContain('格子を dig');
+    expect(crystals.note).toContain('格子ごしにそのまま殴る');
     expect(tree.nodes.indexOf(crystals)).toBeLessThan(tree.nodes.indexOf(bed));
     expect(bed.note).toContain('結晶 0 本から');
     expect(bed.note).toContain('ベッドが尽きたら窪みの剣');
@@ -85,7 +85,7 @@ describe('the End fallback alongside the main bed plan', () => {
     expect(CURRENT_PLAN_STRUCTURE).not.toContain('crystals<=2');
     expect(CURRENT_PLAN_STRUCTURE).toContain('檻つきも含めて全部壊す');
     expect(CURRENT_PLAN_STRUCTURE).toContain('毎秒 2 回復し（本数に比例しない）');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('鉄格子を dig で取ってから殴り');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('格子ごしにそのまま殴り');
     expect(CURRENT_PLAN_STRUCTURE).toContain('竜の節（止まり木の脇 10〜14m で降りるのを待ち、ベッドで倒す）はその後ろ');
     expect(CURRENT_PLAN_STRUCTURE).not.toContain('最初の計画に入れない');
     expect(CURRENT_PLAN_STRUCTURE).not.toContain('最後の手');

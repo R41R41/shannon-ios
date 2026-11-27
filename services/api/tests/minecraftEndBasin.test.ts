@@ -174,7 +174,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
   it('says the shooting places cannot be used without a bow or arrows, and keeps them when that is unknown', () => {
     const without = endFightLines(view(), null, false).join('\n');
     expect(without).toContain('クリスタルの射点: 弓か矢が無いので射点は使わない');
-    expect(without).toContain('今登れる（竜は止まり木）');
+    expect(without).toContain('今登れる（竜は止まり木。計画の節がベッドや待ちでも、結晶が残る間はこれが先）');
     expect(without).not.toMatch(/撃てる位置|同じ射点/u);
     expect(endFightLines(view()).join('\n')).toContain('同じ射点: (13,72,-11) から 2 基');
     expect(endFightLines(view(), null, true).join('\n')).toContain('撃てる位置 (13,72,-11)');
@@ -192,7 +192,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     expect(line(0, null)).toContain('今登れる（竜が見えない');
     expect(line(0, 20)).toContain('まだ登らない（竜が自分から 20m、30m 未満）: #15 (50,100,-11) 自分から 38m の柱の根へ寄り');
     for (const phase of [1, 8]) expect(line(phase, 50)).toContain(`今は登らない（竜は`);
-    expect(line(6, 10)).toContain('今登れる（竜は止まり木）');
+    expect(line(6, 10)).toContain('今登れる（竜は止まり木。計画の節がベッドや待ちでも、結晶が残る間はこれが先）');
     // Uncaged and away from her first, then the least climb: #17 is low but beside her, #16 is lower than #15.
     const base = world(approach(), 0);
     const choose = endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance: 40, position: at(80, 90) },
@@ -205,7 +205,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     expect(noBowLine(cagedOnly)).toContain('檻つき 2 本: ');
     expect(noBowLine(cagedOnly)).toContain('1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）');
     expect(noBowLine(cagedOnly)).toContain('檻つきで竜から遠く低い');
-    expect(noBowLine(cagedOnly)).toContain('→ dig で鉄格子');
+    expect(noBowLine(cagedOnly)).toContain('attack target=end_crystal（格子ごしにそのまま。格子は掘らない）');
     expect(noBowLine(cagedOnly)).not.toContain('後回し');
     expect(climbNow(cagedOnly)).toBe(true);
   });
