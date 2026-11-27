@@ -3,7 +3,7 @@ import { LIMITS_MANUAL_LINE } from './minecraftActLimits.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
 import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
-import { handToLine, lineToHand, pos, readPos, withSlotWord } from './minecraftActShortHands.js';
+import { handToLine, lineToHand, pos, readPos, unquoted, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
 import { SLEEP_EXCEPT, SLEEP_MODES } from './minecraftSleepWords.js';
@@ -338,17 +338,6 @@ export function actToShort(input: ActInput): ShortAct {
     ...(input.reserve === true ? { reserve: true } : {}),
     ...(input.dependsOn !== undefined ? { dependsOn: [...input.dependsOn] } : {}), ...(input.uses?.length ? { uses: [...input.uses] } : {}),
     ...(input.keep?.length ? { keep: input.keep.map(entry => `${entry.item}:${entry.count}:${entry.use}`) } : {}) };
-}
-
-/**
- * One layer of quotes put around a written value is taken off (amendment A-7 3: 3 of 45 answers wrote stopIf as
- * `"hostileWithin=8 hpBelow=10"` with the quotes inside the
- * string, or with the inner quotes escaped, `\"…\"`, and every token of it failed). The quote may be `"` or `'`, escaped or not.
- */
-function unquoted(text: string): string {
-  const value = text.trim();
-  const wrapped = /^\\?["']([\s\S]*?)\\?["']$/u.exec(value);
-  return wrapped ? wrapped[1]!.trim() : value;
 }
 
 function stopIfOf(text: string, errors: string[]): Record<string, unknown> {

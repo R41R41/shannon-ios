@@ -366,9 +366,22 @@ const FLAGS: Record<string, string> = { rel: 'rel', sprint: 'sprint', exposeOk: 
 const NOTE = /\s+note=("(?:[^"\\]|\\.)*")/u;
 const BARE_NOTE = /\s+note=(?!")(.*)$/su;
 
-/** `key=value` の値: true・false・数はその型、それ以外は文字。 */
-function valueOf(raw: string): unknown {
-  const number = Number(raw);
+/**
+ * One layer of quotes put around a written value is taken off (amendment A-7 3: stopIf written as `"hostileWithin=8"`; end1127 run 14:
+ * Haiku wrote `shoot target="#1115" item=bow` as the knowledge teaches it, the quotes went to the body inside the target, 26 shots missed).
+ * The quote may be `"` or `'`, escaped (`\"…\"`) or not.
+ */
+export function unquoted(text: string): string {
+  const value = text.trim();
+  const wrapped = /^\\?["']([\s\S]*?)\\?["']$/u.exec(value);
+  return wrapped ? wrapped[1]!.trim() : value;
+}
+/** A line's tokens. A quoted value that holds spaces (`target="ender dragon"`, `shoot "ender dragon"`) stays one token; a quote that
+ * does not open a value (`don't`) or never closes is only part of a word, as before. */
+const LINE_TOKEN = /[A-Za-z]+=(?:\\?"[^"]*"|'[^']*')|\\?"[^"]*"|\S+/gu;
+/** `key=value` の値: 外側の引用符を外した後、true・false・数はその型、それ以外は文字。 */
+function valueOf(text: string): unknown {
+  const raw = unquoted(text), number = Number(raw);
   return raw === 'false' ? false : raw === 'true' ? true : raw !== '' && Number.isFinite(number) ? number : raw;
 }
 function readTokens(tokens: readonly string[], verb: string): Read | { error: string } {
@@ -382,9 +395,9 @@ function readTokens(tokens: readonly string[], verb: string): Read | { error: st
       const numbers = key[2] === '' || key[2] === 'none' ? [] : key[2]!.split(',').map(Number);
       if (numbers.some(number => !Number.isInteger(number))) return bad(verb, 'dependsOn= は前の手の番号をコンマで（dependsOn=1,3）。何にも頼らないなら dependsOn=none');
       out.hand.dependsOn = numbers;
-    } else if (key && key[1] === 'slot') out.hand.slot = slotWordOf(key[2]!);
+    } else if (key && key[1] === 'slot') out.hand.slot = slotWordOf(unquoted(key[2]!));
     else if (key) out.hand[key[1]!] = valueOf(key[2]!);
-    else out.words.push(token);
+    else out.words.push(unquoted(token));
   }
   return out;
 }
@@ -409,7 +422,7 @@ export function lineToHand(line: string): ActHand | { error: string } {
   if (note) {
     try { noteText = JSON.parse(note[1]!) as string; } catch { return { error: `note の引用が読めない: ${text.slice(0, 40)}` }; }
   }
-  const [verb = '', ...tokens] = (note ? text.replace(NOTE, '') : bare ? text.slice(0, bare.index) : text).split(/\s+/u);
+  const [verb = '', ...tokens] = (note ? text.replace(NOTE, '') : bare ? text.slice(0, bare.index) : text).match(LINE_TOKEN) ?? [];
   const reader = Object.hasOwn(READERS, verb) ? READERS[verb] : undefined;
   if (!reader) return bad(verb, '知らない手');
   const read = readTokens(tokens, verb);
