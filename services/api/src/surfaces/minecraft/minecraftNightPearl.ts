@@ -1,7 +1,7 @@
 import { carried } from './minecraftConditions.js';
 import { countMatching } from './minecraftItems.js';
 import { ARROWS, BLOCKS, END_OBSIDIAN } from './minecraftLlmcPrepRules.js';
-import { dayTick, minutes, NIGHT_FROM, pearlGap, thunderstorm } from './minecraftNightArms.js';
+import { armedForNight, dayTick, minutes, NIGHT_FROM, PEARL_NIGHT_MIN_HEALTH, pearlGap, thunderstorm } from './minecraftNightArms.js';
 import { framesOf } from './minecraftSeenMarks.js';
 import { eyeBasisOf } from './minecraftEyeSpare.js';
 
@@ -13,20 +13,22 @@ import { eyeBasisOf } from './minecraftEyeSpare.js';
  */
 
 /** Health under which the gap alone does not make the plan's now the pearls (a night spent on the surface at that health is not the kind of night the fact is for): the plan's own pearl node still does. */
-export const PEARL_NIGHT_MIN_HEALTH = 12;
+export { PEARL_NIGHT_MIN_HEALTH };
 
 const finite = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 
 /**
- * Whether the pearls are the plan's now: the node is a pearl node (`kindPearl`), or the portal room's frames are counted, the pearls and eyes are fewer than the empty frames, the
- * run is the dragon's, she is in the overworld and the End's check is what is being prepared (`endStage`, from `preparationStage`) and her health is not low. A request of one
- * thing (a house, a cake) has no pearls to hunt: the caller passes `journey` false.
+ * Whether the pearls are the plan's now: the node is a pearl node (`kindPearl`), or the pearls and eyes are fewer than the eyes to hold (`pearlGap`: the empty frames when they are known, else
+ * 12 plus the spare), the run is the dragon's, she is in the overworld, the End's check is what is being prepared (`endStage`, from `preparationStage`) and her health is not low. A request of
+ * one thing (a house, a cake) has no pearls to hunt: the caller passes `journey` false. Before the frames are in view (not found yet, or only remembered) the night on the surface is also
+ * asked of her only with the iron sword and the shield in the pack (`armedForNight`); the portal room's scene, with the frames in view, is as it was.
  */
 export function pearlNowOf(input: { kindPearl: boolean; world: Record<string, unknown>; counts: ReadonlyMap<string, number>; dimension: string | null; endStage: boolean; journey: boolean }): boolean {
   if (input.kindPearl) return true;
-  if (!input.journey || !input.endStage || input.dimension !== 'overworld' || !framesOf(input.world)) return false;
+  if (!input.journey || !input.endStage || input.dimension !== 'overworld') return false;
   const health = finite(input.world.health);
   if (health !== null && health < PEARL_NIGHT_MIN_HEALTH) return false;
+  if (!framesOf(input.world) && !armedForNight(input.world, input.counts)) return false;
   return pearlGap(input.world, input.counts) > 0;
 }
 
@@ -93,8 +95,13 @@ export function pearlDayLine(world: Record<string, unknown>, counts: ReadonlyMap
   if (gap <= 0) return null;
   // Before the frames are found the gap is to the 10 that go to the stronghold; the eyes to hold on the way there are the spare's number (`eyeBasisOf`), taken when a pearl comes.
   const basis = eyeBasisOf(world);
-  const spare = basis.kind === 'search' ? `。要塞へ向かえるのは 10 個から。道中で投げて割れる分の予備を足した ${basis.need} 個まで、手に入る時に取る` : '';
-  return `パールはあと ${gap} 個足りない（パール ${carried(counts, 'ender_pearl')}・アイ ${carried(counts, 'ender_eye')}）${spare}。パールの主な入手先は、エンダーマンが湧く夜の地上。寝れば夜が飛ぶ。${seen ?? ''}`.replace(/。$/u, '');
+  const search = basis.kind === 'search';
+  const spare = search ? `。要塞へ向かえるのは 10 個から。道中で投げて割れる分の予備を足した ${basis.need} 個まで、手に入る時に取る` : '';
+  // Before the frames are found the day is for the walk: the pearls are not waited for (the night's endermen come on the way, and the eyes are wanted at the frames, not at the start).
+  const tail = !search ? '' : armedForNight(world, counts)
+    ? '。昼は夜を待たず進む。エンダーマンが見えたら、または夜が来ていたら寝ずに狩る（寝ると夜ごと飛んで入手先が消える）。ただし体力・防具が整わない時、エンダーマンが見えない時は、探して歩き回って夜を過ごすより寝て飛ばしてよい'
+    : '。昼は夜を待たず進む。体力・防具・盾が整わない夜は、無理に地上に立たず寝て飛ばしてよい';
+  return `パールはあと ${gap} 個足りない（パール ${carried(counts, 'ender_pearl')}・アイ ${carried(counts, 'ender_eye')}）${spare}。パールの主な入手先は、エンダーマンが湧く夜の地上。寝れば夜が飛ぶ。${seen ?? ''}`.replace(/。$/u, '') + tail;
 }
 
 /** The dusk window in which the lines of what can be moved are said: within this many ticks of the night. */
@@ -106,6 +113,8 @@ const DUSK_WINDOW_TICKS = 12_000;
  */
 export function nightMeanwhileLine(world: Record<string, unknown>, counts: ReadonlyMap<string, number>, dimension: string | null, pearlNow: boolean): string | null {
   if (!pearlNow || dimension !== 'overworld' || thunderstorm(world)) return null;
+  // Before the frames are found the day is for the walk, not for a wait for the night: no line that counts the wait (the pearl day line says what to do with a night that comes).
+  if (eyeBasisOf(world).kind === 'search') return null;
   const tick = dayTick(world);
   if (tick === null || tick >= NIGHT_FROM || NIGHT_FROM - tick > DUSK_WINDOW_TICKS) return null;
   const parts: string[] = [];

@@ -223,7 +223,7 @@ export function readinessParts(
   const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, pearlNow, llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, () => dayBedAdviceTold(taskId))
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
-  const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
+  const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null, undefined, pearlNow) : null;
   // 11/27: while the pearls are short the day's fact (where they mainly come from, what the day has shown of endermen) and, as the dusk comes, what can be moved besides waiting.
   const pearlLines = planNow ? [pearlDayLine(facts.world, facts.counts, facts.dimension, pearlNow, enderSeenWords(taskId)), nightMeanwhileLine(facts.world, facts.counts, facts.dimension, pearlNow)] : [];
   const night = [sleepLine, bedLine, ...pearlLines].filter(Boolean).join('。') || null;

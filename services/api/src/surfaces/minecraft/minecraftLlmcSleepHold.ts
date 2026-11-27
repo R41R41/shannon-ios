@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { readinessOf } from './minecraftLlmcReadiness.js';
-import { AFLOAT_NO_SLEEP, BED, BED_FROM, canSleepNow, dayTick, enemyNear, noSleepSpot, minutes, NIGHT_FROM, NIGHT_TO, thunderstorm } from './minecraftNightArms.js';
+import { AFLOAT_NO_SLEEP, armedForNight, BED, BED_FROM, canSleepNow, dayTick, enemyNear, noSleepSpot, minutes, NIGHT_FROM, NIGHT_TO, pearlGap, thunderstorm } from './minecraftNightArms.js';
 import { deathCounterOf } from './minecraftControlState.js';
 import { readActResult } from '../../contracts/minecraftActContract.js';
 import { SLEEP_COST, SLEEP_RESUME, SLEEP_SKIP } from '../../contracts/minecraftSleepWords.js';
@@ -132,7 +132,7 @@ function noteSleepModes(hands: readonly unknown[], input: unknown, frame: BodyOb
  * day and never hears whether it stands: said with how to take it back), or, at dusk and at night with a bed in the pack, what a sleep costs and when not to sleep, beside the
  * plan's now. `nodeTitle` is the plan's current node (the purpose the sleep is weighed against).
  */
-export function sleepStateLine(frame: BodyObservation | null, taskId: string, nodeTitle: string | null, now: () => number = Date.now): string | null {
+export function sleepStateLine(frame: BodyObservation | null, taskId: string, nodeTitle: string | null, now: () => number = Date.now, pearlNow = false): string | null {
   const facts = readinessOf(frame);
   if (!facts || facts.dimension !== 'overworld') return null;
   const clock = now();
@@ -164,8 +164,10 @@ export function sleepStateLine(frame: BodyObservation | null, taskId: string, no
   if (![...facts.counts].some(([name, count]) => BED.test(name) && count > 0)) return null;
   if (afloat) return null; // the bed's line beside the plan's now says it (`AFLOAT_NO_SLEEP`)
   const effect = storm ? '寝ると雷雨が止む' : SLEEP_COST;
+  // The pearls are short and she is armed for the surface (sword, shield, health): the way to hunt them tonight is to take the booking back, said beside the cost of the sleep.
+  const hunt = !storm && pearlNow && pearlGap(facts.world, facts.counts) > 0 && armedForNight(facts.world, facts.counts) ? '。パールを夜に狩るなら sleep on=false で予約を消す' : '';
   return `夜の睡眠: ベッドを持っていて、寝る予定になる。${effect}。${nodeTitle ? `今の節「${nodeTitle}」が` : '今の節が'}夜そのもの（夜に湧く敵を倒す・夜のうちに急ぐ）か、人が寝ないと言った時は、${SLEEP_SKIP} を先に出す。`
-    + 'ファントムが近い・装備か食料が足りない地上の夜で、夜が目的でなければ寝る';
+    + 'ファントムが近い・装備か食料が足りない地上の夜で、夜が目的でなければ寝る' + hunt;
 }
 
 /**
