@@ -148,7 +148,7 @@ function boundsProblem(value: unknown, node: Schema, here: string): string | nul
     return `${here} は ${node.maxLength} 字まで（今は ${value.length} 字）`;
   }
   if (Array.isArray(value) && outside(value.length, node.minItems, node.maxItems)) {
-    return `${here} は ${String(node.minItems ?? 0)}〜${String(node.maxItems ?? '')} 個（今は ${value.length} 個）${value.length === 0 && (node.minItems ?? 0) >= 1 ? '。使わないなら欄ごと書かない（空の [] は断られる）' : ''}`;
+    return `${here} は ${String(node.minItems ?? 0)}〜${String(node.maxItems ?? '')} 個（今は ${value.length} 個）${value.length === 0 && typeof node.minItems === 'number' && node.minItems >= 1 ? '。使わないなら欄ごと書かない（空の [] は断られる）' : ''}`;
   }
   return null;
 }
