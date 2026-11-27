@@ -83,6 +83,7 @@ export const DRAGON_MILESTONES: readonly Milestone[] = Object.freeze([
   // coordinator's pace for each stretch, a ruler and nothing else; the Nether's own target above is the same plan's (47 minutes).
   { name: 'ネザー要塞', seconds: 3_200, doneWhen: 'see:fortress', late: true, journal: 'nether_fortress' },
   { name: 'ブレイズロッド 7 本', short: 'ロッド7', seconds: 4_700, doneWhen: 'have:blaze_rod>=7', late: true, journal: 'blaze_rods_7' },
+  // 11/27: the pearl and eye milestones are a pace ruler at the floor of the number to hold (12 plus the least spare, 1); the nodes aim at `EYES_AT_DEPARTURE` (14) and cover them (`covers`).
   { name: 'エンダーパール 13 個', short: 'パール13', seconds: 6_000, doneWhen: 'have:ender_pearl>=13', late: true, journal: 'ender_pearls_14' },
   // The review of 11/10 (G11): the line to leave the Nether is 12 eyes (the seed's eye node closes at 12, the coordinator's of 11/9), and a node done
   // holds a milestone only at a count as high (`covers`): at 14 this one fell back to unreached at the first eye thrown, and the meter and the pace

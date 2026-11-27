@@ -19,7 +19,8 @@ const GOLDEN = {
   // The first plan (R9 says 11 eyes are the number needed until the frames are seen): the first plan's digest moved.
   // 11/27 (run 7 of 11/26): the first plan's R9 words order the End's check before the entry and write a where with its dimension.
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
-  first_plan: ['1f02ff82062e58de'],
+  // 11/27 (spare eyes): the first plan's current structure says the number needed before the frames are seen is the 12 plus a spare (13 to 14), and that pearls are taken when they come.
+  first_plan: ['98c209f07016fac4'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });

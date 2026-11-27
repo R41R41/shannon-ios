@@ -3,6 +3,7 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { acquired, carried, doneFacts } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
+import { FRAME_EYES, MIN_SPARE } from './minecraftEyeSpare.js';
 
 /** The fact for a node whose title was changed and whose done condition and place were not (`PlanNode.staleCondition`, set by `plan.update`): said in its result and in the live's now; nothing is removed. */
 export const STALE_CONDITION_WORDS = 'この済む条件は題を変える前のものです（doneWhen・where を新しい題に合わせるなら set で作り直す）';
@@ -51,8 +52,8 @@ export function targetUpdateProblem(before: PlanTree, after: PlanTree, observati
  * Why a target node cannot be closed now: the count and what is counted toward it, and that the count may be lowered (11/15b c1: with 13 eyes made
  * and no pearl, 「パール 14」 was refused five times as 「未達か未確認」; the head took the pearls for spent, not knowing an eye counts as one).
  */
-/** The portal frame takes 12 eyes; a pearl or eye target above it holds the spare for eyes that break when thrown. */
-const FRAME_EYES = 12;
+/** The portal frame takes 12 eyes; a pearl or eye target above it holds the spare for eyes that break when thrown (at least 1 more, `MIN_SPARE`). */
+const FRAME_EYES_WITH_SPARE = FRAME_EYES + MIN_SPARE;
 
 const DONE_REPAIR ='done にできるのは現物を持っている節だけ。'
   + '直し方: しなくていい節は set state=done ではなく drop（id とその下を消す）で外す。待たせる節は state=blocked か wait';
@@ -63,9 +64,9 @@ function shortOfTarget(id: string, target: NonNullable<PlanNode['target']>, coun
   const parts = target.item === 'ender_pearl' ? `（ender_pearl ${carried(counts, 'ender_pearl')}＋ender_eye ${carried(counts, 'ender_eye')}。アイもパールとして数える）`
     : target.item === 'blaze_rod' ? `（blaze_rod ${carried(counts, 'blaze_rod')}＋粉・アイから戻した分）` : '';
   const spare = target.item === 'ender_pearl' || target.item === 'ender_eye';
-  const lower = !spare ? '' : have >= FRAME_EYES
-    ? `予備を減らすなら同じ set で target の count と doneWhen の数を ${FRAME_EYES}〜${have} に下げてよい（枠の ${FRAME_EYES} は下回らない）`
-    : `枠に ${FRAME_EYES} 要るので数は下げない`;
+  const lower = !spare ? '' : have >= FRAME_EYES_WITH_SPARE
+    ? `予備を減らすなら同じ set で target の count と doneWhen の数を ${have > FRAME_EYES_WITH_SPARE ? `${FRAME_EYES_WITH_SPARE}〜${have}` : have} に下げてよい（枠の ${FRAME_EYES} と予備の最低 ${MIN_SPARE} は下回らない）`
+    : `枠に ${FRAME_EYES} と割れる分の予備 ${MIN_SPARE} 以上で ${FRAME_EYES_WITH_SPARE} 要るので数は下げない`;
   return `${id}: 取得目標 ${target.item}×${target.count} に今 ${have}${parts}、あと ${target.count - have}。${DONE_REPAIR}。${lower}`;
 }
 

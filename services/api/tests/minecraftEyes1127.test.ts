@@ -41,8 +41,10 @@ describe('the frames open with the eyes in hand', () => {
   it('says 72% and the gap in the shortage with 11 eyes, 1 powder and no pearl', () => {
     const counts = new Map([['ender_eye', 11], ['blaze_powder', 1]]);
     const text = preparationShortage({ dimension: 'overworld', counts, food: 400, nowKinds: null, world: {}, journeyReadiness: true })!;
-    expect(text).toContain('エンダーアイ 11/12（開く確率 72%');
-    expect(text).toContain('あと 1 個まで');
+    // one measure: the frames' 12 and the spare for the throws still to come (none made yet: 6 of a fifth, 2), not the chance of opening
+    expect(text).toContain('エンダーアイ 11/14（枠 12＋予備 2');
+    expect(text).toContain('あと 3 個');
+    expect(text).not.toContain('開く確率');
     expect(text).toContain('作れるのは 0 個');
   });
   it('names a bed the map shows while fewer than 8 are carried', () => {

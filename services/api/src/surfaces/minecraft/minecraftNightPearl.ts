@@ -3,6 +3,7 @@ import { countMatching } from './minecraftItems.js';
 import { ARROWS, BLOCKS, END_OBSIDIAN } from './minecraftLlmcPrepRules.js';
 import { dayTick, minutes, NIGHT_FROM, pearlGap, thunderstorm } from './minecraftNightArms.js';
 import { framesOf } from './minecraftSeenMarks.js';
+import { eyeBasisOf } from './minecraftEyeSpare.js';
 
 /**
  * The night of the pearls (run of 11/27, 10:50 to 10:56): the plan's pearl node was renamed and kept the kind `stronghold`, so the night's "not asleep" fact never came;
@@ -90,7 +91,10 @@ export function pearlDayLine(world: Record<string, unknown>, counts: ReadonlyMap
   if (tick === null || tick >= NIGHT_FROM) return null;
   const gap = pearlGap(world, counts);
   if (gap <= 0) return null;
-  return `パールはあと ${gap} 個足りない（パール ${carried(counts, 'ender_pearl')}・アイ ${carried(counts, 'ender_eye')}）。パールの主な入手先は、エンダーマンが湧く夜の地上。寝れば夜が飛ぶ。${seen ?? ''}`.replace(/。$/u, '');
+  // Before the frames are found the gap is to the 10 that go to the stronghold; the eyes to hold on the way there are the spare's number (`eyeBasisOf`), taken when a pearl comes.
+  const basis = eyeBasisOf(world);
+  const spare = basis.kind === 'search' ? `。要塞へ向かえるのは 10 個から。道中で投げて割れる分の予備を足した ${basis.need} 個まで、手に入る時に取る` : '';
+  return `パールはあと ${gap} 個足りない（パール ${carried(counts, 'ender_pearl')}・アイ ${carried(counts, 'ender_eye')}）${spare}。パールの主な入手先は、エンダーマンが湧く夜の地上。寝れば夜が飛ぶ。${seen ?? ''}`.replace(/。$/u, '');
 }
 
 /** The dusk window in which the lines of what can be moved are said: within this many ticks of the night. */

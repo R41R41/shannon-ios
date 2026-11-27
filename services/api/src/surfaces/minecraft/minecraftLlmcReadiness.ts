@@ -15,11 +15,12 @@ import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
 import { framesKnownOf, framesOf } from './minecraftSeenMarks.js';
-import { frameOpenChance, honestFix, throwsFromBody } from './minecraftEyeLedger.js';
+import { honestFix, throwsFromBody } from './minecraftEyeLedger.js';
+import { eyeBasisOf, spareReason } from './minecraftEyeSpare.js';
 import { END_PREP_AFTER_STRONGHOLD } from './minecraftEndPrepWords.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
-import { WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
+import { EYES_TO_LEAVE, WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
 
 /**
  * mb-llmc r6 (run 29, 2026-10-22, owner 「r6 を作り 2 モデルで比べる」): the facts of readiness the decision is shown first,
@@ -61,7 +62,7 @@ const STAGES: Readonly<Record<'nether_deep' | 'nether_blaze' | 'end', { title: s
     ...END_WEAPONS,
     // end1108d S9 (11/8): 「エンダーアイ 11/12」 one throw after 12 sent the first plan back to the Nether; 10 in hand is the stronghold's
     // (thrown eyes are picked up, frames hold some from the start; the frames in view say the rest).
-    { label: 'エンダーアイ（12 が目安。落ちたアイは拾う）', count: 10, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
+    { label: 'エンダーアイ（要塞を探しに向かえる最低。持つ目安は枠 12＋予備。落ちたアイは拾う）', count: 10, pattern: /^ender_eye$/u }, { label: '足場のブロック', count: 64, pattern: BLOCKS },
     // S1's lab (2026-11-02): a fall from a crystal's pillar is stopped by water the body pours under itself, with a full bucket and nothing else.
     { label: '水入りバケツ', count: 1, pattern: /^water_bucket$/u }] },
 };
@@ -100,7 +101,7 @@ const STAGE_OF_KIND: Readonly<Partial<Record<PlanKind, Stage>>> = { end: 'end', 
 export function preparationStage(dimension: string | null, counts: ItemCounts, kinds: readonly PlanKind[] | null): Stage | null {
   if (dimension === 'the_nether') {
     const rods = countMatching(counts, /^blaze_rod$/u), pearls = countMatching(counts, /^(?:ender_pearl|ender_eye)$/u);
-    if (rods >= 7 && pearls >= 13) return null;
+    if (rods >= 7 && pearls >= EYES_TO_LEAVE) return null;
     return kinds?.[0] === 'blaze' && rods < 7 ? 'nether_blaze' : 'nether_deep';
   }
   if (dimension !== 'overworld') return null;
@@ -168,8 +169,8 @@ function bedWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
 }
 
 /**
- * The eyes' odds, as a fact beside the shortage (while the frames are not in view and fewer than 12 are carried; with the frames in view, their own count in its place; only said when something else is short, so the shortage
- * stays empty exactly when it was). Making one eye takes a pearl and a powder (a rod gives two powders), so what can be made is the least of them.
+ * The eyes to hold, as a fact beside the shortage, by one measure (`eyeBasisOf`): before the frames are found, 12 plus the spare for the eyes the throws to come are expected to break; with the
+ * frames found (in view or in the body's own record), the empty frames' number and no spare (no eye is thrown any more). Only said when something else is short, so the shortage stays empty exactly when it was). Making one eye takes a pearl and a powder (a rod gives two powders), so what can be made is the least of them.
  */
 function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }): string {
   const eyes = countMatching(parts.counts, /^ender_eye$/u);
@@ -178,17 +179,19 @@ function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
   // The frames in the body's own record of this world count the same (a room found beyond the map's radius): the eye count is only known when its row says one.
   const seen = parts.world ? framesKnownOf(parts.world) : null;
   if (seen && seen.eyes === null) {
-    return eyes > 0 ? `枠 ${seen.frames}（見つかっている）・目入りは枠のそばで読む。手持ち ${eyes}・必要は ${seen.frames} 個まで（目入りの分だけ減る）。作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}。投げ直しの確率でなく、枠で読んだ空きの数で足す` : '';
+    return eyes > 0 ? `枠 ${seen.frames}（見つかっている）・目入りは枠のそばで読む。手持ち ${eyes}・必要は ${seen.frames} 個まで（目入りの分だけ減る）。予備は要らない（枠が見つかったのでもう投げない）。作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}。枠で読んだ空きの数で足す` : '';
   }
   if (seen && seen.eyes !== null) {
     const empty = Math.max(0, seen.frames - seen.eyes), lack = Math.max(0, empty - eyes);
     return lack ? `枠 ${seen.frames}・目入り ${seen.eyes}・空き ${empty} 個。手持ち ${eyes}・足りない ${lack} 個（パール ${lack}・粉 ${lack} が同数要る。今 パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}）。`
-      + '要る数は割れた分を足した 12 でなく、この空きの数' : '';
+      + '予備は要らない（枠が見つかったのでもう投げない）。要る数はこの空きの数' : '';
   }
-  if (eyes >= 12 || eyes <= 0) return '';
-  const makeable = Math.min(pearls, powder + 2 * rods), gap = 12 - eyes;
-  return `エンダーアイ ${eyes}/12（開く確率 ${Math.round(frameOpenChance(eyes) * 100)}%。投げ直しは 1 本ごとに 5 回に 1 回割れる）。`
-    + `作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''} → 作れるのは ${makeable} 個（1 個＝パール 1＋粉 1）。12 まであと ${gap} 個まで足せる`;
+  const basis = eyeBasisOf(parts.world ?? {});
+  if (eyes >= basis.need || eyes <= 0) return '';
+  const makeable = Math.min(pearls, powder + 2 * rods), gap = basis.need - eyes;
+  return `エンダーアイ ${eyes}/${basis.need}（${spareReason(basis)}）。`
+    + `作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''} → 作れるのは ${makeable} 個（1 個＝パール 1＋粉 1）。あと ${gap} 個。`
+    + 'パールはエンダーマンを倒した時・交換で手に入る時に、予備の分まで取る';
 }
 
 /** Eyes enough to look for the stronghold with (the first plan's own count, `EYES_FOR_STRONGHOLD`). */

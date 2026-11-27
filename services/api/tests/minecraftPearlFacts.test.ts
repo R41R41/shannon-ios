@@ -8,21 +8,22 @@ const pack = (items: Record<string, number>) => new Map(Object.entries(items));
 describe('the pearl line', () => {
   it('says how many are missing and what the gold carried gives, eyes counted as pearls', () => {
     expect(pearlLine(pack({ ender_pearl: 3, gold_ingot: 18, blaze_rod: 7 }), 'the_nether'))
-      .toBe('パール 3/13（あと 10 個・約 20 体）。13 で出る：アイ 12 だと枠が足りない見込み約 1 割強、13 で約 3%、14 で約 0.2%。エンダーマン 1 体で平均 0.5 個。'
+      .toBe('パール 3/14（あと 11 個・約 22 体）。14（枠 12＋予備 2。要塞を探す投げは 1 本ごとに 5 回に 1 回割れ、割れた 1 個で空き枠に 1 個足りなくなると要塞の前でパール待ちになる）で出る。エンダーマン 1 体で平均 0.5 個。'
         + 'ピグリンとの交換は金の延べ棒 15.6 個（金塊 約 140 個・ネザー金鉱石 約 35 個）で平均 1 個、持っている金の延べ棒 18 個では平均 約 1.2 個');
-    expect(pearlLine(pack({ ender_pearl: 3, ender_eye: 4, blaze_powder: 2 }), 'the_nether')).toContain('パール 7/13（あと 6 個・約 12 体）');
+    expect(pearlLine(pack({ ender_pearl: 3, ender_eye: 4, blaze_powder: 2 }), 'the_nether')).toContain('パール 7/14（あと 7 個・約 14 体）');
   });
   it('sets the endermen beside the trade when no gold is carried (h28: the gold line alone sent Haiku digging gold ore)', () => {
     const line = pearlLine(pack({ blaze_rod: 7 }), 'the_nether')!;
-    expect(line).toContain('パール 0/13（あと 13 個・約 26 体）');
+    expect(line).toContain('パール 0/14（あと 14 個・約 28 体）');
     expect(line).toContain('エンダーマン 1 体で平均 0.5 個');
     expect(line).toContain('ネザー金鉱石 約 35 個');
   });
   it('says nothing outside the Nether, with the pearls found, or before rods and pearls begin', () => {
     expect(pearlLine(pack({ ender_pearl: 3, gold_ingot: 18 }), 'overworld')).toBeNull();
-    expect(pearlLine(pack({ ender_pearl: 13 }), 'the_nether')).toBeNull();
-    expect(PEARL_TARGET).toBe(13);
-    expect(EYES_TO_LEAVE).toBe(13);
+    expect(pearlLine(pack({ ender_pearl: 14 }), 'the_nether')).toBeNull();
+    // the frames' 12 and the spare for the eyes the throws that find them are expected to break (6 throws a fifth each: 2)
+    expect(PEARL_TARGET).toBe(14);
+    expect(EYES_TO_LEAVE).toBe(14);
     expect(pearlLine(pack({ gold_ingot: 18 }), 'the_nether')).toBeNull();
   });
 });
@@ -46,12 +47,12 @@ describe('the search for a warped forest (run 9: 0 scans after the rods, then th
     expect(lines).toContain('黒曜石 12 はピグリンとの交換でも出る');
     expect(pearlSearchLines(world, pack({ blaze_rod: 6 }), 'the_nether', none)).toEqual([]);
     expect(pearlSearchLines(world, pack({ blaze_rod: 7 }), 'overworld', none)).toEqual([]);
-    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 13 }), 'the_nether', none)).toEqual([]);
+    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 14 }), 'the_nether', none)).toEqual([]);
   });
-  it('leaves the search at 13 eyes, counts 2 powder as a rod, and sets the last way beside the numbers after 6 pairs, the head to choose', () => {
+  it('leaves the search at 14 eyes, counts 2 powder as a rod, and sets the last way beside the numbers after 6 pairs, the head to choose', () => {
     const world = { biomesSeen: 'nether_wastes（ここ）' };
-    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 13 }), 'the_nether', none)).toEqual([]);
-    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 12 }), 'the_nether', none)).not.toEqual([]);
+    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 14 }), 'the_nether', none)).toEqual([]);
+    expect(pearlSearchLines(world, pack({ blaze_rod: 7, ender_eye: 13 }), 'the_nether', none)).not.toEqual([]);
     expect(pearlSearchLines(world, pack({ blaze_powder: 13 }), 'the_nether', none)).toEqual([]);
     const five = pearlSearchLines(world, pack({ blaze_rod: 7 }), 'the_nether', { scans: 5, goes: 5 }).join(' ');
     expect(five).not.toContain('探した回数 5。1 回は約 90 秒');

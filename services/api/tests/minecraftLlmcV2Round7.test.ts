@@ -172,10 +172,10 @@ describe('the seed plan after run 9 (11/13): water before the armour, the villag
     expect(tops[4]!.note).toContain('12m 以内');
     expect(tops[5]!.doneWhen).toBe('have:iron_helmet&have:iron_chestplate');
   });
-  it('asks 13 eyes and the pearls for them, and takes the gate frame back after the way back', () => {
-    const pearls = top('エンダーパール13以上');
-    expect(pearls.doneWhen).toBe('have:ender_pearl>=13|have:ender_eye>=13');
-    expect(top('エンダーアイ14個').doneWhen).toBe('have:ender_eye>=13');
+  it('asks 14 eyes (the frames 12 and the spare) and the pearls for them, and takes the gate frame back after the way back', () => {
+    const pearls = top('エンダーパール14以上');
+    expect(pearls.doneWhen).toBe('have:ender_pearl>=14|have:ender_eye>=14');
+    expect(top('エンダーアイ14個').doneWhen).toBe('have:ender_eye>=14');
     const titles = tops.map(node => node.title), back = titles.indexOf('オーバーワールドへ戻る');
     expect(titles[back + 1]).toBe('帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）');
     expect(tops[back + 1]!.doneWhen).toBe('have:obsidian>=12|dim:the_end');

@@ -10,7 +10,7 @@ const frames = (note: string) => ({ mapLandmarks: [`Q エンドポータルの�
 describe('the eyes of the End check', () => {
   it('asks twelve with no frames in view, and the empty frames once they are', () => {
     const base = { dimension: 'overworld', food: 330, nowKinds: ['stronghold' as const] };
-    expect(preparationShortage({ ...base, counts: counts([...KIT, ['ender_eye', 4]]) })).toContain('エンダーアイ（12 が目安。落ちたアイは拾う） 4/10');
+    expect(preparationShortage({ ...base, counts: counts([...KIT, ['ender_eye', 4]]) })).toContain('エンダーアイ（要塞を探しに向かえる最低。持つ目安は枠 12＋予備。落ちたアイは拾う） 4/10');
     const some = preparationShortage({ ...base, counts: counts([...KIT, ['ender_eye', 4]]), world: frames('×12 アイ入り 9') });
     expect(some).toBeNull();
     const short = preparationShortage({ ...base, counts: counts([...KIT, ['ender_eye', 1]]), world: frames('×12 アイ入り 9') });

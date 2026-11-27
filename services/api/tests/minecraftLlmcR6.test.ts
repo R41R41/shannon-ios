@@ -115,7 +115,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     expect(gate).toContain(`食料 15.6 点（目安 40）。欠けたまま進むと: ${BEFORE_GATE.risk}。`);
     expect(gate).toContain('目標（そろえば。必須ではない）— 盾（予備を含め 2）・盾の作り直しの鉄（2）・板（盾の作り直し 2 枚分と作業台、16）・足場のブロック（64 あると橋で尽きない）・金のブーツ（金 4 がそろう時）が無い');
     const end = preparationShortage({ ...home, nowKinds: ['stronghold' as const] })!.replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '');
-    expect(end).toContain('準備の不足（エンドへ入る前に要る物）: ベッド（エンドの点検は 8・戦いの目標は 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ（12 が目安。落ちたアイは拾う）・足場のブロックが無い');
+    expect(end).toContain('準備の不足（エンドへ入る前に要る物）: ベッド（エンドの点検は 8・戦いの目標は 10）・黒曜石（エンドの戦い用・目標 12。ポータルの 10 とは別）・エンダーアイ（要塞を探しに向かえる最低。持つ目安は枠 12＋予備。落ちたアイは拾う）・足場のブロックが無い');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）');
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）・矢（光の矢も数える。材料 羽根 0・火打石 0・棒 0（1 ずつで 4 本））が無い');
     // The audit of 11/4, order 10: a spectral arrow is an arrow, a crossbow a bow.

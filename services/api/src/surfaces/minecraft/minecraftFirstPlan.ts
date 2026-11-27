@@ -10,6 +10,7 @@ import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood, stacks } from './minecraftLlmcLive.js';
 import { eyeLedgerFact, frameFoundWords } from './minecraftEyeLedger.js';
 import { framesKnownOf } from './minecraftSeenMarks.js';
+import { eyeBasisOf, EYES_AT_DEPARTURE, FRAME_EYES } from './minecraftEyeSpare.js';
 import { preparationShortage,recoveryLine } from './minecraftLlmcReadiness.js';
 import { parseCondition } from '../../contracts/minecraftActCondition.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
@@ -131,7 +132,10 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['死ぬと持ち物と時間を失う（死んでも続ける）。体力12未満・盾の耐久2割未満なら戦わず退いて補う'],
     children: [node('mc_probe kind=camp で湧き場の足場を見つけ、go で着く', { kind: 'blaze' }),
     node('8m 内の見えるブレイズへ待たずに attack target=#id（体が追う）、剣で 20 体ほど（矢なし）', { kind: 'blaze' }), node('棒を拾う（ブレイズがいない時）', { kind: 'blaze' })] }),
-  node('エンダーパール13以上', { kind: 'pearl', target: { item: 'ender_pearl', count: 13 }, doneWhen: 'have:ender_pearl>=13|have:ender_eye>=13', note: '13 で出る（アイ 12 だと枠が足りない見込み 約 1 割強、13 で約 3%。早く集まれば 14）',
+  // The owner's line of 11/27 (one pearl more): the number to leave with is the frames' 12 plus the spare for the eyes the throws that find the stronghold break (`eyeSpare`), and the pearls
+  // are taken up to it whenever they come. The rods stay 7: 7 rods make 14 powder, which is this number.
+  node(`エンダーパール${EYES_AT_DEPARTURE}以上`, { kind: 'pearl', target: { item: 'ender_pearl', count: EYES_AT_DEPARTURE }, doneWhen: `have:ender_pearl>=${EYES_AT_DEPARTURE}|have:ender_eye>=${EYES_AT_DEPARTURE}`,
+    note: `${EYES_AT_DEPARTURE} で出る（枠 ${FRAME_EYES}＋予備 ${EYES_AT_DEPARTURE - FRAME_EYES}。要塞を探す投げは 5 回に 1 回割れ、割れた 1 個で枠に 1 個足りないと要塞の前でパール待ちになる）。手に入る時は予備の分まで取る`,
     // Run 9 (11/12): after the rods she scanned and searched 0 times, took the way back for the pearls (about 1,100 s, 0 pearls). The search is the first child,
     // done by what the body saw; the rest of the pearl's children stay until the pearls are in.
     children: [node('歪んだ森を探す（走査→見えていない向きへ90mのgo→走査）', { kind: 'nether', doneWhen: 'see:warped_forest',
@@ -140,9 +144,9 @@ const BEYOND: readonly PlanSeed[] = [
   // The coordinator, 11/9 (thru-1110's table): leave the Nether with 12 eyes, not 10 (a frame holds one from the start 1 time in 10, 1.2 on
   // average, so about 11 are needed, and a throw breaks about 1 in 5). A node closed in the Nether stays done while eyes fly; a first plan made
   // in the overworld with 10 or more eyes has these stages taken out (`strongholdFirst`, EYES_FOR_STRONGHOLD), so 10 still keep her from going back.
-  node('エンダーアイ14個', { kind: 'pearl', target: { item: 'ender_eye', count: 14 }, doneWhen: 'have:ender_eye>=13', note: '材料（粉 14）があれば全部作る。13 以上でネザーを出る',
+  node(`エンダーアイ${EYES_AT_DEPARTURE}個`, { kind: 'pearl', target: { item: 'ender_eye', count: EYES_AT_DEPARTURE }, doneWhen: `have:ender_eye>=${EYES_AT_DEPARTURE}`, note: `材料（粉 ${EYES_AT_DEPARTURE}）があれば全部作る。${EYES_AT_DEPARTURE} 個そろってからネザーを出る`,
     children: [node('粉と真珠で作る', { kind: 'pearl' })] }),
-  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: 'パールとアイがそろってから（アイ13以上）。帰りのゲートから。ポータルの対は live の控え。そろう前に始めるなら、エンダーパールの節を skip と理由で閉じてから（往復で戻る理由は黒曜石・ベッドではない）' }),
+  node('オーバーワールドへ戻る', { kind: 'nether', doneWhen: 'dim:overworld', note: `パールとアイがそろってから（アイ${EYES_AT_DEPARTURE}以上）。帰りのゲートから。ポータルの対は live の控え。そろう前に始めるなら、エンダーパールの節を skip と理由で閉じてから（往復で戻る理由は黒曜石・ベッドではない）` }),
   // Run 9 (11/13): the gate's frame (10 obsidian) is taken on the way back, not found again as lava.
   node('帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12|dim:the_end',
     note: 'ネザーの用事（ロッド・パール）が済んで戻った後だけ。先に目玉を 1 個投げて向きを知る。ダイヤのツルハシで 1 個約 9 秒、10 個で約 90 秒。足りない 2 は溶岩で' }),
@@ -336,7 +340,7 @@ function readinessInput(world: Record<string, unknown>, journeyReadiness?: boole
   const known = dimension === 'overworld' ? framesKnownOf(world) : null;
   const thrown = dimension === 'overworld' && !known ? eyeLedgerFact(world.eyeThrows, feet, now) : [];
   const netherEyes = dimension === 'the_nether' ? eyesInHand(world) : null;
-  return [...(eyes !== null ? [known ? EYES_WITH_FRAMES(eyes, frameFoundWords(known, feet, eyes)) : EYES_IN_HAND(eyes)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+  return [...(eyes !== null ? [known ? EYES_WITH_FRAMES(eyes, frameFoundWords(known, feet, eyes)) : EYES_IN_HAND(eyes, eyeBasisOf(world).need)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 
 /**
@@ -389,8 +393,8 @@ const EYES_PLAN_TAIL =
  * and the first node is the walk there. The same tail as the case without frames: where the preparation goes.
  */
 const EYES_WITH_FRAMES = (eyes: number, found: string) => `エンダーアイ ${eyes} 個（オーバーワールド）。${found}。要塞の場所はもう分かっているので、目を投げて場所を出す節は要らない。` + EYES_PLAN_TAIL;
-const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
-  (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
+const EYES_IN_HAND = (eyes: number, need: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
+  (eyes >= need ? '' : `枠は最大 12 で、割れる分の予備を足した ${need} 個を持って向かうのが目安（今 ${eyes}/${need}・あと ${need - eyes} 個。要塞を探す投げは 5 回に 1 回割れる。パールが手に入る時は予備の分まで取る。10 個以上あれば、足すためにネザーへ戻らず先に投げる）。`) +
   '投げて落ちたアイは拾う。' + EYES_PLAN_TAIL;
 /**
  * Run 7 (11/27): a task begun in the Nether with 13 eyes. With the overworld-only rule in the system, Haiku weighed whether it applied (its thinking filled the 9,000 output tokens in 2 of 4 asks with the

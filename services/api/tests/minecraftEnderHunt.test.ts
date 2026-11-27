@@ -10,9 +10,9 @@ const killed = JSON.stringify({ v: 1, done: 1, of: 1, lines: [{ i: 1, do: 'fight
 describe('huntLine', () => {
   it('says the numbers with the average drop, and the time to the rest when there was a kill', () => {
     const line = huntLine({ near: 3, nearest: 9.4, elapsedMs: 10 * 60_000, kills: 2, gained: 1, have: 3 })!;
-    expect(line).toContain('エンダーマン狩り 10 分: いま近くに 3 体（最寄り 9m）・撃破 2 体・パール +1（3/13）');
+    expect(line).toContain('エンダーマン狩り 10 分: いま近くに 3 体（最寄り 9m）・撃破 2 体・パール +1（3/14）');
     expect(line).toContain('1 体の落とし物は平均 0.5 個（0〜1）');
-    expect(line).toContain('撃破 0.2 体/分）ならあと 10 個に約 100 分');
+    expect(line).toContain('撃破 0.2 体/分）ならあと 11 個に約 110 分');
     expect(line).toContain('撃破は fight の結果に出た分だけ（体の反射が倒した分は結果に載らず、入っていない）');
     expect(line).toContain('反射の撃破を含まないので、実際はこれより速いことがある');
   });
@@ -38,7 +38,7 @@ describe('createEnderHunt', () => {
     hunt.note('r1', killed, 60_000);
     hunt.note('r1', killed, 61_000);
     const line = hunt.line(enders(8, 12), pearls(2), NETHER, 4 * 60_000)!;
-    expect(line).toContain('エンダーマン狩り 4 分: いま近くに 2 体（最寄り 8m）・撃破 1 体・パール +1（2/13）');
+    expect(line).toContain('エンダーマン狩り 4 分: いま近くに 2 体（最寄り 8m）・撃破 1 体・パール +1（2/14）');
     const again = createEnderHunt(hunt.checkpoint().minecraftEnderHunt);
     expect(again.line(enders(8), pearls(2), NETHER, 4 * 60_000 + 1_000)).toContain('撃破 1 体');
   });

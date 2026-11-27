@@ -291,7 +291,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
   });
   it('asks the water bucket before the End: the stage\'s shortage line and the check node\'s condition', () => {
     const base = { dimension: 'overworld', food: 333, nowKinds: ['stronghold' as const] };
-    const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 12], ['cobblestone', 64], ['iron_sword', 1]];
+    const kit: Array<[string, number]> = [['white_bed', 8], ['obsidian', 8], ['bow', 1], ['arrow', 30], ['ender_eye', 14], ['cobblestone', 64], ['iron_sword', 1]];
     expect(heading(preparationShortage({ ...base, counts: owned(kit) }))).toBe('準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い');
     expect(heading(preparationShortage({ ...base, counts: owned(kit.slice(0, -1)) }))).toMatch(/^準備の不足（エンドへ入る前に要る物）: 水入りバケツが無い。目標/u);
     expect(preparationShortage({ ...base, counts: owned([...kit, ['water_bucket', 1]]) })).toBeNull();
@@ -300,7 +300,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     const check = plan.nodes.find(node => node.title === '出発の点検（エンドへ）')!;
     expect(check.doneWhen).toBe('food>=150&have:bed>=8&have:obsidian>=8&have:ender_eye>=10&have:water_bucket');
     // Run 9 (11/13): the Nether is left with 13 eyes (12 left the frame short about 1 time in 8).
-    expect(plan.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=13');
+    expect(plan.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=14');
     expect(check.note).toContain('水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ');
     expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
   });

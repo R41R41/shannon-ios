@@ -1,5 +1,6 @@
 import { readActResult } from '../../contracts/minecraftActContract.js';
 import { carried } from './minecraftConditions.js';
+import { eyeBasisOf } from './minecraftEyeSpare.js';
 import { PEARL_TARGET } from './minecraftPearlFacts.js';
 
 /**
@@ -102,7 +103,7 @@ export function createEnderHunt(saved: unknown) {
       }
       if (state.since === null || near.length === 0) return null;
       const line = huntLine({ near: near.length, nearest: near[0]!.distance, elapsedMs: now - state.since, kills: state.kills.length,
-        gained: Math.max(0, pearlsOf(counts) - state.pearls0), have: pearlsOf(counts) });
+        gained: Math.max(0, pearlsOf(counts) - state.pearls0), have: pearlsOf(counts), target: dimension === 'overworld' ? eyeBasisOf(world).need : PEARL_TARGET });
       return line && `${line}${triesWords(state.tries ?? [], near.map(item => item.id))}`;
     },
     checkpoint: () => ({ minecraftEnderHunt: { ...state, kills: state.kills.map(item => ({ ...item })), tries: (state.tries ?? []).map(item => ({ ...item })) } }),
@@ -110,7 +111,8 @@ export function createEnderHunt(saved: unknown) {
 }
 export type EnderHunt = ReturnType<typeof createEnderHunt>;
 
-export interface HuntNumbers { near: number; nearest: number; elapsedMs: number; kills: number; gained: number; have: number }
+/** `target`: the number to hold (`eyeBasisOf` in the overworld: 12 plus the spare, or the empty frames when found; the Nether's pearl target otherwise). */
+export interface HuntNumbers { near: number; nearest: number; elapsedMs: number; kills: number; gained: number; have: number; target?: number }
 
 /**
  * 11/26 (Haiku, the Nether pearl stage): the body's reflex (floor melee) killed two of the three endermen of the stage and its words carry no kill into the
@@ -119,11 +121,12 @@ export interface HuntNumbers { near: number; nearest: number; elapsedMs: number;
  *
  * The line from the numbers (pure): null before two minutes, and once the pearls are enough. */
 export function huntLine(n: HuntNumbers): string | null {
-  if (n.have >= PEARL_TARGET || n.elapsedMs < SHOW_AFTER_MS) return null;
+  const target = n.target ?? PEARL_TARGET;
+  if (n.have >= target || n.elapsedMs < SHOW_AFTER_MS) return null;
   const minutes = Math.max(1, Math.round(n.elapsedMs / 60_000));
-  const missing = PEARL_TARGET - n.have;
+  const missing = target - n.have;
   const base = `エンダーマン狩り ${minutes} 分: いま近くに ${n.near} 体（最寄り ${Math.round(n.nearest)}m）・撃破 ${n.kills} 体`
-    + `・パール +${n.gained}（${n.have}/${PEARL_TARGET}）。`
+    + `・パール +${n.gained}（${n.have}/${target}）。`
     + `撃破は fight の結果に出た分だけ（体の反射が倒した分は結果に載らず、入っていない）。`
     + `1 体の落とし物は平均 ${PEARLS_PER_KILL} 個（0〜1）`;
   if (n.kills === 0) return base;

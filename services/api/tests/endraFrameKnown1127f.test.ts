@@ -89,8 +89,9 @@ describe('(d) the first plan\'s eyes in hand', () => {
     expect(none).toContain('2 本投げれば要塞の場所が出る');
     expect(none).not.toContain('目を投げて場所を出す節は要らない');
   });
-  it('the plan\'s words say 11 eyes are the number needed, not a spare, until the frames are seen', () => {
-    expect(ownFirstPlanSystem()).toContain('目 11 個は余りでなく必要数に近い');
+  it('the plan\'s words say the number needed until the frames are seen is the 12 plus a spare, and the empty frames number once they are seen', () => {
+    expect(ownFirstPlanSystem()).toContain('枠が見えるまでの必要数は、枠 12＋予備');
+    expect(ownFirstPlanSystem()).toContain('枠が見えたら予備は要らず、必要は空き枠の数（枠 12・目入り 1 なら 11）');
     expect(ownFirstPlanSystem()).toContain('「枠は (x,y,z) で見つかっている」とある時は');
   });
 });
@@ -108,8 +109,9 @@ describe('(e) one measure for the eyes once the frames are in view', () => {
   });
   it('before the frames are seen keeps the odds and the 10 of the stronghold', () => {
     const said = preparationShortage({ ...base, counts: new Map([...KITS.filter(([name]) => name !== 'ender_eye'), ['ender_eye', 9] as [string, number]]), world: {} })!;
-    expect(said).toContain('開く確率');
-    expect(said).toContain('エンダーアイ（12 が目安。落ちたアイは拾う） 9/10');
+    expect(said).toContain('エンダーアイ 9/14（枠 12＋予備 2');
+    expect(said).not.toContain('開く確率');
+    expect(said).toContain('エンダーアイ（要塞を探しに向かえる最低。持つ目安は枠 12＋予備。落ちたアイは拾う） 9/10');
   });
   it('with the frames only in the body record: no odds line, one measure of the frames own words', () => {
     const said = preparationShortage({ ...base, counts: new Map([...KITS.filter(([name]) => name !== 'ender_eye'), ['ender_eye', 9] as [string, number]]), world: SAME_WORLD })!;

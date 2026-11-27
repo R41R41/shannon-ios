@@ -32,6 +32,7 @@ import {
 } from './minecraftLlmcReadiness.js';
 import { BED_ITEM, wornItems } from './minecraftItems.js';
 import { carried } from './minecraftConditions.js';
+import { eyeBasisOf } from './minecraftEyeSpare.js';
 import { END_BEDS, END_OBSIDIAN } from './minecraftLlmcPrepRules.js';
 import { waterNodeFacts } from './minecraftLlmcWaterNode.js';
 import { shiftFacts } from './minecraftLlmcShiftFacts.js';
@@ -288,7 +289,6 @@ export function armourIronWords(missing: readonly string[], counts: ReadonlyMap<
 }
 
 const ARMOUR_SLOTS: ReadonlyArray<readonly [string, string]> = [['helmet', '頭'], ['chestplate', '胴'], ['leggings', '脚'], ['boots', '足']];
-const EYES_FOR_FRAMES = 12;
 /**
  * Run 7 of 11/26 (past the fortress the shortage listed the beds, obsidian and the bow, and said nothing of the pickaxe at 73 of 1561, the armour at 2 of 4 or the
  * pearls and rods that make up for a broken eye): the End's check as one line of numbers, each only while it falls short, from the pack, the worn line and the durability
@@ -312,8 +312,10 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   if (picks && picks.left < picks.max / 2) lacks.push(`${picks.name} 耐久 ${picks.left}/${picks.max}`);
   const worn = wornItems(world.worn), missing = ARMOUR_SLOTS.filter(([slot]) => !worn.some(name => name.endsWith(`_${slot}`))).map(([, label]) => label);
   if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）${armourIronWords(missing, counts)}`);
-  const eyes = count('ender_eye');
-  if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
+  // One measure with the eye fact beside the shortage (`eyeBasisOf`): 12 plus the spare for the throws to come while the frames are still to be found. Once they are found (in view or in the
+  // body's record) the empty frames' number is said by the shortage's own two lines, so it is not said a third time here (it was 10/12 here beside 10/11 there).
+  const eyes = count('ender_eye'), basis = eyeBasisOf(world);
+  if (basis.kind === 'search' && eyes < basis.need) lacks.push(`アイ ${eyes}/${basis.need}（枠 12＋予備 ${basis.spare}。足せる材料: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
   // The same sentence is in the heading just before (`END_PREP_AFTER_STRONGHOLD`); here it is said short, for the line read alone.
   const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい' : '';
   return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数${behind}）: ${lacks.join('・')}` : null;

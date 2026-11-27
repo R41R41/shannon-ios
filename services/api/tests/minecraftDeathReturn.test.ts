@@ -30,7 +30,7 @@ describe('the way back to the drops of a death in another dimension (11/15c c1, 
     expect(said).not.toMatch(/必ず残る|消えない/u);
     // 31 m at 2.5 m/s; the other end (17,70,12) to the drops (149,74,75): 146 m at the Nether's 1.2 blocks a second
     expect(said).toContain('帰り道: ゲート 31m (138,79,102)（歩いて約 12 秒）→ 向こう側 (17,70,12) から落とし物まで 146m（約 122 秒）');
-    expect(said).toContain('区間の目標まで: ロッド 今 0/7（落とし物に 5）・パール・アイ 今 0/13。落とし物の分を集め直すと約 210 秒');
+    expect(said).toContain('区間の目標まで: ロッド 今 0/7（落とし物に 5）・パール・アイ 今 0/14。落とし物の分を集め直すと約 210 秒');
     expect(said).toContain('今: 体力 20・満腹 20・食べ物 13 点');
     expect(said).toContain('体は勝手に戻らない）。捨てるなら act の why に「落とし物は捨てる」と書く');
     expect(said.length).toBeLessThan(560);
@@ -62,10 +62,10 @@ describe('the way back to the drops of a death in another dimension (11/15c c1, 
   });
 
   it('says what the road lacks only while the rods and pearls are gathered: eyes made count, and not in the End nor with the frames found', () => {
-    // 12 eyes made, the rods used up: 6 rods' worth (an eye is half a rod), 12 of 13
+    // 12 eyes made, the rods used up: 6 rods' worth (an eye is half a rod), 12 of 14
     const eyes = c1({ inventory: [{ name: 'ender_eye', count: 12 }] });
-    expect(line(eyes)).toContain('区間の目標まで: ロッド 今 6/7（落とし物に 5）・パール・アイ 今 12/13');
-    expect(line(c1({ inventory: [{ name: 'ender_eye', count: 13 }] }))).not.toContain('区間の目標まで');
+    expect(line(eyes)).toContain('区間の目標まで: ロッド 今 6/7（落とし物に 5）・パール・アイ 今 12/14');
+    expect(line(c1({ inventory: [{ name: 'ender_eye', count: 14 }] }))).not.toContain('区間の目標まで');
     // the frames remembered: the frame line counts the eyes exactly
     const found = line(c1({ rememberedPlaces: { nether_portal: '31m 南 (138,79,102) ↔nether(17,70,12)', end_portal_frame: '40m 東 (300,20,80)' } }))!;
     expect(found).toContain('帰り道: ゲート 31m (138,79,102)');

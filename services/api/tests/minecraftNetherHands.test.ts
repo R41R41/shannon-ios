@@ -131,7 +131,7 @@ describe('S8 and S6 stage knowledge', () => {
       'この狩りの夜は寝ない（寝ると夜が飛び、エンダーマンが出ない', 'ゾンビ・スケルトン・クリーパーも来て屋根の下へ入れる', '数は持ち物の ender_pearl で数える']) expect(pearl).toContain(fact);
     expect(pearl).not.toContain('地上でも戦い方は同じ');
     const tree = seedPlan('エンドラを討伐してください')!;
-    const pearls = tree.nodes.find(node => node.title === 'エンダーパール13以上')!;
+    const pearls = tree.nodes.find(node => node.title === 'エンダーパール14以上')!;
     const ways = tree.nodes.filter(node => node.parentId === pearls.id);
     expect(ways.map(node => node.title)).toContain('歪んだ森が見つからない時は、地上の夜の平らな所でエンダーマン（天井2。寝ると夜が飛ぶので寝ない）');
     // Run 9 (11/12, 9ae9ef1a): the first child is the warped forest search, done in the Nether by what the body saw (kind nether); the ways themselves stay pearl.

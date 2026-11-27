@@ -189,7 +189,8 @@ describe('fix 4: after the point, the plan and the words of the End\'s items', (
     const all = JSON.stringify(V2_STAGES);
     expect(all).toContain('投げが割れて 10 個になった時の次の手');
     expect(all).toContain('10 個（34%）のまま枠へ進む');
-    expect(all).toContain('11 個ある時は、パールを探さずその 11 個（72%）で進んでよい');
+    expect(all).toContain('11 個ある時は、パールのために夜を待たずその 11 個（72%）で進んでよい');
+    expect(all).toContain('エンダーマンが見える・パールが手に入る時は逃さず、予備の分（不足行の必要数）まで取る');
   });
   it('(e) before going down to the frames with no table, no log and no plank: the digs against the pickaxe\'s uses and the way to a table', () => {
     const world = { dimension: 'overworld', mapLandmarks: ['Q エンドポータルの枠 (216,39,-14) 北3m ×12 アイ入り 0'],

@@ -17,7 +17,7 @@ describe('the fights at the same target, counted by the head', () => {
     expect(fightRepeatLines('t', frame(2, 7, [[58, 20]]), T(2))).toEqual([]);
     noteFights('t', input, stopped('fight 止まった moved: enderman #58 屋根中央に留まれない。与えた打撃 0（振り 0）'), frame(2, 7, [[58, 20]]), T(2));
     const [line] = fightRepeatLines('t', frame(2, 7, [[58, 20], [61, 14.4], [70, 30]]), T(9));
-    expect(line).toContain('enderman #58 への fight が 3 回続けて止まった（最初から 9 分・パール +0（2/13）・与えた打撃 計 0）');
+    expect(line).toContain('enderman #58 への fight が 3 回続けて止まった（最初から 9 分・パール +0（2/14）・与えた打撃 計 0）');
     expect(line).toContain('enderman_did_not_arrive（3 回続き）');
     expect(line).toContain('近くの別のエンダーマン 2 体（最寄り 14m）');
     expect(line).toContain('金の延べ棒 15.6 個で平均 1 個。いま持っている金の延べ棒 7 個');

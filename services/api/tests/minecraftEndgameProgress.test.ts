@@ -30,7 +30,7 @@ describe('walking the late-game seed with the frames of a run', () => {
 
   it('starts at the check before the Nether\'s depth, and the later nodes need their own observations', () => {
     expect(seed.nodes.filter(node => node.parentId === null).map(node => node.title)).toEqual(['出発の点検（ネザーの奥へ）', 'ネザー要塞を探す', 'ブレイズロッド7以上',
-      'エンダーパール13以上', 'エンダーアイ14個', 'オーバーワールドへ戻る', '帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', '出発の点検（エンドへ）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
+      'エンダーパール14以上', 'エンダーアイ14個', 'オーバーワールドへ戻る', '帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', '出発の点検（エンドへ）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
     // a fortress in view before the check is not the fortress node yet: the check comes first
     const early = at({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 2 }), mapLandmarks: ['N ネザー要塞 (10,64,10) 北10m レンガ×9'] });
     expect(state(early, 'p2')).toBe('continue');
@@ -106,10 +106,10 @@ describe('walking the late-game seed with the frames of a run', () => {
 
   it('keeps the eyes reached once their node closed at 12: an eye thrown in the overworld does not turn the meter back to the eyes', () => {
     // The through run's plan back in the overworld: the gate, the pearls and the eyes (12 made, the line to leave the Nether) are done.
-    const seed = seedPlan('エンドラを討伐して')!, closed = new Set(['黒曜石10とゲート', 'エンダーパール13以上', 'エンダーアイ14個']);
+    const seed = seedPlan('エンドラを討伐して')!, closed = new Set(['黒曜石10とゲート', 'エンダーパール14以上', 'エンダーアイ14個']);
     const dragon: PlanTree = { ...seed, current: seed.nodes.find(node => node.title === '出発の点検（エンドへ）')!.id,
       nodes: seed.nodes.map(node => (closed.has(node.title) ? { ...node, state: 'done' as const } : node)) };
-    expect(dragon.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=13');
+    expect(dragon.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=14');
     // one eye thrown and not yet picked up: 11 in the pack
     const thrown = frame({ dimension: 'overworld', position: { x: 40, y: 70, z: 0 }, inventory: items({ ender_eye: 11, cooked_beef: 4 }), mapLandmarks: [] });
     const line = meterLine(dragon, thrown, 7_000 / 60);

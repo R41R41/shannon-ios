@@ -62,7 +62,7 @@ describe('the words of the stages and the results', () => {
     expect(V2_STAGES.nether).toContain('「来た道」だけなら最初の点は始まった所で、ゲートではない'); // 1115b c1
     expect(V2_STAGES.nether).toContain('立てる最寄り (x,y,z)');
     expect(V2_STAGES.pearl).toContain('seconds 120〜150');
-    expect(V2_STAGES.pearl).toContain('アイが 13 個そろってから');
+    expect(V2_STAGES.pearl).toContain('アイが 14 個そろってから');
     expect(V2_STAGES.stronghold).toContain('dig at=そのマス で最初に 1 回壊す');
     expect(V2_STAGES.stronghold).toContain('枠の台の縁（立てる）');
     expect(V2_STAGES.stronghold).toContain('6 枠分並べ');

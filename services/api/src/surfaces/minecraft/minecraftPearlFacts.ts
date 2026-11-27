@@ -1,13 +1,14 @@
 import { carried } from './minecraftConditions.js';
+import { EYES_AT_DEPARTURE, FRAME_EYES } from './minecraftEyeSpare.js';
 
 /**
  * The pearls still to find, said as numbers beside the choices (the pearl forest scenes of 11/3: with 18 gold and 2 endermen in 10 minutes the
  * model fought on and never set the trade against the wait): how many are carried (pearls and eyes, an eye was a pearl), how many are
- * missing of the 13 the road aims at (run 9, 11/13: 12 eyes for the frames, one more for the one in five that breaks), and what the gold carried gives at a piglin's 15.6 ingots to one pearl on average (S6 read the 1.21.11
+ * missing of the number the road aims at (the frames' 12 and the spare for the eyes that break when thrown to find them: `eyeSpare`, one measure for every line), and what the gold carried gives at a piglin's 15.6 ingots to one pearl on average (S6 read the 1.21.11
  * barter table: weight 10 of 469, 2 to 4 pearls). Only numbers the body
  * reported; it names no way to get them.
  */
-export const PEARL_TARGET = 13;
+export const PEARL_TARGET = EYES_AT_DEPARTURE;
 export const GOLD_PER_PEARL = 15.6;
 
 /** The line for a decision in the Nether with rods in hand and pearls missing, or null. Both ways are set side by side in the same units
@@ -17,8 +18,8 @@ export const GOLD_PER_PEARL = 15.6;
 const PEARLS_PER_ENDERMAN = 0.5;
 const NUGGETS_PER_INGOT = 9;
 const NUGGETS_PER_ORE = 4;
-/** What leaving with 12, 13 or 14 eyes risks: the frames take 12 and one in five thrown breaks (S9's counts of the frames lacking an eye). */
-const PEARL_ODDS = `${PEARL_TARGET} で出る：アイ 12 だと枠が足りない見込み約 1 割強、13 で約 3%、14 で約 0.2%`;
+/** Why the number is what it is: the frames take 12, and the throws that find them are expected to break about one eye in five (the spare is the mean of those breaks, never under 1). */
+const PEARL_ODDS = `${PEARL_TARGET}（枠 ${FRAME_EYES}＋予備 ${PEARL_TARGET - FRAME_EYES}。要塞を探す投げは 1 本ごとに 5 回に 1 回割れ、割れた 1 個で空き枠に 1 個足りなくなると要塞の前でパール待ちになる）で出る`;
 export function pearlLine(counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
   if (dimension !== 'the_nether') return null;
   const have = carried(counts, 'ender_pearl') + carried(counts, 'ender_eye');
@@ -46,7 +47,7 @@ export const RODS_FOR_EYES = 7;
 export const WALK_BLOCKS_PER_SECOND = 1.2;
 export const SEARCH_GO_BLOCKS = 90;
 /** The eyes (a pearl is an eye to be) at which the plan leaves for the overworld; below it the search for pearls goes on in the Nether. */
-export const EYES_TO_LEAVE = 13;
+export const EYES_TO_LEAVE = PEARL_TARGET;
 /** Rods in hand as the plan counts them: two powder make one rod's worth. */
 const rodsCarried = (counts: ReadonlyMap<string, number>): number => carried(counts, 'blaze_rod') + Math.floor(carried(counts, 'blaze_powder') / 2);
 export const searchingForPearls = (counts: ReadonlyMap<string, number>, dimension: string | null): boolean =>
