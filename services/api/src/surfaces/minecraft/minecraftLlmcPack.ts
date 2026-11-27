@@ -1,4 +1,5 @@
 import { OMIT } from './minecraftLlmcLiveEnemies.js';
+import { ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 
 /**
  * mb-llmc v2 (実走36: 階段掘りで丸石 121・閃緑岩 65・深層岩の丸石 154 を拾い続けて満杯になり、dig が 0/12 で止まる・drop だけの act が 4 回・
@@ -60,13 +61,37 @@ function spareTool(name: string, held: ReadonlySet<string>): boolean {
   return better.some(kind => held.has(`${kind}_${tool[2]}`));
 }
 
+/** True while the flint the arrows lack is more than the flint carried (`ARROWS_TO_CARRY`, 4 arrows a flint); a bow with enough arrows lacks none. */
+function arrowFlintShort(lines: readonly string[]): boolean {
+  const have = (pattern: RegExp): number => lines.reduce((sum, line) => { const stack = STACK.exec(line); return stack && pattern.test(stack[1]!) ? sum + Number(stack[2]) : sum; }, 0);
+  const arrows = have(/^(?:arrow|spectral_arrow)$/u), bow = have(/^(?:bow|crossbow)$/u);
+  return (bow > 0 && arrows >= ARROWS_TO_CARRY) ? false : Math.ceil(Math.max(0, ARROWS_TO_CARRY - arrows) / 4) > have(/^flint$/u);
+}
+/**
+ * What of the bow's materials she carries, held back from a tidy (11/27: a tidy threw the flint away): item and the count the bow and 12 arrows take, never more than carried. The pack's
+ * words say why; said only while the bow's node is the plan's now, or a bow, arrows, feather or string is carried (stick and flint alone are carried for other work).
+ */
+export const ARCHERY_ITEMS: ReadonlyArray<readonly [string, number]> = [['flint', 3], ['feather', 3], ['string', 3], ['stick', 3], ['bow', 1], ['arrow', ARROWS_TO_CARRY]];
+export function archeryHeld(carried: ReadonlyMap<string, number>, nowDoneWhen?: string): Map<string, number> {
+  const out = new Map<string, number>();
+  const signal = /have:(?:bow|arrow)/u.test(nowDoneWhen ?? '') || ['bow', 'arrow', 'feather', 'string'].some(name => (carried.get(name) ?? 0) > 0);
+  if (!signal) return out;
+  for (const [item, need] of ARCHERY_ITEMS) {
+    const have = carried.get(item) ?? 0;
+    if (have > 0) out.set(item, Math.min(have, need));
+  }
+  return out;
+}
+const ARCHERY_KEEP_WORDS = '弓矢の材料（flint・feather・string・stick・bow・arrow）は捨てない（理由: 作り直すにはクモ・ニワトリ・砂利を探し直すことになり、拾った物は空きが無いと荷に入らない）。'
+  + '火打石が矢の分に満たない間は gravel も捨てない（掘ると 10% で火打石）。空きは dirt・leaves など山のある物から先に作る';
 /** Stacks used (the lines, and the omitted ones), the filler kinds with their totals, from the inventory lines. */
 export function packFacts(lines: readonly string[]): { used: number; filler: Array<[string, number]>; junk: Array<[string, number]>; worn: Array<[string, number]> } {
   let used = 0;
   const tools: Array<[string, number]> = [];
   const filler = new Map<string, number>(), junk = new Map<string, number>();
-  // The section audit of 11/5: gravel is the flint's source (10% a block), kept until the flint and steel is made.
-  const flintMade = lines.some(line => /^flint_and_steel×/u.test(line));
+  // The section audit of 11/5: gravel is the flint's source (10% a block), kept until the flint and steel is made. 11/27 (the bow and arrows are made on the way): and while the flint
+  // the arrows still lack is short (4 arrows to a flint), gravel is not a spare either.
+  const flintMade = lines.some(line => /^flint_and_steel×/u.test(line)) && !arrowFlintShort(lines);
   const held = new Set(lines.flatMap(line => STACK.exec(line)?.[1] ?? []));
   for (const line of lines) {
     const omitted = OMIT.exec(line) ?? /^ほか(\d+)件は略$/u.exec(line);
@@ -154,7 +179,7 @@ export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; ju
 function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: Array<[string, number]> = [], tidy: TidyContext = {}): string | null {
   if (free > FULL_SOON) return null;
   const keepStack = keepStackFor(free), held = tidy.held ?? (() => 0);
-  const say = tidySay(tidy.keepWords, tidy.blocks);
+  const say = tidySay(tidy.keepWords, tidy.blocks, tidy.archery);
   if (free === 0) {
     // Full now: said as what is so and what it costs, not as what will happen (run 46). tidy goes before drop (2026-11-13).
     const spare = dropAdvice({ filler, junk }, held, keepStack);
@@ -172,7 +197,7 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: A
  * 2026-11-13 (run 9: 20 acts to clear a full pack, the drops mostly missing the pit): at 3 free slots or fewer, the hand that makes the room. `keepWords`: what the
  * plan's current and next nodes need, as `物:数,…` (nothing: no example).
  */
-const tidySay = (keepWords?: string, blocks?: TidyContext['blocks']): string => `tidy で空ける（捨てる物と焼く原石を体が選ぶ）。要る物は keep=物:数${keepWords ? `（今の節の材料: keep=${keepWords}）` : ''}${blocksWords(blocks)}`;
+const tidySay = (keepWords?: string, blocks?: TidyContext['blocks'], archery?: boolean): string => `tidy で空ける（捨てる物と焼く原石を体が選ぶ）。要る物は keep=物:数${keepWords ? `（今の節の材料: keep=${keepWords}）` : ''}${blocksWords(blocks)}${archery ? `。${ARCHERY_KEEP_WORDS}` : ''}`;
 /**
  * 11/27 (the dirt and cobblestone she had thrown to make room were the scaffold that was short by 63): when the End's check wants blocks to stand on and she carries some, the
  * tidy words say which of the pack count for that and what throwing them costs. Facts only: the count, the kinds, the number short after a full throw; keeping them is `keep=`.
@@ -184,6 +209,8 @@ export interface TidyContext {
   /** What the open promises and the plan's materials hold back of an item. */
   held?: (item: string) => number;
   keepWords?: string;
+  /** The bow's materials are carried (`archeryHeld`): the tidy words say they are not thrown, with the reason. */
+  archery?: boolean;
   /** The blocks that count for the End's scaffold (`have` of `need`) and the kinds she carries (largest first), while the End's check is the plan's stage. */
   blocks?: { have: number; need: number; held: ReadonlyArray<readonly [string, number]> };
   /** A crafting table or a furnace within reach (remembered within 16 m). */

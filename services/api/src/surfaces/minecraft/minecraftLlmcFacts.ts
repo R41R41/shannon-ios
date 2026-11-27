@@ -17,6 +17,7 @@ import { furnaceFoodOf } from './minecraftFoodWords.js';
 import { nearbyLines, nearbyResourcesOf } from './minecraftLlmcNearby.js';
 import { agedScan } from './minecraftLlmcScanAge.js';
 import { scaffoldLine } from './minecraftLlmcDetour.js';
+import { ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 import { AIRISH, readLayers, type Layers } from './minecraftLlmcPreflightMap.js';
 import { burnLine, lavaNearLine, routeEnemiesLine, type Goal } from './minecraftLlmcHazardFacts.js';
 export { FACT_WINDOW_MS, controlOf, lifeOf, holderWords, holderLine, createHitWatch } from './minecraftLlmcHealth.js';
@@ -210,13 +211,29 @@ const FLINT_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['diamond', 'obsidi
  * flint one dig in ten, and the tidy keeps up to 10 gravel. The nearest sand-or-gravel cell of the map is added when one is in view.
  */
 export function flintLine(observation: BodyObservation | null, kinds: readonly PlanKind[] | undefined): string | null {
-  if (!kinds?.[0] || !FLINT_KINDS.has(kinds[0])) return null;
   const w = world(observation), counts = carriedItemCounts(w, observation?.facts);
-  if ((counts.get('flint') ?? 0) > 0 || (counts.get('flint_and_steel') ?? 0) > 0) return null;
+  const flint = counts.get('flint') ?? 0;
+  const forFire = !!kinds?.[0] && FLINT_KINDS.has(kinds[0]) && flint === 0 && (counts.get('flint_and_steel') ?? 0) === 0;
+  const forArrows = arrowFlintLack(w, counts);
+  if (!forFire && forArrows === null) return null;
   const layers = readLayers(typeof w.localMap === 'string' ? w.localMap : undefined), feet = feetCell(w, layers);
   const gravel = layers ? symbolCells(layers, 's').sort((a, b) => farFrom(feet, a) - farFrom(feet, b))[0] : undefined;
-  return '火打石 0。砂利は掘ると 10% で火打石（10 個で約 35 秒）。片付けは砂利を 10 個まで残す。通り道の砂利を先に掘る'
-    + (gravel ? `。見えている砂か砂利（地図 s）の最寄り (${gravel.x},${gravel.y},${gravel.z}) ${farFrom(feet, gravel)}m` : '');
+  const nearest = gravel ? `。見えている砂か砂利（地図 s）の最寄り (${gravel.x},${gravel.y},${gravel.z}) ${farFrom(feet, gravel)}m` : '';
+  const arrows = forArrows === null ? '' : `。矢の火打石あと ${forArrows}（弓矢の節の分で、今の節は止めない。今 ${flint}・矢 ${arrowsHeld(counts)}/${ARROWS_TO_CARRY}）`;
+  return forFire ? `火打石 0。砂利は掘ると 10% で火打石（10 個で約 35 秒）。片付けは砂利を 10 個まで残す。通り道の砂利を先に掘る${nearest}${arrows}`
+    : `火打石 ${flint}。砂利は掘ると 10% で火打石${nearest}${arrows}`;
+}
+const arrowsHeld = (counts: ReadonlyMap<string, number>): number => ['arrow', 'spectral_arrow'].reduce((sum, name) => sum + (counts.get(name) ?? 0), 0);
+/**
+ * 11/27 (the owner: the bow and arrows are made on the way): the flint the arrows still lack (4 arrows to a flint), said in the overworld while the bow or the arrows fall short, whatever
+ * the plan's section is. Null: another dimension, a bow with enough arrows, or the flint already there. Gravel is not in the nearby list, so this is where its count is said.
+ */
+function arrowFlintLack(w: Record<string, unknown>, counts: ReadonlyMap<string, number>): number | null {
+  if (typeof w.dimension !== 'string' || w.dimension.replace(/^minecraft:/u, '') !== 'overworld') return null;
+  const arrows = arrowsHeld(counts);
+  if ((counts.get('bow') ?? 0) > 0 && arrows >= ARROWS_TO_CARRY) return null;
+  const need = Math.ceil(Math.max(0, ARROWS_TO_CARRY - arrows) / 4), lack = need - (counts.get('flint') ?? 0);
+  return lack > 0 ? lack : null;
 }
 
 /** The lines of the live facts of this section: the diamonds' veins and the flint (the normal version only). */

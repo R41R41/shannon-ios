@@ -149,7 +149,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/27: 760 -> 820 for the fish line's reach (one note beside a fish in the food candidates: about 40).
     // 11/27: 820 -> 860 for the full pack's cost (a go and a vertical do not stop on it; the hands that do are named)
     // 11/27: 860 -> 920 for the facts and plan rows together (obsidian with no diamond pickaxe; the height line is on a separate frame)
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(920);
+    // 11/27 (the bow and arrows made on the way): 920 -> 960 for the flint line's arrow part (the flint the arrows still lack, in the overworld: about 45).
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(960);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });

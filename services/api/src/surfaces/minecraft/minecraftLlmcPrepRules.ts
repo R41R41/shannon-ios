@@ -17,6 +17,7 @@
  */
 import { BED_ITEM } from './minecraftItems.js';
 import { REQUEST_SCOPE_EN } from './minecraftRequestSteps.js';
+import { ARCHERY_CLOSING, ARCHERY_ON_THE_WAY, ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 /**
  * `goal`: wanted when it can be had, not required (the golden boots, when 4 gold is found). `weight`: what one stack of a matching item is worth in the count
  * (a diamond pickaxe stands for three iron ones).
@@ -92,7 +93,7 @@ const has = (counts: ReadonlyMap<string, number>, name: string): number => (coun
  */
 export const BOW: PrepNeed = { label: '弓', count: 1, pattern: /^(?:bow|crossbow)$/u,
   materials: counts => `材料 糸 ${has(counts, 'string')}/3・棒 ${has(counts, 'stick')}/3` };
-export const ARROWS: PrepNeed = { label: '矢', count: 30, pattern: /^(?:arrow|spectral_arrow)$/u,
+export const ARROWS: PrepNeed = { label: '矢', count: ARROWS_TO_CARRY, pattern: /^(?:arrow|spectral_arrow)$/u,
   materials: counts => `光の矢も数える。材料 羽根 ${has(counts, 'feather')}・火打石 ${has(counts, 'flint')}・棒 ${has(counts, 'stick')}（1 ずつで 4 本）` };
 /**
  * The review of 11/10 (G15): the bow is an aim and never holds the End's gate, and nothing on the ground said where string comes from or what
@@ -101,12 +102,15 @@ export const ARROWS: PrepNeed = { label: '矢', count: 30, pattern: /^(?:arrow|s
  * K2 (the same review, from the earlier agents' runs): a run that shot the eight open crystals from the ground went in with a bow and arrows;
  * the second line says how few arrows are worth carrying and that the road's lone skeleton is a source, without a detour or a night's wait.
  */
-export const END_BOW_KNOWLEDGE = '- 弓の糸はクモから（1 体 0〜2 本。弓は糸 3 と棒 3）: 昼の明るい所のクモは打つまで襲ってこないことが多く、見えたら剣で fight して糸を拾う。夜と洞窟のクモは鉄の剣と盾を持ってから。'
-  + '弓と矢があればエンドのクリスタルを地面から撃てる。無いと柱を 1 本ずつ登ることになり（1 本に 5〜8 分）、弓なしの実走 3 本は 3 本とも柱の上か途中で死んだ。'
-  + '見えない時に探し回らない（弓がそろわなくても入場は止まらない）。\n'
-  + '- 矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつと、外した分の予備。目標は 30）: 火打石 1・棒 1・羽根 1 で 4 本なので、3 組で 12 本になる。'
-  + 'スケルトンも倒すと矢を 0〜2 本落とす（まれに弓も。撃たれて刺さった矢は拾えない）。遠くから撃ってくるので、鉄の防具と盾があり、撃ってくるのが 1 体だけの時に fight（range=16）で詰めて斬る（防具か盾が無い時・2 体以上の時は、1 枚で射線を切って陰で待つ）。'
-  + '矢のために夜を待たない・追いかけない・寄り道しない。';
+export const END_BOW_KNOWLEDGE = `- ${ARCHERY_ON_THE_WAY}。この節は要塞の節の前に置く（道中の準備。ベッド・黒曜石・足場の点検物は要塞の後ろ）。\n`
+  + '- 弓の糸はクモから（1 体 0〜2 本。弓は糸 3 と棒 3）: 昼の地表で見えて道がある 1 体を剣で fight して糸を拾う（探しに地下へ潜らない）。昼の明るい所のクモは打つまで襲ってこないことが多い。'
+  + '夜の地上と洞窟のクモは、鉄の剣と盾を持ってからにする。竜との戦いで弓と矢があれば、地面から結晶を撃てる。無いと柱を 1 本ずつ登ることになり（1 本に 5〜8 分）、足場の材料が尽きて高所で竜に落とされやすい。\n'
+  + '- 矢の材料: 火打石は砂利を掘ると 1 個 10%（mine gravel X,Y,Z count=N。拾った砂利を置き直せば同じ 1 個で続けられる。砂利は入力の近くの一覧に出ないので、見えない時は mc_probe kind=scan か mc.view で探す）。'
+  + '羽根はニワトリを hunt chicken（1 羽で平均 1 枚）。石のシャベル（make stone_shovel: 丸石 1＋棒 2、作業台が要る）は砂利を掘る時に体が自動で持ち替える。弓・矢の make（make bow・make arrow）も作業台が要る。\n'
+  + `- ${ARCHERY_CLOSING}。弓矢がそろわなくてもエンドへの入場は止まらない。矢は 12 本あれば檻なしの結晶 8 本に 1 射ずつと外した分に足りる（火打石 3・羽根 3・棒 3）。\n`
+  + '- スケルトンも倒すと矢を 0〜2 本落とす（まれに弓も。撃たれて刺さった矢は拾えない）。遠くから撃ってくるので、鉄の防具と盾があり、撃ってくるのが 1 体だけの時に fight（range=16）で詰めて斬る（防具か盾が無い時・2 体以上の時は、1 枚で射線を切って陰で待つ）。'
+  + '骸骨を探しに行かない（落とし物の弓は出る率が低く、当てにしない）。\n'
+  + '- 持った弓矢は竜との戦いまで撃たない（shoot の手は出さない。ブレイズ・骸骨・クモ・エンダーマン・ホグリンなどには剣で戦う）。理由: 撃った矢は拾えず、外した分は戻らない。';
 
 /**
  * Run59 leg 2 (2026-11-02 23:34): a need that looked impossible to make (the body's make said missing oak_log) was put off and the portal hand was
@@ -324,10 +328,10 @@ export const PLAN_PREP_WORDS = [
   '- 木は序盤だけ通しの分を一度に: 石の斧ができたら原木を最低 12・安心 24 本分まで取る節を書く（doneWhen は stock:wood。作った分を引き、板・棒も原木に換算して数える）。'
     + '後で木のために地上へ戻らない。',
   '- バケツを作った直後・鉄の兜と胸当ての前（炉の待ちに重ねる）に、近くの水源ですぐ汲む節を書く（doneWhen have:water_bucket）。',
-  '- 弓と矢（エンドのクリスタルを地面から壊す道具。無いと柱を 1 本ずつ登ることになり、弓なしの実走 3 本は 3 本ともその柱で死んだ）の材料は序盤の道中で集める。'
-    + '食料か鉄の節の caution に「クモを見たら剣で倒して糸3（夜と洞窟は鉄の剣と盾の後）・ニワトリの羽根・砂利の火打石」と書く（後の節に回さない）。'
-    + '矢は 12 本あれば檻なしの結晶 8 本に足りる（1 射ずつと予備。目標 30）。'
-    + '矢だけのために夜を待つ節・狩りに出る節は書かない（エンドへ着くのが先）。'
-    + 'エンダーアイを 10 個以上持って現世にいる場合は、弓と矢の節も要塞の節の後ろ・エンドへ入る節の前に置く（道中でクモ・羽根・火打石を見たら取る程度で、そのための寄り道はしない）。',
+  `- 弓と矢の節: ${ARCHERY_ON_THE_WAY}。`
+    + '節は要塞（ストロングホールド）の節の前の短い節（道中の準備）に置く。doneWhen は have:bow&have:arrow>=12（12 本そろえば閉じる）。'
+    + 'エンダーアイを 10 個以上持って現世にいる場合も同じで、要塞の節の前の短い節に置く（要塞が先。手元の材料と、見えた物だけで作る）。'
+    + '食料か鉄の節の caution には「通りがかりにクモを見たら剣で倒して糸3（夜と洞窟は鉄の剣と盾の後）・ニワトリの羽根・砂利の火打石を取る（探し回らない）」と書く。'
+    + `${ARCHERY_CLOSING}。`,
   '- エンダーマン 1 体は鉄の剣で約 7 打撃かかり、そのたびに剣の耐久（250）が減る: パール狩りの前に、予備の鉄の剣をもう 1 本作る（鉄の節の caution に書く）。',
 ].join('\n');

@@ -30,7 +30,7 @@ describe('walking the late-game seed with the frames of a run', () => {
 
   it('starts at the check before the Nether\'s depth, and the later nodes need their own observations', () => {
     expect(seed.nodes.filter(node => node.parentId === null).map(node => node.title)).toEqual(['出発の点検（ネザーの奥へ）', 'ネザー要塞を探す', 'ブレイズロッド7以上',
-      'エンダーパール14以上', 'エンダーアイ14個', 'オーバーワールドへ戻る', '帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', '出発の点検（エンドへ）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
+      'エンダーパール14以上', 'エンダーアイ14個', 'オーバーワールドへ戻る', '帰ったゲートの枠の黒曜石を回収（竜戦用 12 に）', '出発の点検（エンドへ）', '弓と矢（道中の短い節。矢 12 本で閉じる）', 'ストロングホールド', 'エンドに入る', 'エンドでドラゴン']);
     // a fortress in view before the check is not the fortress node yet: the check comes first
     const early = at({ dimension: 'the_nether', position: { x: 0, y: 64, z: 0 }, inventory: items({ cooked_beef: 2 }), mapLandmarks: ['N ネザー要塞 (10,64,10) 北10m レンガ×9'] });
     expect(state(early, 'p2')).toBe('continue');
@@ -68,32 +68,34 @@ describe('walking the late-game seed with the frames of a run', () => {
     tree = at({ dimension: 'overworld', position: { x: 0, y: 70, z: 0 }, inventory: items({ ender_eye: 13, cooked_beef: 20, white_bed: 10, obsidian: 12, bow: 1, arrow: 40, water_bucket: 1 }), mapLandmarks: [] });
     expect(state(tree, 'p7')).toBe('done');
     expect(state(tree, 'p8')).toBe('done');
-    expect(tree.current).toBe('p9.2');
+    // the bow's short node (before the stronghold) closes by the bow and the arrows in the frame
+    expect(state(tree, 'p9')).toBe('done');
+    expect(tree.current).toBe('p10.2');
     // far from the room nothing of the stronghold closes; at the room the frames close its first node
     tree = at({ dimension: 'overworld', position: { x: 600, y: 70, z: -1800 }, inventory: items({ ender_eye: 11, white_bed: 4, bow: 1, arrow: 40 }), mapLandmarks: [] });
-    expect(state(tree, 'p9.2')).toBe('continue');
+    expect(state(tree, 'p10.2')).toBe('continue');
     tree = at({ dimension: 'overworld', position: { x: 700, y: 25, z: -1893 }, inside: 'ストロングホールドの中', inventory: items({ ender_eye: 11, white_bed: 4, bow: 1, arrow: 40 }),
       mapLandmarks: ['Q エンドポータルの枠 (703,26,-1899) 北6m ×12 アイ入り 2'] });
-    expect(state(tree, 'p9.2')).toBe('done');
-    expect(tree.current).toBe('p9.3');
+    expect(state(tree, 'p10.2')).toBe('done');
+    expect(tree.current).toBe('p10.3');
     tree = at({ dimension: 'overworld', position: { x: 703, y: 27, z: -1896 }, inventory: items({ white_bed: 4, bow: 1, arrow: 40 }),
       mapLandmarks: ['Q エンドポータルの枠 (703,26,-1899) 北3m ×12 アイ入り 12', 'e エンドポータル (703,26,-1898) 北2m'] });
-    expect(state(tree, 'p9.3')).toBe('done');
-    expect(state(tree, 'p9')).toBe('done');
-    expect(tree.current).toBe('p10');
+    expect(state(tree, 'p10.3')).toBe('done');
+    expect(state(tree, 'p10')).toBe('done');
+    expect(tree.current).toBe('p11');
     // the End: entering closes its node; the crystals close theirs when the body says none are left; the dragon's node stays open
     tree = at({ dimension: 'the_end', position: { x: 100, y: 49, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 40 }), mapLandmarks: [] }, { crystals: { remaining: 10 } });
-    expect(state(tree, 'p10')).toBe('done');
-    expect(tree.current).toBe('p11.1');
+    expect(state(tree, 'p11')).toBe('done');
+    expect(tree.current).toBe('p12.1');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [] }, { crystals: { remaining: 4 } });
-    expect(state(tree, 'p11.2')).toBe('continue');
+    expect(state(tree, 'p12.2')).toBe('continue');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
     // The section audit of 11/5: the fallback is one node (crystals with the bow while the sword strikes the perched dragon), with no
     // condition of its own: all crystals gone is no longer a step before the sword.
-    expect(state(tree, 'p11.2')).toBe('continue');
-    expect(state(tree, 'p11')).toBe('continue');
+    expect(state(tree, 'p12.2')).toBe('continue');
+    expect(state(tree, 'p12')).toBe('continue');
     // the bed way (the first child, no condition: the kill is the body's record) stays the current node whatever the crystals say
-    expect(tree.current).toBe('p11.1');
+    expect(tree.current).toBe('p12.1');
   });
 
   it('keeps the meter on the later milestones: the next target after the Nether is the fortress, then the rods, and so on', () => {

@@ -1,11 +1,11 @@
 import { carried } from './minecraftConditions.js';
-import { NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
+import { ARROWS, BOW, NETHER_BY_SECONDS } from './minecraftLlmcPrepRules.js';
 import { thunderstorm } from './minecraftLlmcStateWords.js';
 import { SLEEP_COST, SLEEP_SKIP } from '../../contracts/minecraftSleepWords.js';
 import { REQUEST_NIGHT_WAY } from './minecraftRequestSteps.js';
 import { oreRouteHands, SEALED_SHAFT_WORD, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
-import { framesOf } from './minecraftSeenMarks.js';
-import { wornItems } from './minecraftItems.js';
+import { eyeBasisOf } from './minecraftEyeSpare.js';
+import { countMatching, wornItems } from './minecraftItems.js';
 export { thunderstorm } from './minecraftLlmcStateWords.js';
 
 /**
@@ -21,7 +21,7 @@ const NETHER_MINUTES = Math.round(NETHER_BY_SECONDS / 60), NETHER_TICKS = NETHER
 const netherShare = (left: number, nether: boolean): string => nether ? `（ネザーまで ${NETHER_MINUTES} 分の目標の ${Math.round(100 * left / NETHER_TICKS)}%）` : '';
 const WEAPON = /(?:^|:)(?:wooden|stone|golden|iron|diamond|netherite)_(?:sword|axe)$/u;
 /** The blade of the iron gear: the weapon the night and the gate are met with (a stone one is what the first hour makes). */
-const IRON_BLADE = /(?:^|:)(?:iron|diamond|netherite)_sword$/u;
+export const IRON_BLADE = /(?:^|:)(?:iron|diamond|netherite)_sword$/u;
 const IRON_FOR_SWORD = 2;
 const IRON_FOR_PICKAXE = 3;
 const IRON_PICK_UP = /(?:^|:)(?:iron|diamond|netherite)_pickaxe$/u;
@@ -118,16 +118,21 @@ export const enemyNear = (world: Record<string, unknown>): boolean => (Array.isA
  * that a sleep makes the morning, and a night slept through has no endermen. While the plan's now is a pearl node (`pearlNow`) and the pearls and
  * eyes are under the 10 that go to the stronghold, the bed's line says that too, as a fact beside it; the choice stays hers.
  */
-const PEARLS_TO_GO = 10;
 /**
- * Pearls and eyes still missing: against the empty frames of the portal room when the body has counted them (`framesOf`: the frames seen less the eyes in them), else
- * against the 10 that go to the stronghold. 11/27 (run of that night): the plan's pearl node was renamed and kept its kind `stronghold`, so the plan's now never read as a pearl node;
- * with 10 eyes in the pack and 1 frame still empty the gap is 1 pearl, which the 10 alone did not show.
+ * Pearls and eyes still missing, against the one measure of the eyes to hold (`eyeBasisOf`): the empty frames of the portal room when they are known (in view, or the body's remembered
+ * row), else, before the frames are found, 12 plus the spare for the throws still to come (13 or 14). 11/27: the floor was 10 there, so with 10 to 12 eyes in the pack and no frame in view
+ * the night's pearl word never came and the head read the ordinary "a sleep skips the night" night; one eye broken on the way meant a wait at the frames.
  */
 export function pearlGap(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): number {
-  const frames = framesOf(world);
-  const need = frames ? Math.max(0, frames.frames - frames.eyes) : PEARLS_TO_GO;
-  return Math.max(0, need - carried(counts, 'ender_pearl') - carried(counts, 'ender_eye'));
+  return Math.max(0, eyeBasisOf(world).need - carried(counts, 'ender_pearl') - carried(counts, 'ender_eye'));
+}
+
+/** Health from which a night on the surface is a night for the hunt (below it the gap alone does not make the pearls the plan's now). */
+export const PEARL_NIGHT_MIN_HEALTH = 12;
+/** What a night of hunting on the surface is met with: an iron (or better) sword and a shield in the pack, and the health not low (an absent reading is not low). */
+export function armedForNight(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): boolean {
+  const health = typeof world.health === 'number' && Number.isFinite(world.health) ? world.health : null;
+  return (health === null || health >= PEARL_NIGHT_MIN_HEALTH) && carriedNames(counts, IRON_BLADE).length > 0 && carried(counts, 'shield') > 0;
 }
 
 /** The pieces she has on, of the four (`world.worn`), for the night's danger words. */
@@ -145,10 +150,25 @@ export function nightDangerWords(world: Record<string, unknown>, counts: Readonl
   return `夜に地表で待つ時の事実: ${parts.join('・')}・夜の地上はゾンビ・スケルトン・クリーパー・クモが湧く（明かりの無い所ほど）`;
 }
 
+/**
+ * The night's chance at the bow, as facts, said only with the pearl night and only while she is armed (sword, shield, health): what the same surface gives for the bow and the arrows
+ * (the spider's string, the skeleton's arrows) and what is carried. The pearls come first; no walk to look for them. Null when the bow is carried and the arrows are at their aim.
+ */
+function bowChance(counts: ReadonlyMap<string, number>): string | null {
+  const bow = countMatching(counts, BOW.pattern) > 0, arrows = countMatching(counts, ARROWS.pattern);
+  if (bow && arrows >= ARROWS.count) return null;
+  const parts = [
+    ...(bow ? [] : [`クモ→糸（弓は糸 3＋棒 3。${BOW.materials?.(counts) ?? ''}・弓 無し）`]),
+    ...(arrows >= ARROWS.count ? [] : [`スケルトン→矢（今 ${arrows}/${ARROWS.count}。${ARROWS.materials?.(counts) ?? ''}）`])];
+  return `この夜に同じ地上で取れる弓矢の物: ${parts.join('、')}。エンダーマンのパールが先。近くに来た 1 体ずつを剣で倒して拾う（探し回らない）`;
+}
+
 /** The pearl word of the bed's lines: said while the plan's now is the pearls (`pearlNow`) and some are still missing (`pearlGap`), with the night's danger beside it. */
-const pearlNightWord = (world: Record<string, unknown>, counts: ReadonlyMap<string, number>, pearlNow: boolean): string =>
-  pearlNow && pearlGap(world, counts) > 0
-    ? `。パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）。${nightDangerWords(world, counts)}` : '';
+const pearlNightWord = (world: Record<string, unknown>, counts: ReadonlyMap<string, number>, pearlNow: boolean): string => {
+  if (!pearlNow || pearlGap(world, counts) <= 0) return '';
+  const chance = armedForNight(world, counts) ? bowChance(counts) : null;
+  return `。パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）。${nightDangerWords(world, counts)}${chance ? `。${chance}` : ''}`;
+};
 
 /**
  * The bed against the night, as the facts of the game (the coordinator's wording of 11/4, after run60 and run61 both ended in a night): within a minute of

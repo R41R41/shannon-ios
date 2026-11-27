@@ -57,8 +57,10 @@ describe('(1) the pearl fact stands up from the gap, not from the node\'s kind',
     // no eye in the pack and a node of another kind: the End's check is not what is being prepared
     const iron = planFromSeeds([seed('p2', '鉄を掘る', { kind: 'iron' })]);
     expect(parts(iron, world({ inventory: inventory({ white_bed: 1, iron_pickaxe: 1 }) })).planNow).not.toContain(WORD);
-    // the frames are not counted yet (the stronghold is still to be found): the 10 that go there are not "short"
-    expect(parts(renamed(), world({ mapLandmarks: [] })).planNow).not.toContain(WORD);
+    // the frames are not counted yet (the stronghold is still to be found): the eyes to hold are 12 plus the spare (14 with no throw made), not the 10 that go there. 10 eyes are short, and
+    // armed (sword, shield, health) the pearls are the now; unarmed they are not (the night is then slept as before)
+    expect(parts(renamed(), world({ mapLandmarks: [] })).planNow).toContain(WORD);
+    expect(parts(renamed(), world({ mapLandmarks: [], inventory: inventory({ ...PACK, iron_sword: 1, shield: 0 }) })).planNow).not.toContain(WORD);
   });
   it('the pearl node by its own kind keeps the old behaviour (under 10 pearls and eyes, with no frames known)', () => {
     const few = new Map([['white_bed', 1], ['blaze_rod', 7], ['ender_pearl', 3]]);
@@ -96,7 +98,7 @@ describe('(3) while the night is near: the shortages that can be moved, from the
     expect(line).toContain('夜まで 約 4 分');
     expect(line).toContain('足場のブロック あと 63（今 1/64');
     expect(line).toContain('黒曜石 あと 1（今 7/8。ダイヤのつるはし あり）');
-    expect(line).toContain('矢 あと 28（今 2/30。材料 羽根 0・火打石 2・棒 2）');
+    expect(line).toContain('矢 あと 10（今 2/12。材料 羽根 0・火打石 2・棒 2）');
   });
   it('gives no estimate of time and does not say these replace the wait; they are the checks that are fine behind the stronghold', () => {
     expect(line).not.toMatch(/間に合|足りる|余裕|十分|で済む|何分/u);

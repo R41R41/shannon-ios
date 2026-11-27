@@ -71,8 +71,9 @@ describe('before the frames are found: 12 plus the spare, one measure', () => {
   });
   it('says nothing more at the number (14 with none thrown, 13 after a throw), and the pearl day line names the two numbers: the 10 that go, the number to hold', () => {
     expect(endLackLine(readinessOf(frame({ inventory: pack({ ender_eye: 13 }), eyeThrows: THROWS }))!, ['stronghold'])).not.toContain('アイ');
-    const day = pearlDayLine({ time: '1000', ...world }, counts({ ender_eye: 8 }), 'overworld', true, null)!;
-    expect(day).toContain('パールはあと 2 個足りない');
+    const day = pearlDayLine({ time: '1000', eyeThrows: THROWS, ...world }, counts({ ender_eye: 8 }), 'overworld', true, null)!;
+    // the floor is the number to hold (13 after throws), not the 10 that go: 8 eyes are 5 short
+    expect(day).toContain('パールはあと 5 個足りない');
     expect(day).toContain('要塞へ向かえるのは 10 個から。道中で投げて割れる分の予備を足した 13 個まで、手に入る時に取る');
   });
   it('the hunt line counts toward the same number in the overworld, the pearl target in the Nether', () => {

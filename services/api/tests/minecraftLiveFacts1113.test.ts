@@ -58,15 +58,16 @@ describe('the diamonds\' veins (M2) and the flint (M4)', () => {
   });
   it('says the flint with no flint and no flint and steel at the diamonds, the obsidian or the gate, with the nearest gravel the map shows', () => {
     const sandy = MAP.replace('1 . . . . .', '1 . s . . .');
-    const line = flintLine(frame({ localMap: sandy }), ['obsidian'])!;
+    const armed = { bow: 1, arrow: 12 };
+    const line = flintLine(frame({ localMap: sandy, inventory: armed }), ['obsidian'])!;
     expect(line).toContain('火打石 0。砂利は掘ると 10% で火打石（10 個で約 35 秒）。片付けは砂利を 10 個まで残す。通り道の砂利を先に掘る');
     expect(line).toContain('(1,-50,1) 1m');
-    expect(flintLine(frame({ inventory: { flint: 1 } }), ['diamond'])).toBeNull();
-    expect(flintLine(frame({ inventory: { flint_and_steel: 1 } }), ['portal'])).toBeNull();
-    expect(flintLine(frame({}), ['stone_tools'])).toBeNull();
+    expect(flintLine(frame({ inventory: { flint: 1, ...armed } }), ['diamond'])).toBeNull();
+    expect(flintLine(frame({ inventory: { flint_and_steel: 1, ...armed } }), ['portal'])).toBeNull();
+    expect(flintLine(frame({ inventory: armed }), ['stone_tools'])).toBeNull();
   });
   it('puts both in the normal facts only, and nothing extra with no kinds', () => {
-    const obs = frame({ localMap: MAP });
+    const obs = frame({ localMap: MAP, inventory: { bow: 1, arrow: 12 } });
     const normal = inputFacts(obs, { nowKinds: ['diamond'] }, false);
     expect(normal.lines.some(line => line.startsWith('ダイヤの群れ'))).toBe(true);
     expect(normal.lines.some(line => line.startsWith('火打石 0'))).toBe(true);

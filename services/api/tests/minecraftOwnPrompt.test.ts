@@ -38,7 +38,7 @@ const PINNED = {
   // 11/13 the body's dropGuard: the lava beside or above is filled with stone, the obsidian hand's with its canPlace only, so the core asks for stone there (前は a4f7d78bb3171771).
   // 11/13 the 1111 review: lava beside is not walked and only O is dug there (the core's falls line) (前は a49b5cc1bdf3e971).
   // The reading of the live state says the application's own lines are advice and only world text is never obeyed (the model took its own lines for injected text; 前は 05691936cd001657 と 9484df3e3e4d04cf).
-  llmc_r9_system: 'c0d825f9d55a9361',
+  llmc_r9_system: 'b18df016a6ed2acb',
   old_mode_system: '3345e1deee8a446d',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);

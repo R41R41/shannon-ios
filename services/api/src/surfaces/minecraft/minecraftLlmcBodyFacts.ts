@@ -34,6 +34,7 @@ import { BED_ITEM, wornItems } from './minecraftItems.js';
 import { carried } from './minecraftConditions.js';
 import { eyeBasisOf } from './minecraftEyeSpare.js';
 import { END_BEDS, END_OBSIDIAN } from './minecraftLlmcPrepRules.js';
+import { ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 import { waterNodeFacts } from './minecraftLlmcWaterNode.js';
 import { shiftFacts } from './minecraftLlmcShiftFacts.js';
 import { missingNodeFact, planNowOf } from './minecraftLlmcNode.js';
@@ -228,7 +229,7 @@ export function readinessParts(
   const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, pearlNow, llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, () => dayBedAdviceTold(taskId))
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
-  const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
+  const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null, undefined, pearlNow) : null;
   // 11/27: while the pearls are short the day's fact (where they mainly come from, what the day has shown of endermen) and, as the dusk comes, what can be moved besides waiting.
   const pearlLines = planNow ? [pearlDayLine(facts.world, facts.counts, facts.dimension, pearlNow, enderSeenWords(taskId)), nightMeanwhileLine(facts.world, facts.counts, facts.dimension, pearlNow)] : [];
   const night = [sleepLine, bedLine, ...pearlLines].filter(Boolean).join('。') || null;
@@ -306,8 +307,8 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   const beds = [...counts].reduce((sum, [name, n]) => sum + (BED_ITEM.test(name) ? n : 0), 0);
   if (beds < END_BEDS) lacks.push(`ベッド ${beds}/${END_BEDS}（あと ${END_BEDS - beds}）`);
   if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}（あと ${END_OBSIDIAN - count('obsidian')}）${count('diamond_pickaxe') + count('netherite_pickaxe') > 0 ? '' : '。掘る手段が無い（ダイヤのつるはしが荷に無い）'}`);
-  if (!count('bow')) lacks.push(`弓なし（作るなら糸 ${count('string')}/3・棒 ${count('stick')}/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）`);
-  if (count('arrow') < 12) lacks.push(`矢 ${count('arrow')}/12（羽根 ${count('feather')}・火打石 ${count('flint')}・棒 ${count('stick')}）`);
+  if (!count('bow')) lacks.push(`弓なし（作るなら糸 ${count('string')}/3・棒 ${count('stick')}/3。弓矢は道中の短い節で作る物で、遠い所へは往復しない）`);
+  if (count('arrow') < ARROWS_TO_CARRY) lacks.push(`矢 ${count('arrow')}/${ARROWS_TO_CARRY}（羽根 ${count('feather')}・火打石 ${count('flint')}・棒 ${count('stick')}）`);
   const picks = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
     const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null, durability = item?.durability as Record<string, unknown> | undefined;
     const left = durability?.left, max = durability?.max;
@@ -322,7 +323,7 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   const eyes = count('ender_eye'), basis = eyeBasisOf(world);
   if (basis.kind === 'search' && eyes < basis.need) lacks.push(`アイ ${eyes}/${basis.need}（枠 12＋予備 ${basis.spare}。足せる材料: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
   // The same sentence is in the heading just before (`END_PREP_AFTER_STRONGHOLD`); here it is said short, for the line read alone.
-  const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい' : '';
+  const behind = beforeStronghold(world, counts, kinds) ? '。点検物（ベッド・黒曜石・足場）は要塞の後ろでよい。取りに出る節は要らない。弓矢は別で、要塞の前の道中の短い節で作る（遠い所へは往復しない）。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい' : '';
   return lacks.length ? `エンドへ入る前に要る物のうち足りない分（数${behind}）: ${lacks.join('・')}` : null;
 }
 

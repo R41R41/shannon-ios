@@ -29,18 +29,18 @@ describe('watchLine', () => {
     const first = watchLine(3, 10_000, 0, 0, 32)!;
     expect(first).toContain('ブレイズは剣で倒す: 体力 14 以上の時に、見えている 8m 内の 1 体へ attack target=#id');
     expect(first).toContain('追って斬った 2 回は 3 秒以内に倒し傷 0、動かず待つ hold は約 25 回で 1 体');
-    expect(first).toContain('矢 32 本はエンド用に残す');
+    expect(first).toContain('矢 32 本は竜との戦いまで撃たない（クリスタルとドラゴン用に 12 本。ブレイズにも使わず剣で戦う）');
     expect(first).not.toContain('shoot');
     const later = watchLine(3, 3 * 60_000, 1, 2, 20)!;
     expect(later.startsWith('湧き場の近くで 3 分 0 秒: 撃破 1 体・棒 2/7。')).toBe(true);
-    expect(later).toContain('矢 20 本はエンド用');
+    expect(later).toContain('矢 20 本は竜との戦いまで撃たない');
   });
 });
 
 describe('the arrows kept in the watch', () => {
   it('needs both a bow and arrows in the pack', () => {
     const pack = (items: Array<[string, number]>) => new Map(items);
-    expect(createBlazeWatch(null).line(blazes(2), pack([['bow', 1], ['arrow', 32]]), NETHER, 0)).toContain('矢 32 本はエンド用');
+    expect(createBlazeWatch(null).line(blazes(2), pack([['bow', 1], ['arrow', 32]]), NETHER, 0)).toContain('矢 32 本は竜との戦いまで撃たない');
     expect(createBlazeWatch(null).line(blazes(2), pack([['arrow', 32]]), NETHER, 0)).toBeNull();
     expect(createBlazeWatch(null).line(blazes(2), pack([['bow', 1]]), NETHER, 0)).toBeNull();
   });
