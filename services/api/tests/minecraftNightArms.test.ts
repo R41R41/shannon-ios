@@ -81,8 +81,8 @@ describe('nightBedLine', () => {
     }
     expect(dayBedLine({ timeOfDay: 1000 }, few, 'overworld', true)).toContain(word);
     expect(dayBedLine({ timeOfDay: 1000 }, few, 'overworld')).not.toContain('パールを地上の');
-    // With 10 or more pearls and eyes the stronghold is next (no going back for more): the bed's line is as it was.
-    const enough = new Map([['white_bed', 1], ['ender_pearl', 4], ['ender_eye', 6]]);
+    // With the eyes to hold in the pack (14 before the frames are found) the stronghold is next (no going back for more): the bed's line is as it was.
+    const enough = new Map([['white_bed', 1], ['ender_pearl', 4], ['ender_eye', 10]]);
     expect(nightBedLine({ time: '14000' }, enough, 'overworld', true)).not.toContain('パールを地上の');
     expect(dayBedLine({ timeOfDay: 1000 }, enough, 'overworld', true)).not.toContain('パールを地上の');
     // The wire: the endgame's lines take the plan's now from the caller.
