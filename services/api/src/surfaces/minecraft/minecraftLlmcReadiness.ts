@@ -14,7 +14,7 @@ import { fetchingNetherDrops, portalCellHand } from './minecraftLlmcGateEntry.js
 import { kindOf, readWhere } from './minecraftPlanFacts.js';
 import { parseDoneWhen, predicateDimension } from './minecraftPlanDone.js';
 import { returningToEnd } from './minecraftEndEntry.js';
-import { framesOf } from './minecraftSeenMarks.js';
+import { framesKnownOf, framesOf } from './minecraftSeenMarks.js';
 import { frameOpenChance, honestFix, throwsFromBody } from './minecraftEyeLedger.js';
 import { END_PREP_AFTER_STRONGHOLD } from './minecraftEndPrepWords.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
@@ -175,8 +175,12 @@ function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
   const eyes = countMatching(parts.counts, /^ender_eye$/u);
   const pearls = countMatching(parts.counts, /^ender_pearl$/u), powder = countMatching(parts.counts, /^blaze_powder$/u), rods = countMatching(parts.counts, /^blaze_rod$/u);
   // The frames in view (this line and the one of the empty frames gave two counts side by side, 10/12 and 10/11): one measure, the frames' own.
-  const seen = parts.world ? framesOf(parts.world) : null;
-  if (seen) {
+  // The frames in the body's own record of this world count the same (a room found beyond the map's radius): the eye count is only known when its row says one.
+  const seen = parts.world ? framesKnownOf(parts.world) : null;
+  if (seen && seen.eyes === null) {
+    return eyes > 0 ? `枠 ${seen.frames}（見つかっている）・目入りは枠のそばで読む。手持ち ${eyes}・必要は ${seen.frames} 個まで（目入りの分だけ減る）。作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}。投げ直しの確率でなく、枠で読んだ空きの数で足す` : '';
+  }
+  if (seen && seen.eyes !== null) {
     const empty = Math.max(0, seen.frames - seen.eyes), lack = Math.max(0, empty - eyes);
     return lack ? `枠 ${seen.frames}・目入り ${seen.eyes}・空き ${empty} 個。手持ち ${eyes}・足りない ${lack} 個（パール ${lack}・粉 ${lack} が同数要る。今 パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}）。`
       + '要る数は割れた分を足した 12 でなく、この空きの数' : '';

@@ -107,9 +107,15 @@ describe('(e) one measure for the eyes once the frames are in view', () => {
     expect(said).not.toContain('開く確率');
   });
   it('before the frames are seen keeps the odds and the 10 of the stronghold', () => {
-    const said = preparationShortage({ ...base, counts: new Map([...KITS.filter(([name]) => name !== 'ender_eye'), ['ender_eye', 9] as [string, number]]), world: SAME_WORLD })!;
+    const said = preparationShortage({ ...base, counts: new Map([...KITS.filter(([name]) => name !== 'ender_eye'), ['ender_eye', 9] as [string, number]]), world: {} })!;
     expect(said).toContain('開く確率');
     expect(said).toContain('エンダーアイ（12 が目安。落ちたアイは拾う） 9/10');
+  });
+  it('with the frames only in the body record: no odds line, one measure of the frames own words', () => {
+    const said = preparationShortage({ ...base, counts: new Map([...KITS.filter(([name]) => name !== 'ender_eye'), ['ender_eye', 9] as [string, number]]), world: SAME_WORLD })!;
+    expect(said).not.toContain('開く確率');
+    expect(said).not.toContain('アイ 10/12');
+    expect(said).toContain('枠 12（見つかっている）・目入りは枠のそばで読む');
   });
 });
 
