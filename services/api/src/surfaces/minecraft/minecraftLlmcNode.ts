@@ -426,7 +426,7 @@ function stepWords(leaf: PlanNode, left: PlanNode | undefined, skipped: readonly
   const passed = others.length ? `。飛ばした節は順のまま残っている: ${others.map(node => `[${node.id}] ${node.title.slice(0, 20)}`).join('・')}` : '';
   // The node left is named with how far it is and how to go back (run 9: the now moved from the walk to the point to the preparation behind it, and nothing said the walk was still open).
   const reach = left ? reachOf?.(left) ?? null : null;
-  const back = left ? `。計画の順で先の [${left.id}] ${left.title.slice(0, 24)}${reach ? `（${reach}）` : ''} は開いたまま。防具・食料・掘る道具の欠けの手なら、そのまま続けてよい。エンドの点検物（ベッド・黒曜石・足場・弓矢）の手なら、要塞の後ろの順なので plan_update の current で [${left.id}] に戻せる` : '';
+  const back = left ? `。計画の順で先の [${left.id}] ${left.title.slice(0, 24)}${reach ? `（${reach}）` : ''} は開いたまま。防具・食料・掘る道具の欠けの手なら、そのまま続けてよい。エンドの点検物（ベッド・黒曜石・足場）の手なら、要塞の後ろの順なので plan_update の current で [${left.id}] に戻せる。弓矢の節は要塞の前の道中の短い節で、見えた分だけ作って進めてよい` : '';
   return `今の節を [${leaf.id}] に進めた（体が [${leaf.id}] の項目を始めたため）${left ? back : '。飛ばした節は順のまま残っている'}${left ? passed : passed.replace(/^。飛ばした節は順のまま残っている/u, '')}${caution ? `。${caution}` : ''}${lack ? `。${lack}` : ''}`;
 }
 

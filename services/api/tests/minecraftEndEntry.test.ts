@@ -20,22 +20,22 @@ const RETURN: Pack = [['cobblestone', 20], ['cooked_beef', 10]];
 const endDeath = { lastDeath: '2分前 the_end (10,60,10) 「void」 落とした物: iron_sword×1' };
 
 describe('End entry goals and recovery', () => {
-  it('shows bow, 30 arrows and an iron-or-better sword as goals, leaving the main bed plan admissible', () => {
+  it('shows bow, 12 arrows and an iron-or-better sword as goals, leaving the main bed plan admissible', () => {
     for (const item of ['bow', 'arrow', 'iron_sword', 'diamond_sword', 'netherite_sword']) {
       expect(BEFORE_END.needs.find(need => need.pattern.test(item))?.goal, item).toBe(true);
     }
     const arrows = BEFORE_END.needs.find(need => need.pattern.test('spectral_arrow'))!;
-    expect(arrows).toMatchObject({ count: 30, goal: true });
+    expect(arrows).toMatchObject({ count: 12, goal: true });
     expect(deadlyGateHold(walk, frame(FULL))).toBeNull();
     expect(deadlyGateHold(walk, frame(FULL.filter(([name]) => name !== 'white_bed')))?.line).toContain('ベッド');
   });
 
   it('counts ordinary and spectral arrows together in the displayed shortage', () => {
-    const counts = new Map([...FULL, ['bow', 1], ['arrow', 10], ['spectral_arrow', 20], ['ender_eye', 12], ['iron_sword', 1]] as Pack);
+    const counts = new Map([...FULL, ['bow', 1], ['arrow', 4], ['spectral_arrow', 8], ['ender_eye', 12], ['iron_sword', 1]] as Pack);
     const shortage = () => preparationShortage({ dimension: 'overworld', nowKinds: ['end'], counts, food: 333 });
     expect(shortage()).toBeNull();
-    counts.set('spectral_arrow', 19);
-    expect(shortage()).toContain('29/30');
+    counts.set('spectral_arrow', 7);
+    expect(shortage()).toContain('11/12');
     expect(shortage()).toContain('目標（そろえば。必須ではない）');
   });
 
@@ -88,15 +88,16 @@ describe('End entry goals and recovery', () => {
 
   // K2 (the same review): how few arrows are worth carrying and where the road gives them, as an aim that sends her on no detour.
   it('names twelve arrows as the least worth carrying and the lone skeleton of the road as a source', () => {
-    expect(END_BOW_KNOWLEDGE).toContain('矢は最低 12 本（檻なしのクリスタル 8 本に 1 射ずつ');
-    expect(END_BOW_KNOWLEDGE).toContain('矢のために夜を待たない・追いかけない・寄り道しない');
+    expect(END_BOW_KNOWLEDGE).toContain('矢は 12 本（結晶 10＋予備 2）そろえば節を閉じる');
+    expect(END_BOW_KNOWLEDGE).toContain('矢は 12 本あれば檻なしの結晶 8 本に 1 射ずつと外した分に足りる');
+    expect(END_BOW_KNOWLEDGE).toContain('村など遠い所へは往復しない');
     expect(END_BOW_KNOWLEDGE).toContain('鉄の防具と盾があり、撃ってくるのが 1 体だけの時に fight（range=16）で詰めて斬る（防具か盾が無い時・2 体以上の時は、1 枚で射線を切って陰で待つ）');
-    expect(PLAN_PREP_WORDS).toContain('矢だけのために夜を待つ節・狩りに出る節は書かない');
+    expect(PLAN_PREP_WORDS).toContain('弓と矢の節: 弓矢（弓＝糸 3＋棒 3、矢は火打石・棒・羽根 各 1 で 4 本）は、竜との戦いでクリスタルを地面から撃つために');
     const bow = seedPlan('エンドラを倒して')!.nodes.find(node => node.title.startsWith('弓と矢'))!;
-    expect(bow.title).toContain('矢は最低 12・目標 30');
+    expect(bow.title).toContain('矢 12 本で閉じる');
     expect(bow.title.length).toBeLessThanOrEqual(60);
     expect(bow.note!.length).toBeLessThanOrEqual(120);
-    expect(bow.doneWhen).toBe('have:bow&have:arrow>=30');
+    expect(bow.doneWhen).toBe('have:bow&have:arrow>=12');
     expect(BEFORE_END.needs.some(need => need.label === '矢' && !need.goal)).toBe(false);
   });
 });

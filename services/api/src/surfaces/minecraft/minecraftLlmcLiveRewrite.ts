@@ -5,7 +5,7 @@ import { waterFailures } from './minecraftLlmcWaterSwitch.js';
 import { FOOD_PASS, NIGHT_PASS } from './minecraftNightArms.js';
 import { BLOCKS } from './minecraftLlmcPrepRules.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
-import { packLines, type TidyContext } from './minecraftLlmcPack.js';
+import { archeryHeld, packLines, type TidyContext } from './minecraftLlmcPack.js';
 import { keepWordsOf, planMaterials } from './minecraftLlmcTidyKeep.js';
 import { inFurnaceOf, ironArmorLine } from './minecraftLlmcIronNumbers.js';
 import { nearNeeds, nearWorthy, type NearNeeds } from './minecraftLlmcReachWords.js';
@@ -289,6 +289,9 @@ function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
   const facts = factsIn(bodyIn);
   const kinds = facts ? [...(facts.now ? [facts.now.kind] : []), ...facts.next.map(node => node.kind)] : [];
   const held = planMaterials(kinds, carried);
+  // 11/27: the bow's materials (flint, feather, string, stick, bow, arrows) are held back from a tidy as the plan's materials are, with the reason in the tidy words.
+  const archery = archeryHeld(carried, facts?.now?.doneWhen);
+  for (const [item, count] of archery) held.set(item, Math.max(held.get(item) ?? 0, count));
   // The open promises hold back what they name (never more than she carries), beside the plan's materials.
   for (const promise of facts?.promised ?? []) {
     const have = carried.get(promise.item) ?? 0;
@@ -303,7 +306,7 @@ function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
   // 11/27: the blocks the End's scaffold counts (64) while the plan's now or next is of the End; what she carries of them, so a tidy does not throw the scaffold away unseen.
   const blockStacks = [...carried].filter(([name, n]) => BLOCKS.test(name) && n > 0).sort((a, b) => b[1] - a[1]);
   const blocks = hasKind(kinds, END_KINDS) && blockStacks.length ? { blocks: { have: blockStacks.reduce((sum, [, n]) => sum + n, 0), need: END_SCAFFOLD, held: blockStacks.slice(0, 4) } } : {};
-  return { ...(held.size ? { held: (item: string) => held.get(item) ?? 0, keepWords: keepWordsOf(held) } : {}), ...blocks,
+  return { ...(held.size ? { held: (item: string) => held.get(item) ?? 0, keepWords: keepWordsOf(held) } : {}), ...(archery.size ? { archery: true } : {}), ...blocks,
     near: { table: within(['crafting_table']), furnace: within(['furnace', 'blast_furnace', 'smoker']) } };
 }
 /** Flow design E: the iron armour's numbers, only while the current or next node is the iron armour. */

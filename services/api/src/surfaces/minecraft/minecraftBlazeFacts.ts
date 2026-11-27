@@ -4,6 +4,7 @@ import { carried } from './minecraftConditions.js';
 import { carriedFood } from './minecraftLlmcLive.js';
 import { marksOf, namesOf } from './minecraftSeenMarks.js';
 import { BLOCKS } from './minecraftLlmcPrepRules.js';
+import { ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 
 /**
  * The blaze camp said as causes and numbers (the arrival scenes of 11/3: with six blazes left every decision of the model stayed in cover and
@@ -331,7 +332,7 @@ export function watchLine(near: number, elapsedMs: number, kills: number, rods: 
   if (rods >= RODS) return null;
   const counted = countedLine(near, elapsedMs, kills, rods, boxed);
   if (arrows <= 0) return counted;
-  const sword = `${SWORD_FACT}。矢 ${arrows} 本はエンド用に残す（クリスタルとドラゴンに 30 本）`;
+  const sword = `${SWORD_FACT}。矢 ${arrows} 本は竜との戦いまで撃たない（クリスタルとドラゴン用に ${ARROWS_TO_CARRY} 本。ブレイズにも使わず剣で戦う）`;
   return counted ? `${counted}。${sword}` : sword;
 }
 

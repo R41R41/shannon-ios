@@ -62,7 +62,8 @@ describe('the End shortage: what is left, the two bed numbers, the reason of the
   });
   it('says once that 8 is the check and 10 the aim, and gives the bow and arrows their reason in the same sentence', () => {
     expect(line).toContain('ベッドの点検が通るのは 8 本から。10 本は戦いの目標で、節が済む条件を 10 本にしなくてよい');
-    expect(line).toContain('弓・矢は、道中で糸・羽根・火打石が手に入った時にだけ作る物で、取りに出る節は書かなくてよい');
+    expect(line).toContain('弓・矢は、要塞へ向かう道中の短い節で作る物で、遠い往復はしない（そろわなくても入れる）');
+    expect(line).not.toContain('取りに出る節は書かなくてよい');
   });
   it('keeps the other stages and the empty shortage as they were', () => {
     const full = new Map<string, number>([['white_bed', 8], ['obsidian', 8], ['cobblestone', 64], ['ender_eye', 12], ['water_bucket', 1], ['iron_sword', 1], ['bow', 1], ['arrow', 30]]);

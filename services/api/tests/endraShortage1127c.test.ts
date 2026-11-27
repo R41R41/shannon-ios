@@ -49,7 +49,7 @@ describe('the End shortage heading before the stronghold', () => {
   });
   it('puts the same words beside the lack line', () => {
     const facts = { dimension: 'overworld', counts: counts(11), world: { eyeThrows: THROWS }, food: 500 } as never;
-    expect(endLackLine(facts, ['stronghold'] as never)).toContain('点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい');
+    expect(endLackLine(facts, ['stronghold'] as never)).toContain('点検物（ベッド・黒曜石・足場）は要塞の後ろでよい。取りに出る節は要らない。弓矢は別で、要塞の前の道中の短い節で作る（遠い所へは往復しない）。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい');
     expect(endLackLine(facts, ['stronghold'] as never)).toContain('ベッド 7/8（あと 1）');
     expect(endLackLine({ ...(facts as object), world: { mapLandmarks: FRAMES } } as never, ['stronghold'] as never)).not.toContain('要塞の後ろでよい');
   });

@@ -20,7 +20,8 @@ const GOLDEN = {
   // 11/27 (run 7 of 11/26): the first plan's R9 words order the End's check before the entry and write a where with its dimension.
   // 11/11 trim: the stage rules (and so the first plan, which carries them) lose the reference sentence of runs 41 and 42, whose example the descent's reason line says once.
   // 11/27 (spare eyes): the first plan's current structure says the number needed before the frames are seen is the 12 plus a spare (13 to 14), and that pearls are taken when they come.
-  first_plan: ['300cd4df169c28bf'],
+  // 11/27 (the bow and arrows made on the way): the first plan's current structure and prep words say the short node before the stronghold, the 12 arrows and the no-shot.
+  first_plan: ['fd14c7f2ae3fcbbf'],
 };
 
 const live = (step: number) => ({ observation: { position: { x: 10 + step, y: 64, z: -3 }, health: 20, food: 18 }, pace: { minutes: step } });

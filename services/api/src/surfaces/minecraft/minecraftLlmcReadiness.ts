@@ -17,7 +17,7 @@ import { returningToEnd } from './minecraftEndEntry.js';
 import { framesKnownOf, framesOf } from './minecraftSeenMarks.js';
 import { honestFix, throwsFromBody } from './minecraftEyeLedger.js';
 import { eyeBasisOf, spareReason } from './minecraftEyeSpare.js';
-import { END_PREP_AFTER_STRONGHOLD } from './minecraftEndPrepWords.js';
+import { ARROWS_TO_CARRY, END_PREP_AFTER_STRONGHOLD } from './minecraftEndPrepWords.js';
 import { oreRouteHands, stonePickHands } from './minecraftOreRoute.js';
 import { workingFurnaces } from './minecraftFurnaceMeanwhile.js';
 import { EYES_TO_LEAVE, WALK_BLOCKS_PER_SECOND as NETHER_WALK_BLOCKS_PER_SECOND } from './minecraftPearlFacts.js';
@@ -260,7 +260,7 @@ function endCheck(parts: { counts: ItemCounts; world?: Record<string, unknown>; 
   // The review of 11/10, E1: an eye carried started the clock at the check, and it ran out before the stronghold. The gate starts it.
   const now = parts.now ?? Date.now(), since = endGatherSince(parts.taskId, now, false);
   if (since === null || now - since < END_GATHER_MS) return table;
-  return { ...table, food: END_MIN_FOOD, title: `エンドへ入る前に要る物（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 30 はあれば使う）`,
+  return { ...table, food: END_MIN_FOOD, title: `エンドへ入る前に要る物（ベッド集めの ${END_GATHER_MS / 60_000} 分を過ぎた。予備の手：鉄以上の剣。弓と矢 ${ARROWS_TO_CARRY} は道中で作った分があれば使う）`,
     needs: [...table.needs.filter(need => !gathering(need) && !END_WEAPONS.includes(need)), ...END_FALLBACK_WEAPONS] };
 }
 
@@ -272,9 +272,9 @@ function goalWords(table: PrepStage, parts: { counts: ItemCounts; worn?: readonl
   // What a lacking goal costs (`PrepNeed.cost`), said after the list: a goal that reads as optional is not left without its reason.
   const costs = [...new Set(goals.filter(need => need.cost && (held(parts.counts, need) < need.count
     || (need.worn && parts.worn && [...parts.counts.keys()].some(name => need.pattern.test(name) && !parts.worn!.includes(name))))).map(need => need.cost!))];
-  // 11/27: "bow and arrows missing" read as a thing to go and get (run 8: the first plan wrote a node for them); the reason is said in the same sentence.
+  // 11/27: said as a short node on the way (the owner's decision, `ARCHERY_ON_THE_WAY`), with no far trip.
   const archery = goals.some(need => /bow|arrow/u.test(need.pattern.source) && held(parts.counts, need) < need.count)
-    ? '。弓・矢は、道中で糸・羽根・火打石が手に入った時にだけ作る物で、取りに出る節は書かなくてよい（無くても入れる）' : '';
+    ? '。弓・矢は、要塞へ向かう道中の短い節で作る物で、遠い往復はしない（そろわなくても入れる）' : '';
   return `目標（そろえば。必須ではない）— ${wanted.join('。')}${archery}${costs.length ? `。欠けた目標の代償: ${costs.join('。')}` : ''}`;
 }
 

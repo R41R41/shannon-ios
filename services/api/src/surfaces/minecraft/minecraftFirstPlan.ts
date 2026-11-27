@@ -16,6 +16,7 @@ import { parseCondition } from '../../contracts/minecraftActCondition.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { kindOf } from './minecraftPlanFacts.js';
 import { foodPointsWords } from './minecraftFoodWords.js';
+import { ARCHERY_ON_THE_WAY, ARROWS_TO_CARRY } from './minecraftEndPrepWords.js';
 export { FIRST_PLAN_SCHEMA, FIRST_PLAN_SYSTEM, FIRST_PLAN_SCHEMA_R4, FIRST_PLAN_SYSTEM_R4, FIRST_PLAN_SYSTEM_R5, FIRST_PLAN_SYSTEM_R6,
    FIRST_PLAN_SYSTEM_R7, FIRST_PLAN_SYSTEM_R8, FIRST_PLAN_SYSTEM_R9 } from './minecraftFirstPlanPrompts.js';
 
@@ -158,8 +159,15 @@ const BEYOND: readonly PlanSeed[] = [
     children: [node('ベッドを8個にする（預けた箱から・羊毛3と板3）', { kind: 'bed', doneWhen: 'have:bed>=8',
         note: 'ゲートの前のベッドも掘って持つ。羊毛は鋏（鉄2）で刈ると1頭1〜3枚（殺すと1枚）。8に足りない時に。9個目は枠の近くに置くリスポーン用（戦い用の8とは別）' }),
       node('エンドの戦い用の黒曜石を12（最低8・ポータルの分とは別）', { kind: 'obsidian', doneWhen: 'have:obsidian>=12', note: '戻ったゲートの枠から（回収の節）。足りない分は溶岩で' }),
-      node('弓と矢（矢は最低 12・目標 30。道中の材料とスケルトンの矢で。寄り道しない）', { kind: 'other', doneWhen: 'have:bow&have:arrow>=30',
-        note: '糸（クモ）・棒・火打石・羽根。弓があればクリスタルを地面から撃てる（無いと柱を登る）。矢 12 は檻なし 8 本に 1 射ずつと予備。無くても入場は止まらない' })] }),
+    ] }),
+  // 11/27 (the owner): the bow and arrows are made on the way, in a short node before the stronghold, and kept for the fight with the dragon (`ARCHERY_ON_THE_WAY`). It closes at 12 arrows or when
+  // what is in sight is taken: the same words as the knowledge (`END_BOW_KNOWLEDGE`), within the node's limits (the note 120 characters, a caution 80).
+  node('弓と矢（道中の短い節。矢 12 本で閉じる）', { kind: 'other', doneWhen: `have:bow&have:arrow>=${ARROWS_TO_CARRY}`,
+    note: '先に空きを 8 マス作る。見えた分だけ作って次へ進む（30m 内に見えない物は探さない）。矢が 4〜8 本でも持つ価値あり。そろわなくても閉じて要塞へ',
+    caution: ['弓＝糸3＋棒3、矢4本＝火打石・棒・羽根 各1（作業台が要る）。骸骨の弓が荷にあれば糸は不要',
+      'クモは昼の地表で見える1体を剣で。ニワトリは hunt chicken。砂利は mine gravel（石のシャベルは体が持ち替える）',
+      '弓も糸も無い時は羽根・火打石だけを集めに行かない。村など遠い所へは往復しない',
+      '作ったら竜との戦いまで撃たない（ブレイズ・骸骨などにも剣で戦う）'] }),
   node('ストロングホールド', { kind: 'stronghold', children: [
     node('食料330点（交点への道すがら）', { kind: 'food', doneWhen: 'food>=330|see:end_portal_frame',
       note: '交点の向きへ歩きながら、見えた牛・豚・羊を go の間に hunt で積む。かまどは持って歩き、夜の囲いでまとめて焼く。地上で止まって集めない（エンドのゲートは食料 80 の予備で入れる）' }),
@@ -385,8 +393,9 @@ export const EYES_FOR_STRONGHOLD = 10;
  * stronghold fourth, with the eyes in the pack. It is the facts and the reason now, and where the shortage's things go (the order's own words are in the plan's system, `CURRENT_PLAN_STRUCTURE`).
  */
 const EYES_PLAN_TAIL =
-  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢（とそれ用の鉄）の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く。' +
-  '防具の欠け・食料・掘る道具の欠けは要塞の前の短い節（出発の準備）にしてよい（手元か近く 30m 以内の材料で作れる分だけ。遠くへ鉄を掘りに行く節は作らない）。エンドの点検物は要塞の後ろの節。' +
+  'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・足場の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く。' +
+  `${ARCHERY_ON_THE_WAY}。弓矢の節は要塞の節の前の短い節（道中の準備）に置く。` +
+  '防具の欠け・食料・掘る道具の欠けは要塞の前の短い節（出発の準備）にしてよい（手元か近く 30m 以内の材料で作れる分だけ。遠くへ鉄を掘りに行く節は作らない）。エンドの点検物は要塞の後ろの節（ベッド・黒曜石・足場）。' +
   '節は削らず順だけ後ろへ置く（黒曜石・ベッドの節、枠を埋めてポータルを開く節、12 個目の目の作り方の注意も節に残す）。理由: 枠は 12 個で目は今の数より多く要り、置かれていない時の手立ての節が計画に無いと、要塞に着いた後に次の手が決まらない';
 /**
  * The frames are already known in this world (the body remembered a room 155 m away and the first plan still said "two throws give the place"): the place is a fact, the eyes are for the frames,
@@ -401,7 +410,8 @@ const EYES_IN_HAND = (eyes: number, need: number) => `エンダーアイ ${eyes}
  * new system; with the old system 4 of 4 took 2.8 to 4.2 thousand): the Nether's case is said as a fact of its own, with the same reason.
  */
 const EYES_IN_NETHER = (eyes: number) => `エンダーアイ ${eyes} 個（ネザーの中）。要塞の場所は現世へ戻って 2 本投げれば出る（足りない物は要らない）。ロッド・パール・アイを足す節は要らない。` +
-  '帰りのゲートで現世へ戻る節が先。ベッド・黒曜石・弓矢・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く';
+  '帰りのゲートで現世へ戻る節が先。ベッド・黒曜石・足場・鉄の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く。' +
+  `${ARCHERY_ON_THE_WAY}。弓矢の節は要塞の節の前の短い節（道中の準備）に置く`;
 /** The eyes she carries, in whatever dimension, when they are enough to look for the stronghold (`EYES_FOR_STRONGHOLD`); null: fewer. */
 function eyesInHand(world: Record<string, unknown>): number | null {
   const eyes = carriedItemCounts(world, {}).get('ender_eye') ?? 0;

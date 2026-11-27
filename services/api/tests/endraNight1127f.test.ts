@@ -96,7 +96,7 @@ describe('(3) while the night is near: the shortages that can be moved, from the
     expect(line).toContain('夜まで 約 4 分');
     expect(line).toContain('足場のブロック あと 63（今 1/64');
     expect(line).toContain('黒曜石 あと 1（今 7/8。ダイヤのつるはし あり）');
-    expect(line).toContain('矢 あと 28（今 2/30。材料 羽根 0・火打石 2・棒 2）');
+    expect(line).toContain('矢 あと 10（今 2/12。材料 羽根 0・火打石 2・棒 2）');
   });
   it('gives no estimate of time and does not say these replace the wait; they are the checks that are fine behind the stronghold', () => {
     expect(line).not.toMatch(/間に合|足りる|余裕|十分|で済む|何分/u);

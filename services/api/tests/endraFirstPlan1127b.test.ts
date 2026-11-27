@@ -31,7 +31,8 @@ describe('(1) the words the run asks the first plan with (ownFirstPlanSystem)', 
   const system = ownFirstPlanSystem();
   it('says the order for 10 or more eyes in the overworld with its reason, and keeps the ordinary opening order for fewer', () => {
     expect(system).toContain('順番（エンダーアイを 10 個以上持って現世にいる時）: 要塞の場所は目を 2 本投げれば今すぐ出せる');
-    expect(system).toContain('エンドの点検（ベッド・黒曜石・弓矢）の節は、要塞の節の後ろ、エンドへ入る節の前に置く（エンドへ入ってからは取りに戻れない）');
+    expect(system).toContain('エンドの点検（ベッド・黒曜石・足場）の節は、要塞の節の後ろ、エンドへ入る節の前に置く（エンドへ入ってからは取りに戻れない）');
+    expect(system).toContain('弓矢の節は別で、要塞の節の前の短い節（道中の準備）に置く');
     expect(system).toContain('理由: 点検の物は道中・要塞の近く・村や溶岩を通る時に取れる分だけでよい');
     expect(system).toContain('アイが 10 個未満の通常の序盤（村→鉄→ネザー→要塞）は、この順のまま変えない');
   });
@@ -47,13 +48,13 @@ describe('(1) the words the run asks the first plan with (ownFirstPlanSystem)', 
     const conditional = system.split('エンダーアイを 10 個以上持って現世にいる場合').length - 1;
     // the exception to 「準備の不足は…」, the village and the dragon's beds (one line), the bow and arrows, the iron
     expect(conditional).toBeGreaterThanOrEqual(4);
-    for (const rule of ['準備の不足は、必要になる仕事の前に', '村の節（ベッド全部・干し草・箱）', '竜戦用のベッドは target bed×10', '弓と矢（エンドのクリスタルを地面から壊す道具', '鉄はネザーまでに約']) {
+    for (const rule of ['準備の不足は、必要になる仕事の前に', '村の節（ベッド全部・干し草・箱）', '竜戦用のベッドは target bed×10', '弓と矢の節: 弓矢（弓＝糸 3＋棒 3', '鉄はネザーまでに約']) {
       const line = system.split('\n').find(row => row.includes(rule));
       expect(line, rule).toBeDefined();
     }
     expect(system).toContain('エンダーアイを 10 個以上持って現世にいる場合は例外: 必要な仕事は要塞を探す節が先');
     expect(system).toContain('この節を要塞の節の後ろ・エンドへ入る節の前に置く');
-    expect(system).toContain('弓と矢の節も要塞の節の後ろ・エンドへ入る節の前');
+    expect(system).toContain('エンダーアイを 10 個以上持って現世にいる場合も同じで、要塞の節の前の短い節に置く（要塞が先。手元の材料と、見えた物だけで作る）');
     expect(system).toContain('エンダーアイを 10 個以上持って現世にいる場合の鉄: ネザーへ行かないので「ネザーまでに約 30」は要らない');
   });
   it('is what a dragon or nether goal is asked with, and the order line is not in the words of a request of one thing', () => {
@@ -70,7 +71,8 @@ describe('(2) the eyes line is facts and a reason, shown only for 10 or more eye
     const text = input(run8World());
     expect(text).toContain('エンダーアイ 11 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）');
     expect(text).toContain('枠は最大 12 で、割れる分の予備を足した 14 個を持って向かうのが目安（今 11/14・あと 3 個');
-    expect(text).toContain('ベッド・黒曜石・弓矢（とそれ用の鉄）の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く');
+    expect(text).toContain('ベッド・黒曜石・足場の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く');
+    expect(text).toContain('弓矢の節は要塞の節の前の短い節（道中の準備）に置く');
     expect(text).not.toContain('最初の節はストロングホールドを探す節');
     // the facts side's shortage line is not removed
     expect(text).toContain('準備の不足（');

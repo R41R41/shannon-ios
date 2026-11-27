@@ -61,7 +61,7 @@ describe('(a) the road names every open top-level node with its id, and the curr
   it('the road and the first plan and the plan tool say the dimension beside a where', () => {
     // The words the run asks with (`ownFirstPlanSystem`; R9 is a replay comparison only and is not called in a run).
     expect(ownFirstPlanSystem()).toContain('where は座標のあとに次元を添える');
-    expect(ownFirstPlanSystem()).toContain('エンドの点検（ベッド・黒曜石・弓矢）の節は、要塞の節の後ろ、エンドへ入る節の前');
+    expect(ownFirstPlanSystem()).toContain('エンドの点検（ベッド・黒曜石・足場）の節は、要塞の節の後ろ、エンドへ入る節の前');
     // Historical: R9 held the 11/26 wording (a replay comparison, kept as it was).
     expect(FIRST_PLAN_SYSTEM_R9).toContain('where は座標のあとに次元を添える');
     expect(FIRST_PLAN_SYSTEM_R9).toContain('エンドの点検の節（黒曜石・ベッド・弓と矢）は、エンドへ入る節より前');
@@ -112,7 +112,7 @@ describe('(d) the End shortage as one line of numbers', () => {
       { name: 'obsidian', count: 7 }, { name: 'flint', count: 2 }, { name: 'blaze_powder', count: 1 }], ...extra });
   it('d0132: beds 6/8, obsidian 7/8, no bow, arrows 0/12, the pickaxe, the armour 2/4, the eyes and what makes up for a broken one', () => {
     const facts = readinessOf(frame(world()))!;
-    expect(endLackLine(facts, ['stronghold'])).toBe('エンドへ入る前に要る物のうち足りない分（数。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい）: ベッド 6/8（あと 2）・黒曜石 7/8（あと 1）・弓なし（作るなら糸 0/3・棒 0/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）・矢 0/12（羽根 0・火打石 2・棒 0）'
+    expect(endLackLine(facts, ['stronghold'])).toBe('エンドへ入る前に要る物のうち足りない分（数。点検物（ベッド・黒曜石・足場）は要塞の後ろでよい。取りに出る節は要らない。弓矢は別で、要塞の前の道中の短い節で作る（遠い所へは往復しない）。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい）: ベッド 6/8（あと 2）・黒曜石 7/8（あと 1）・弓なし（作るなら糸 0/3・棒 0/3。弓矢は道中の短い節で作る物で、遠い所へは往復しない）・矢 0/12（羽根 0・火打石 2・棒 0）'
       + '・diamond_pickaxe 耐久 73/1561・防具 2/4（脚・足が無い）。欠けた部位ぜんぶの鉄 脚 7＋足 4＝11（手元 インゴット 0・生の鉄 0）。足は鉄のブーツでよい（金のブーツはネザーに入る時だけ）・アイ 11/14（枠 12＋予備 2。足せる材料: パール 0・粉 1・ロッド 0）');
   });
   it('says nothing in the Nether, or when every number is met', () => {
@@ -121,7 +121,7 @@ describe('(d) the End shortage as one line of numbers', () => {
   it('is part of the live shortage of a task whose node is of the stronghold', () => {
     const tree = withState(['p1', 'p2', 'p3', 'p4', 'p5'], 'n1');
     const parts = readinessParts({ plan: () => undefined, planView: () => null, planTree: () => tree, journeyReadiness: true } as LlmcBodyParts, null, frame(world()), 't1');
-    expect(parts.shortage).toContain('エンドへ入る前に要る物のうち足りない分（数。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい）: ベッド 6/8');
+    expect(parts.shortage).toContain('エンドへ入る前に要る物のうち足りない分（数。点検物（ベッド・黒曜石・足場）は要塞の後ろでよい。取りに出る節は要らない。弓矢は別で、要塞の前の道中の短い節で作る（遠い所へは往復しない）。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい）: ベッド 6/8');
   });
 });
 
