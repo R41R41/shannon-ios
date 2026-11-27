@@ -304,7 +304,21 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   const credit = last ? ' → attack target=ender_dragon seconds=2 onFail="continue"' : '';
   const why = last ? `。竜の体力 ${round(dragon.health!)} はこのベッドで尽きる見込み: ベッドだけで倒すと手柄が付かず advancement end/kill_dragon が出ないので、use の前に 1 回打つ（届かなくてもそのまま use）` : '';
   return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}]${credit} → use at=[${foot}]`
-    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）`;
+    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。use が傷になるのは竜の頭が枕から 3m 以内の時だけ（結果の「頭の箱まで」が 3 を大きく超えたら空振り）。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）`;
+}
+
+/**
+ * The bed burst's moment (11/27, run 16): while she comes down to the perch (phase 2) with a bed held, the body can fire a short row of beds at the landing (bedsite reads
+ * only in phase 2). The head built place+use by hand at the sit instead, and 3 of 4 blasts went off 25-45 m from her head. The standing-crystal rule is the sitting line's.
+ */
+export function dragonBurstLine(end: EndView | null, bedItem: string | null = null): string | null {
+  const dragon = end?.dragon;
+  if (!dragon || dragon.phase !== 2 || dragon.id === null || !bedItem) return null;
+  const standing = end?.crystals.remaining ?? null;
+  if (standing !== null && standing >= 3) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、削った分が周回中に +2 体力/秒で戻る。結晶を残り 2 以下にしてから）`;
+  return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中。座るのを待たない）: すぐ mc_probe kind=bedsite target=#${dragon.id}（packet_history_pending なら 1 秒後にもう一度）`
+    + ` → 返った stand へ go → footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":35}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
+    + `座ってからでは bedsite が読めない。座りの place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
@@ -664,7 +678,7 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));
   else lines.push(...hazards);
   if (positions) lines.push(positions);
-  const bedHand = dragonBedLine(end, bedItem), basin = dragonBasinLine(end);
+  const bedHand = dragonBedLine(end, bedItem) ?? dragonBurstLine(end, bedItem), basin = dragonBasinLine(end);
   if (bedHand) lines.push(bedHand);
   // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
   if (basin) lines.push(bedHand || (end?.crystals.remaining ?? 0) > 2 ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);

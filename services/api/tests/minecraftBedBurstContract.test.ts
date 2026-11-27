@@ -2,12 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { actMilliseconds, actProblem, ACT_INPUT_SCHEMA, type ActHand, type ActInput } from '../src/contracts/minecraftActContract.js';
 import { expandShortAct, handToLine, shortHandProblem } from '../src/contracts/minecraftActShortContract.js';
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
+import { BED_BURST_DESCRIPTION } from '../src/contracts/minecraftBedBurstContract.js';
+import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { llmcInputProblem } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { PROBE_INPUT_SCHEMA } from '../src/contracts/minecraftProbeContract.js';
 import { prepareProbeInput, probeLabel } from '../src/surfaces/minecraft/minecraftLlmcProbeInput.js';
 
 const burst = (): ActHand => ({ do: 'bed_burst', at: [{ x: 0, y: 67, z: 2 }, { x: 0, y: 67, z: 3 }], target: '#12', count: 5, seconds: 20 });
 const input = (hand = burst()): ActInput => ({ hands: [hand, { do: 'go', to: { x: 8, y: 64, z: 8 }, seconds: 10 }], accept: ['ender_dragon'] });
+
+describe('the head is told when and how to use it (run 16: the text sat behind skill_read and was never read)', () => {
+  it('accepts seconds up to 40 like the body, and refuses 41', () => {
+    expect(actProblem(input({ ...burst(), seconds: 40 }))).toBeNull();
+    expect(actProblem(input({ ...burst(), seconds: 41 }))).not.toBeNull();
+  });
+  it('passes the real head check for the act the text describes: go, place, bed_burst with 35 s, retreat go', () => {
+    const expanded = expandShortAct({ hands: ['go 3,65,3 range=0.5 seconds=8', 'place obsidian at=3,65,2 4,65,2',
+      'json {"do":"bed_burst","at":[{"x":4,"y":66,"z":0},{"x":4,"y":66,"z":1}],"target":"#13","count":5,"seconds":35,"onFail":"continue"}', 'go -6,66,10 seconds=10'], accept: ['ender_dragon'] });
+    expect(expanded.errors).toEqual([]);
+    expect(llmcInputProblem('mc.act', expanded.input)).toBeNull();
+  });
+  it('puts the moment (phase 2, before the sit), the order of the hands and one example in the act body, not only behind the page', () => {
+    expect(BED_BURST_DESCRIPTION.indexOf('phase 2')).toBeLessThan(BED_BURST_DESCRIPTION.indexOf('未観測の配置'));
+    expect(SHORT_ACT_DESCRIPTION).toContain('座るのを待たずにすぐ mc_probe kind=bedsite');
+    expect(SHORT_ACT_DESCRIPTION).toContain('"do":"bed_burst"');
+    expect(SHORT_ACT_DESCRIPTION).toContain('go（stand）→ place（黒曜石）→ bed_burst → 退避 go');
+  });
+});
 
 describe('the head can request a bounded burst and its own immediate retreat', () => {
   it('accepts the public schema without adding hand properties or replacing the following go', () => {
@@ -41,7 +62,7 @@ describe('the head can request a bounded burst and its own immediate retreat', (
     ['relative', { rel: true }], ['target name', { target: 'ender_dragon' }], ['negative id', { target: '#-1' }], ['noncanonical id', { target: '#0012' }],
     ['unsafe id', { target: '#99999999999999999999' }],
     ['zero beds', { count: 0 }], ['too many beds', { count: 6 }], ['fractional beds', { count: 1.5 }],
-    ['too short', { seconds: 0.5 }], ['too long', { seconds: 21 }], ['nonfinite seconds', { seconds: Infinity }],
+    ['too short', { seconds: 0.5 }], ['too long', { seconds: 41 }], ['nonfinite seconds', { seconds: Infinity }],
     ['unrelated strategy permission', { canDig: ['end_stone'] }],
   ] as const)('refuses %s before the body sees it', (_name, delta) => {
     expect(actProblem(input({ ...burst(), ...delta } as ActHand))).not.toBeNull();
