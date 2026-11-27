@@ -33,6 +33,15 @@ describe('a value or word wrapped in one layer of quotes is read without them', 
     expect(lineToHand('attack "ender dragon" seconds=5')).toMatchObject({ target: 'ender dragon', seconds: 5 });
     expect(lineToHand('shoot target=\\"ender dragon\\" item=bow')).toEqual({ do: 'shoot', target: 'ender dragon', item: 'bow' });
   });
+  it('a quote left open does not swallow the next fields', () => {
+    expect(lineToHand('go 1,2,3 dig="a place="b" maxDig=5')).toMatchObject({ canPlace: ['b'], maxDig: 5 });
+    expect(lineToHand('shoot target="#1 item="bow" n=3')).toMatchObject({ item: 'bow', n: 3 });
+  });
+  it('dependsOn may be quoted', () => {
+    expect(lineToHand('shoot target="#1" dependsOn="1"')).toMatchObject({ dependsOn: [1] });
+    expect(lineToHand('shoot target="#1" dependsOn="none"')).toMatchObject({ dependsOn: [] });
+    expect(lineToHand('shoot target="#1" dependsOn=\\"1,2\\"')).toMatchObject({ dependsOn: [1, 2] });
+  });
   it('a quote that never closes, and note=, are as before', () => {
     expect(lineToHand('shoot target="#1115 item=bow')).toMatchObject({ do: 'shoot' });
     expect(lineToHand('shoot target="#1115" item=bow note="end crystal"')).toEqual({ do: 'shoot', target: '#1115', item: 'bow', note: 'end crystal' });

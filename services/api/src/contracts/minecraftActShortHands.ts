@@ -378,7 +378,7 @@ export function unquoted(text: string): string {
 }
 /** A line's tokens. A quoted value that holds spaces (`target="ender dragon"`, `shoot "ender dragon"`) stays one token; a quote that
  * does not open a value (`don't`) or never closes is only part of a word, as before. */
-const LINE_TOKEN = /[A-Za-z]+=(?:\\?"[^"]*"|'[^']*')|\\?"[^"]*"|\S+/gu;
+const LINE_TOKEN = /[A-Za-z]+=(?:\\?"[^"]*"|'[^']*')(?=\s|$)|\\?"[^"]*"(?=\s|$)|\S+/gu;
 /** `key=value` の値: 外側の引用符を外した後、true・false・数はその型、それ以外は文字。 */
 function valueOf(text: string): unknown {
   const raw = unquoted(text), number = Number(raw);
@@ -392,7 +392,7 @@ function readTokens(tokens: readonly string[], verb: string): Read | { error: st
     else if (Object.hasOwn(FLAGS, token)) out.hand[FLAGS[token]!] = true;
     else if (key && key[1] === 'do') return bad(verb, 'do= は書けない');
     else if (key && key[1] === 'dependsOn') {
-      const numbers = key[2] === '' || key[2] === 'none' ? [] : key[2]!.split(',').map(Number);
+      const depends = unquoted(key[2]!), numbers = depends === '' || depends === 'none' ? [] : depends.split(',').map(Number);
       if (numbers.some(number => !Number.isInteger(number))) return bad(verb, 'dependsOn= は前の手の番号をコンマで（dependsOn=1,3）。何にも頼らないなら dependsOn=none');
       out.hand.dependsOn = numbers;
     } else if (key && key[1] === 'slot') out.hand.slot = slotWordOf(unquoted(key[2]!));
