@@ -102,9 +102,9 @@ describe('the stronghold route knowledge and the seed plan', () => {
 
   it('says in the stronghold step that the Nether is not the way (the frame was taken on the way back, run 9 11/13); the food node is its first child', () => {
     const tree = seedPlan('エンドラを討伐して', 'the_nether')!;
-    expect(tree.nodes.filter(node => node.parentId === 'p9').map(node => node.id)).toEqual(['p9.1', 'p9.2', 'p9.3']);
-    expect(tree.nodes.find(node => node.id === 'p9.1')!.title).toBe('食料330点（交点への道すがら）');
-    const step = tree.nodes.find(node => node.id === 'p9.2')!;
+    expect(tree.nodes.filter(node => node.parentId === 'p10').map(node => node.id)).toEqual(['p10.1', 'p10.2', 'p10.3']);
+    expect(tree.nodes.find(node => node.id === 'p10.1')!.title).toBe('食料330点（交点への道すがら）');
+    const step = tree.nodes.find(node => node.id === 'p10.2')!;
     expect(step.doneWhen).toBe('see:end_portal_frame');
     const caution = step.caution!.join(' ');
     expect(caution).toContain('ネザー経由は使わない（帰りのゲートの枠は回収済み）');

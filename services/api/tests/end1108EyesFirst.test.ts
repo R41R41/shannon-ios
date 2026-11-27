@@ -132,7 +132,7 @@ describe('end1108g7 S7: the blaze knowledge says where blazes come, where rods f
   });
   it('kills by sword and keeps the arrows for the End (end1108h16: chases killed 2 in 3 s with no health lost, holds 1 in about 25; owner 11/8)', () => {
     expect(V2_STAGES.blaze).toContain('倒すのは剣で: 見えている 8m 内の 1 体へ attack target=#id');
-    expect(V2_STAGES.blaze).toContain('ブレイズに矢は使わない（矢はエンドのドラゴンとクリスタル用に 30 本残す');
+    expect(V2_STAGES.blaze).toContain('ブレイズに矢は使わない（矢は竜との戦いまで撃たない: エンドのクリスタルとドラゴン用に 12 本残す');
     expect(V2_STAGES.blaze).toContain('追って斬った 2 回は 0.7 秒と 2.7 秒で倒し、傷 0。待つだけの hold は約 25 回で 1 体');
     expect(V2_STAGES.blaze).toContain('湧き場から 12m を超えた時に追うのをやめて返す');
     expect(V2_STAGES.blaze).not.toContain('shoot target=blaze n=5');

@@ -277,7 +277,7 @@ function fullProblem(hand: Rec, form: Form, seen: Seen): Found {
 
 const FROM: Readonly<Record<string, string>> = { cobblestone: '石を dig か mine で掘る', log: '木を dig で切る', planks: 'log から make', stick: 'planks から make',
   iron_ingot: 'raw_iron を smelt', gold_ingot: 'raw_gold を smelt', diamond: '深い所のダイヤ鉱石を mine', coal: '石炭鉱石を mine（木炭は log を smelt）', string: 'クモを fight',
-  leather: '牛を fight', wool: '羊を fight', flint: '砂利を dig', feather: '鶏を fight', blaze_rod: 'ブレイズを fight', ender_pearl: 'エンダーマンを fight', wheat: '作物を dig' };
+  leather: '牛を fight', wool: '羊を fight', flint: '砂利を mine（10% で出る）', feather: '鶏を hunt（hunt chicken）', blaze_rod: 'ブレイズを fight', ender_pearl: 'エンダーマンを fight', wheat: '作物を dig' };
 /** The stones the game takes for cobblestone in a furnace and the stone tools (the body counts the same three: utils/nightGate, utils/toolWear). */
 const COBBLE_LIKE = ['cobbled_deepslate', 'blackstone'];
 /** What the pack holds of a recipe's part: cobblestone counts cobbled deepslate and blackstone too (below y=0 the pack has mostly cobbled deepslate). */

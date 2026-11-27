@@ -46,7 +46,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const { blaze, hunt } = watched;
   const arrows = ['arrow', 'spectral_arrow', 'tipped_arrow'].reduce((sum, item) => sum + (facts.counts.get(item) ?? 0), 0);
   const shooting = facts.counts.size ? (facts.counts.get('bow') ?? 0) > 0 && arrows > 0 : null;
-  const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting);
+  const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting, facts.counts.size ? arrows : null);
   const stall = some(watched.climb?.(shooting) ?? null);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));

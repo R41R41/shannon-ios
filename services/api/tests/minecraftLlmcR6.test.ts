@@ -120,7 +120,7 @@ describe('the shortage, the recovery and where food is: facts of the code', () =
     expect(end).toContain('目標（そろえば。必須ではない）— 弓（材料 糸 0/3・棒 0/3）・矢（光の矢も数える。材料 羽根 0・火打石 0・棒 0（1 ずつで 4 本））が無い');
     // The audit of 11/4, order 10: a spectral arrow is an arrow, a crossbow a bow.
     expect(preparationShortage({ ...home, nowKinds: ['stronghold' as const], counts: new Map([['crossbow', 1], ['spectral_arrow', 30]]) })!
-      .replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '').replace('。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい', ''))
+      .replace(`（${END_PREP_AFTER_STRONGHOLD}）`, '').replace('。点検物（ベッド・黒曜石・足場）は要塞の後ろでよい。取りに出る節は要らない。弓矢は別で、要塞の前の道中の短い節で作る（遠い所へは往復しない）。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい', ''))
       .not.toMatch(/弓|矢/u);
   });
 

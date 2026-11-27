@@ -302,7 +302,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     // Run 9 (11/13): the Nether is left with 13 eyes (12 left the frame short about 1 time in 8).
     expect(plan.nodes.find(node => node.title === 'エンダーアイ14個')!.doneWhen).toBe('have:ender_eye>=14');
     expect(check.note).toContain('水入りバケツ（水を汲んだ物）を hotbar（最初の 9 スロット）に持つ');
-    expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 30・水入りバケツ');
+    expect(STRATEGY_KNOWLEDGE_V2).toContain('弓と矢 12（道中で作る）・水入りバケツ');
   });
 });
 

@@ -81,7 +81,7 @@ describe('(2) a follow names the node it left, and how to go back', () => {
     expect(found).toMatchObject({ to: 'p2.3', from: 'p1.1' });
     expect(found.words).toContain('今の節を [p2.3] に進めた');
     expect(found.words).toContain(`計画の順で先の [p1.1] 交点の手前まで歩く（${REACH}） は開いたまま`);
-    expect(found.words).toContain('防具・食料・掘る道具の欠けの手なら、そのまま続けてよい。エンドの点検物（ベッド・黒曜石・足場・弓矢）の手なら、要塞の後ろの順なので plan_update の current で [p1.1] に戻せる');
+    expect(found.words).toContain('防具・食料・掘る道具の欠けの手なら、そのまま続けてよい。エンドの点検物（ベッド・黒曜石・足場）の手なら、要塞の後ろの順なので plan_update の current で [p1.1] に戻せる。弓矢の節は要塞の前の道中の短い節で、見えた分だけ作って進めてよい');
     expect(found.words).toContain('注意（p2）: ベッドと黒曜石は要塞の後ろで取る');
     // the node left is not listed a second time among the nodes passed
     expect(found.words).not.toContain('飛ばした節は順のまま残っている');

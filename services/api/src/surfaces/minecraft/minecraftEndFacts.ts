@@ -391,6 +391,18 @@ function cagedLeft(end: EndView | null): number | null {
   return list.length > 0 && list.length >= left && list.every(crystal => crystal.caged === true) ? list.length : null;
 }
 
+/**
+ * 11/27 (the bow and arrows are made on the way): the arrows against the crystals that need one each, as one line of facts ahead of the shooting places. An arrow breaks an uncaged
+ * crystal in one shot; what the arrows do not cover is the climb. Null: the arrows or the crystals are not counted, or no uncaged crystal is left.
+ */
+export function arrowBudgetLine(end: EndView | null, arrows: number | null): string | null {
+  const left = end?.crystals.remaining;
+  if (arrows === null || left === null || left === undefined) return null;
+  const open = left - (end?.crystals.caged ?? 0);
+  if (open <= 0) return null;
+  return `檻なしの結晶 ${open} 本・矢 ${arrows} 本（1 本 1 発で壊れる）。${arrows < open ? `矢が ${open - arrows} 本足りない分は柱を登る形になる` : '矢は結晶の数に足りている'}`;
+}
+
 export function noBowLine(end: EndView | null): string {
   const head = 'クリスタルの射点: 弓か矢が無いので射点は使わない（結晶は柱の脇を積んで登って殴る）';
   const dragon = end?.dragon ?? null;
@@ -464,10 +476,10 @@ export function createClimbWatch() {
 }
 
 /** At most six existing fight lines, plus one basin line for normal decisions. Join hazards when the existing observations need the room. */
-export function endFightLines(end: EndView | null, bedItem: string | null = null, shooting: boolean | null = null): string[] {
+export function endFightLines(end: EndView | null, bedItem: string | null = null, shooting: boolean | null = null, arrows: number | null = null): string[] {
   // e03 (11/9): with no bow the shooting places still named the perch "(1,62,1) から 4 基", and the head kept waiting there until a fireball's cloud killed it.
   const shots = shooting === false ? (end?.crystals.openings || end?.crystals.shootSets ? [noBowLine(end)] : []) : [crystalOpeningLine(end), crystalShootSetsLine(end)];
-  const lines = [dragonLine(end), crystalLine(end), ...shots].filter((line): line is string => line !== null);
+  const lines = [dragonLine(end), crystalLine(end), arrowBudgetLine(end, arrows), ...shots].filter((line): line is string => line !== null);
   const positions = dragonApproachLine(end) ?? perchLine(end);
   const hazards = [breathLine(end), fireballLine(end)].filter((line): line is string => line !== null);
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));
