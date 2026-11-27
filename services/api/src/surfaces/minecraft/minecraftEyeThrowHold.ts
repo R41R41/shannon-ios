@@ -1,12 +1,13 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
-import type { EyeLedger } from './minecraftEyeLedger.js';
+import { frameFoundWords, type EyeLedger } from './minecraftEyeLedger.js';
 import { bearingBetween, compassWord, type Fix } from './minecraftEyeTriangulation.js';
 import { feetOf, readinessOf } from './minecraftLlmcReadiness.js';
-import { framesOf } from './minecraftSeenMarks.js';
+import { framesKnownOf, framesOf } from './minecraftSeenMarks.js';
 
 /**
  * The eyes kept for the frames (S5's rig of 11/5, 8a3c4fd2: after the sideways throw gave the point, she followed each fallen eye 10 to 15 m and
  * threw again, 27 throws, until none was left for the frames). A throw into the sky (`use item=ender_eye` with no `at`) is held when:
+ * (0) the frames are known in this world (the map's marks, or the body's remembered row for this world): no throw goes; they are walked to.
  * (a) the ledger has a point within `FRAME_SEARCH_RADIUS` (the frames' probe reaches it from there): walk to it and look for the frames.
  *     One throw goes from within that radius of the point while the ledger has none thrown there: the way out when the frames are not at the
  *     point (the eye sinks over the stronghold, or draws a new line from near it);
@@ -102,6 +103,9 @@ function reasonOf(ledger: EyeLedger | undefined, world: Record<string, unknown>,
   const canMake = count('ender_pearl') > 0 && count('blaze_powder') + count('blaze_rod') > 0;
   const feet: Place | null = via ?? feetOf(world);
   const fix = ledger?.fix(now) ?? null;
+  // The frames are known in this world (in view, or in the body's own record of it): a throw into the sky only searches for them. Nothing here reads another world's record.
+  const known = framesKnownOf(world);
+  if (known) return `${frameFoundWords(known, feet, eyes)}（枠のそばの mc_probe kind=frames は 0.3 秒・目を使わずに目入りの数を読める）`;
   const frames = framesOf(world), need = frames ? Math.max(0, frames.frames - frames.eyes) : FRAMES;
   const throws = ledger?.throws(now) ?? [];
   const again = !frames && fix !== null && againFrom(throws, fix, feet);

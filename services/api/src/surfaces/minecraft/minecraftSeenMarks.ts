@@ -107,3 +107,26 @@ export function framesOf(world: Record<string, unknown>): { frames: number; eyes
   const eyes = /アイ入り\s*(\d+)/u.exec(mark.rest);
   return { frames: Number(count[1]), eyes: eyes ? Number(eyes[1]) : 0, at: mark };
 }
+
+/** The portal room's frames as far as this world's own record knows them: how many, how many hold an eye (null: the row does not say), where. */
+export interface FramesKnown { frames: number; eyes: number | null; at: { x: number; y: number; z: number }; inView: boolean }
+
+/**
+ * The frames the body remembers (`rememberedPlaces.end_portal_frame`: `155m 南 (505,31,1603) ×12`, the dimension she is in): a room found beyond the map's radius, or one the map's marks
+ * have not drawn yet. The body writes this record per world (the file is named by the server and the world id; a new world starts with an empty one), so the row is of the world she
+ * is in; a world with no row has no frames known. The row's eye count is read only when it says one (`アイ入り 3`); the digest of the places does not always.
+ */
+export function rememberedFramesOf(world: Record<string, unknown>): FramesKnown | null {
+  const places = world.rememberedPlaces;
+  const row = places && typeof places === 'object' && !Array.isArray(places) ? (places as Record<string, unknown>).end_portal_frame : null;
+  const at = cellOf(row);
+  if (typeof row !== 'string' || !at) return null;
+  const count = /×(\d+)/u.exec(row), eyes = /アイ入り\s*(\d+)/u.exec(row);
+  return { frames: count ? Number(count[1]) : 12, eyes: eyes ? Number(eyes[1]) : null, at, inView: false };
+}
+
+/** The frames this world is known to have: the ones in view (the map's marks, with their eye count), else the body's remembered row. Null: none known. */
+export function framesKnownOf(world: Record<string, unknown>): FramesKnown | null {
+  const seen = framesOf(world);
+  return seen ? { frames: seen.frames, eyes: seen.eyes, at: { x: seen.at.x, y: seen.at.y, z: seen.at.z }, inView: true } : rememberedFramesOf(world);
+}

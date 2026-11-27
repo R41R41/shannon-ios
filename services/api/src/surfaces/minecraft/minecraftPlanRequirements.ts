@@ -4,6 +4,9 @@ import { acquired, carried, doneFacts } from './minecraftConditions.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
 import { materialsOf, smeltingInputOf } from './minecraftLlmcRecipes.js';
 
+/** The fact for a node whose title was changed and whose done condition and place were not (`PlanNode.staleCondition`, set by `plan.update`): said in its result and in the live's now; nothing is removed. */
+export const STALE_CONDITION_WORDS = 'この済む条件は題を変える前のものです（doneWhen・where を新しい題に合わせるなら set で作り直す）';
+
 export const PLAN_TARGET_SCHEMA = { type: 'object', additionalProperties: false, required: ['item', 'count'], properties: {
   item: { type: 'string', pattern: '^[a-z][a-z0-9_]{0,63}$' }, count: { type: 'integer', minimum: 1, maximum: 99999 } },
   description: 'この節で取得する物と数。材料や道具の節とは分ける。doneWhen のどの代替条件でもこの取得が必要' };

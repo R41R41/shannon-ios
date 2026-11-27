@@ -154,6 +154,11 @@ export interface PlanNode {
   /** Why it is blocked. */
   reason?: string;
   /**
+   * The title was changed by a `set` that left `doneWhen` and `where` as they were: they are of the node before its title changed (a node made into another work kept an `at:` condition
+   * 295 m away and said it unmet at every decision). A fact for the live state and the result of the update; nothing is removed. Cleared when `doneWhen` or `where` is set.
+   */
+  staleCondition?: true;
+  /**
    * mb-llmc r4 (owner 2026-10-22; arch-check 23: of what a supervisor wrote, the forbids and cautions held longest
    * and worked): what not to
    * do (`forbid`) and what to mind (`caution`) while this node or one under it is the current one; at most

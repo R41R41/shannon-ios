@@ -8,7 +8,8 @@ import type { FcaPlanInbox } from '../../mind/action/fca/fcaPlanTools.js';
 import { scanForPlan } from './minecraftLlmcProbe.js';
 import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood, stacks } from './minecraftLlmcLive.js';
-import { eyeLedgerFact } from './minecraftEyeLedger.js';
+import { eyeLedgerFact, frameFoundWords } from './minecraftEyeLedger.js';
+import { framesKnownOf } from './minecraftSeenMarks.js';
 import { preparationShortage,recoveryLine } from './minecraftLlmcReadiness.js';
 import { parseCondition } from '../../contracts/minecraftActCondition.js';
 import { parseDoneWhen } from './minecraftPlanDone.js';
@@ -331,9 +332,11 @@ function readinessInput(world: Record<string, unknown>, journeyReadiness?: boole
   const eyes = eyesForStronghold(world);
   const at = record(world.position), feet = at && typeof at.x === 'number' && typeof at.z === 'number' ? { x: at.x, z: at.z } : null;
   // Run 7 (11/27): the lines she threw before this plan (the body keeps them on the world): the point they give, as a guide, is a fact of the first plan too.
-  const thrown = dimension === 'overworld' ? eyeLedgerFact(world.eyeThrows, feet, now) : [];
+  // The frames are known in this world (the map's marks, or the body's record of this world): the plan starts from them, and the lines thrown before say nothing more.
+  const known = dimension === 'overworld' ? framesKnownOf(world) : null;
+  const thrown = dimension === 'overworld' && !known ? eyeLedgerFact(world.eyeThrows, feet, now) : [];
   const netherEyes = dimension === 'the_nether' ? eyesInHand(world) : null;
-  return [...(eyes !== null ? [EYES_IN_HAND(eyes)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
+  return [...(eyes !== null ? [known ? EYES_WITH_FRAMES(eyes, frameFoundWords(known, feet, eyes)) : EYES_IN_HAND(eyes)] : netherEyes !== null ? [EYES_IN_NETHER(netherEyes)] : []), ...thrown, foodPointsWords(food), ...(shortage ? [shortage] : []), ...(recovery ? [recovery] : [])];
 }
 
 /**
@@ -377,12 +380,18 @@ export const EYES_FOR_STRONGHOLD = 10;
  * Run 8 (11/27): the line was an order (「最初の節は…」) beside a shortage list that read as things to do first; Haiku wrote the village's beds, iron, an obsidian node and a bow first and the
  * stronghold fourth, with the eyes in the pack. It is the facts and the reason now, and where the shortage's things go (the order's own words are in the plan's system, `CURRENT_PLAN_STRUCTURE`).
  */
-const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
-  (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
-  '投げて落ちたアイは拾う。' +
+const EYES_PLAN_TAIL =
   'ゲート・ネザー・ブレイズ・パールを集める節は要らない。ベッド・黒曜石・弓矢（とそれ用の鉄）の不足は、道中・要塞の近く・村や溶岩を通る時に取れる分だけでよく、そのための節は要塞の節の後ろ・エンドへ入る節の前に置く。' +
   '防具の欠け・食料・掘る道具の欠けは要塞の前の短い節（出発の準備）にしてよい（手元か近く 30m 以内の材料で作れる分だけ。遠くへ鉄を掘りに行く節は作らない）。エンドの点検物は要塞の後ろの節。' +
   '節は削らず順だけ後ろへ置く（黒曜石・ベッドの節、枠を埋めてポータルを開く節、12 個目の目の作り方の注意も節に残す）。理由: 枠は 12 個で目は今の数より多く要り、置かれていない時の手立ての節が計画に無いと、要塞に着いた後に次の手が決まらない';
+/**
+ * The frames are already known in this world (the body remembered a room 155 m away and the first plan still said "two throws give the place"): the place is a fact, the eyes are for the frames,
+ * and the first node is the walk there. The same tail as the case without frames: where the preparation goes.
+ */
+const EYES_WITH_FRAMES = (eyes: number, found: string) => `エンダーアイ ${eyes} 個（オーバーワールド）。${found}。要塞の場所はもう分かっているので、目を投げて場所を出す節は要らない。` + EYES_PLAN_TAIL;
+const EYES_IN_HAND = (eyes: number) => `エンダーアイ ${eyes} 個（オーバーワールド）。2 本投げれば要塞の場所が出る（今すぐできて、足りない物は要らない）。` +
+  (eyes >= 12 ? '' : `枠は最大 12 で、足りない分は枠に最初から入っている目玉で埋まることが多い（今 ${eyes}/12。開く確率は不足の行の通り。枠の所で足りないと分かってからパール 1 個で足せる）。`) +
+  '投げて落ちたアイは拾う。' + EYES_PLAN_TAIL;
 /**
  * Run 7 (11/27): a task begun in the Nether with 13 eyes. With the overworld-only rule in the system, Haiku weighed whether it applied (its thinking filled the 9,000 output tokens in 2 of 4 asks with the
  * new system; with the old system 4 of 4 took 2.8 to 4.2 thousand): the Nether's case is said as a fact of its own, with the same reason.

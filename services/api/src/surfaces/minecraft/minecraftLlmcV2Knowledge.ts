@@ -460,6 +460,9 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '## パールとアイ',
     '- パールの当て: ①歪んだ森（青い森）のエンダーマン ②ピグリンに金の延べ棒を渡す（当たりは約 2.1%、当たると 2〜4 個。金 15.6 個で平均 1 個、14 個には平均 220 個・9 割なら 380 個。ばらつきが大きい）'
       + '③夜のオーバーワールドのエンダーマン（歪んだ森より少ないが、森が見つからない時の道）。足りない数に対する手間（秒）で当てを並べて選ぶ。金が少なくても交換は金の分だけ取り、残りをエンダーマン（1 体で平均 0.4〜0.5 個。14 個に約 28 体: 平均の期待値）で補ってよい。通り道のエンダーマンも取る。',
+    '- パールの道の行（足りない物にパールがある時。事実の並びで、選ぶのは頭。数字の期待値は書かない）: ①夜の地表のエンダーマン: 暗い所に出る。この実走の記録では昼の 15 分で 0 体だった（出るまで夜を待つ時間が要る）。'
+      + '②要塞の箱: mc_probe kind=scan の chest で近い地下の箱を数えられる。箱の数も中身も、開けて見るまで分からない（パールが入っているとは限らない）。探索の危険はスポナー・溶岩・迷路。'
+      + '③村の司祭との交換: 緑宝石 5 個が要る（持っていなければ交換できない）。④ネザーへ戻って歪んだ森で集める: 往復だけで 30 分以上かかる。',
     '- ネザーでロッドが 7 本そろいパールが足りない時の最初の 1 手は mc_probe kind=scan（歪んだ森の列の行と biomes の行を読む）。見えなければ見えていない向きへ 90m の go→走査をもう一度。ネザーに居たまま集め、アイがそろってから 1 回だけ現世へ戻る（黒曜石 12 もピグリンとの交換で出るので、それだけでは戻る理由にならない）。',
     '- 歪んだ森が見えない時: 走査（mc_probe kind=scan）で見えていない方向と、通っていないバイオームの方向へ、1 回 90m 以内の go で進み、着くたびに走査し直す。見えた谷や森の反対側を先にする。'
       + 'ネザーで森を探す移動と、ゲートへ戻る時間・夜までの待ち・地上の個体の少なさを比べ、足りない数を早く集められる当てを選ぶ。live の「パール n/14」の行（ネザーだけ）に、金の交換の見込みが出る。'
@@ -573,7 +576,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- 交点が出たら、もう投げない（誤差が 128m 以内の時。広い間は下の通り）: 交点まで歩き、mc_probe kind=frames radius=128 で枠を探す（地表から地下の枠が見える）。アイは枠 12 にそのまま要り、投げると 5 回に 1 回は割れる。'
       + '誤差が 128m を超える間は、目 2 本の角度差が小さい（7 回目は 0.7° で ±175m）ので、交点の 300〜500m 手前ごとに 1 本投げ直して絞る（live の帳簿の「近づいたら…から投げ直す」の位置はその最後の 1 本。要塞が手前や奥へずれていても見つけられる。割れる分は目の余裕で見込む）。'
       + '誤差が 128m 以内になってからは、交点の 128m 内まで来ても枠が見えない時の 1 回だけ（沈めば要塞は真下）。'
-      + '交点（24m 内）に着いても枠が見えない時も、そこから投げていなければ 1 回投げて向きを確かめる（同じ所からは投げ直さない）。',
+      + '交点（24m 内）に着いても枠が見えない時も、そこから投げていなければ 1 回投げて向きを確かめる（同じ所からは投げ直さない）。'
+      + '投げる前に先に mc_probe kind=frames を撃つ（0.3 秒・目を使わない・半径の外でも読み込まれた範囲の約 200m まで枠を拾う）。控えに枠が出ている時は、投げずに枠へ歩く。',
     '- 目玉が真下へ沈んだ（down）所、または 12m 足らずで止まった（arrived）所が要塞の入口。',
     '- ポータルの部屋は入口から 7〜72 ブロック離れていた（測った世界では）。',
     '- 落ちたアイは約 5 分、pickup で拾える（割れるのは 5 回に 1 回ほど）。',
@@ -582,7 +586,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '11 個以下なら、live の準備の不足行の「作れる分」（パール・粉・ロッドから作れる数）を見て、要塞へ向かう前に増やすか、この確率で向かうかを決める（落ちたアイを拾う・粉とパールで craft）。'
       + 'パールの入手: エンダーマンは暗い所（夜の地上の平原・歪んだ森）に出て、倒して 0〜1 個。ピグリンとの交換は金インゴットが要り、1 回で出るのは約 2%（出れば 4〜8 個）。'
       + '現世の夜を待つ時間と、ネザー（歪んだ森）へ戻る往復の時間は、live の見込み秒数と夜までの時間で比べる材料にする（この実走の記録にエンダーマンは 0 体だった）。',
-    '- 投げが割れて 10 個になった時の次の手（数）: 枠の所で、パールが 1 個あれば足して 11 個（72%）・2 個あれば 12 個（100%）。パールが 0 個なら、エンダーマン待ちは最初に止めてから 10 分を上限にし、出なければ 10 個（34%）のまま枠へ進む。開かない時は枠の目玉を拾う・パールを探す。11 個ある時は、パールを探さずその 11 個（72%）で進んでよい。理由: 夜の平原で待つ分と、ネザーへの往復（10 分以上）は、72% を 100% にするのに見合わないことが多い。',
+    '- 投げが割れて 10 個になった時の次の手（数）。ここの 72%・34% は、枠がまだ見えず目入りの数が分からない時の確率: 枠が見えたら目入りの数で必要数が決まり、確率でなく足し引きの数になる（live の準備の不足行の「空き」「足りない」）。枠の所で、パールが 1 個あれば足して 11 個（72%）・2 個あれば 12 個（100%）。パールが 0 個なら、エンダーマン待ちは最初に止めてから 10 分を上限にし、出なければ 10 個（34%）のまま枠へ進む。開かない時は枠の目玉を拾う・パールを探す。11 個ある時は、パールを探さずその 11 個（72%）で進んでよい。理由: 夜の平原で待つ分と、ネザーへの往復（10 分以上）は、72% を 100% にするのに見合わないことが多い。',
     '- 枠の真上が海（水面）の時: go waterOk で枠の x,z の水面へ → 息を見て潜る → vertical down stairs 向き y=枠の y+1 liquid=seal で乾いた穴を作って下りる（seal が水を塞ぐので、水の中を掘り進まずに済む）。',
     '- 枠は mc_probe kind=frames（x z=探す中心、省くと足。radius=16〜128、既定 64）が、要塞のエンドポータルの枠を近い順に最大 12 個教える。入口で radius 128 を使う'
       + '（読み込みの外なら 16 ブロック刻みの輪の次に歩く点を返すので、歩いて着いたらもう一度）。感染した石レンガは要塞が近い印で、枠ではない。枠が見えたら live の印（Q）にも出る。',
@@ -720,11 +724,11 @@ export function stagesFor(live: Rec): StageId[] {
   const body = rec(live.body) ?? {}, state = rec(body.state) ?? {};
   const dimension = String(state.dimension ?? '');
   const where = { kinds: nearKinds(factsIn(body)), inside: String(state.inside ?? ''), inventory: text(body.inventory),
-    near: `${text(body.landmarks)} ${text(body.scan)} ${text(body.threats)}` };
+    near: `${text(body.landmarks)} ${text(body.scan)} ${text(body.threats)}`, shortage: text(body.shortage) };
   const found = STAGE_IDS.filter(id => STAGE_WHEN[id](dimension, where));
   return found.length ? found : [dimension === 'the_nether' ? 'nether' : 'prep'];
 }
-interface Where { kinds: readonly PlanKind[]; inside: string; inventory: string; near: string }
+interface Where { kinds: readonly PlanKind[]; inside: string; inventory: string; near: string; shortage: string }
 const kindsOf = (...kinds: PlanKind[]): ReadonlySet<PlanKind> => new Set(kinds);
 /** The kinds of node each stage's knowledge goes with (chapter 7, table 12). */
 const STAGE_KINDS: Readonly<Record<StageId, ReadonlySet<PlanKind>>> = {
@@ -740,7 +744,8 @@ const STAGE_WHEN: Readonly<Record<StageId, (dimension: string, where: Where) => 
   prep: (dimension, where) => dimension === 'overworld' || hasKind(where.kinds, STAGE_KINDS.prep),
   nether: (dimension, where) => dimension === 'the_nether' || hasKind(where.kinds, STAGE_KINDS.nether) || /要塞|砦/u.test(where.inside),
   blaze: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.blaze) || /blaze|ブレイズ/u.test(where.near),
-  pearl: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.pearl) || /ender_pearl/u.test(where.inventory) || /enderman/u.test(where.near),
+  // The pearl was short at a node of another kind (the stronghold's) and the road to it was in no text she read; a lack that names the pearl brings it in, whatever the node.
+  pearl: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.pearl) || /ender_pearl/u.test(where.inventory) || /enderman/u.test(where.near) || /パール|ender_pearl/u.test(where.shortage),
   stronghold: (_dimension, where) => hasKind(where.kinds, STAGE_KINDS.stronghold) || /ストロングホールド|エンドポータル/u.test(`${where.inside} ${where.near}`)
     || /ender_eye/u.test(where.inventory),
   end: (dimension, where) => dimension === 'the_end' || hasKind(where.kinds, STAGE_KINDS.end),

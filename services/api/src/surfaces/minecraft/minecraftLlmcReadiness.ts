@@ -168,13 +168,20 @@ function bedWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }
 }
 
 /**
- * The eyes' odds, as a fact beside the shortage (only while the frames are not in view and fewer than 12 are carried; only said when something else is short, so the shortage
+ * The eyes' odds, as a fact beside the shortage (while the frames are not in view and fewer than 12 are carried; with the frames in view, their own count in its place; only said when something else is short, so the shortage
  * stays empty exactly when it was). Making one eye takes a pearl and a powder (a rod gives two powders), so what can be made is the least of them.
  */
 function eyeWords(parts: { counts: ItemCounts; world?: Record<string, unknown> }): string {
   const eyes = countMatching(parts.counts, /^ender_eye$/u);
-  if (eyes >= 12 || eyes <= 0 || (parts.world && framesOf(parts.world))) return '';
   const pearls = countMatching(parts.counts, /^ender_pearl$/u), powder = countMatching(parts.counts, /^blaze_powder$/u), rods = countMatching(parts.counts, /^blaze_rod$/u);
+  // The frames in view (this line and the one of the empty frames gave two counts side by side, 10/12 and 10/11): one measure, the frames' own.
+  const seen = parts.world ? framesOf(parts.world) : null;
+  if (seen) {
+    const empty = Math.max(0, seen.frames - seen.eyes), lack = Math.max(0, empty - eyes);
+    return lack ? `枠 ${seen.frames}・目入り ${seen.eyes}・空き ${empty} 個。手持ち ${eyes}・足りない ${lack} 個（パール ${lack}・粉 ${lack} が同数要る。今 パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''}）。`
+      + '要る数は割れた分を足した 12 でなく、この空きの数' : '';
+  }
+  if (eyes >= 12 || eyes <= 0) return '';
   const makeable = Math.min(pearls, powder + 2 * rods), gap = 12 - eyes;
   return `エンダーアイ ${eyes}/12（開く確率 ${Math.round(frameOpenChance(eyes) * 100)}%。投げ直しは 1 本ごとに 5 回に 1 回割れる）。`
     + `作れる分：パール ${pearls}・粉 ${powder}${rods ? `・ロッド ${rods}` : ''} → 作れるのは ${makeable} 個（1 個＝パール 1＋粉 1）。12 まであと ${gap} 個まで足せる`;

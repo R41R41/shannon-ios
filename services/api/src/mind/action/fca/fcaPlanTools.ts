@@ -6,6 +6,7 @@ import {
 import type { FcaExternalTools, FcaToolDefinition } from './fcaPorts.js';
 import { toolFailure, toolOk } from '../../tools/toolRegistryPorts.js';
 import { parseCondition } from '../../../contracts/minecraftActCondition.js';
+import { STALE_CONDITION_WORDS } from '../../../surfaces/minecraft/minecraftPlanRequirements.js';
 import { applyLedger, readLedgerSeen, type LedgerAdded, type LedgerInput, type LedgerSeen } from '../../../surfaces/minecraft/minecraftLlmcPromises.js';
 import { offer, withdraw } from '../../../surfaces/minecraft/minecraftLlmcOnceFacts.js';
 import { noteKindRaw } from '../../../infra/decisionRecords/decisionRecordNotes.js';
@@ -66,6 +67,8 @@ export const PLAN_UPDATE_DEFINITION: FcaToolDefinition = {
 '取る物が変わったなら target も新しい物と数に set する。取得目標をやめる時は set で target=null。合わない op は却下される（理由: 頼みが変わって計画を直す時、doneWhen だけを書き直して同じ所で弾かれ続けたから）。'),
     ('持ち主が途中で言い直した事（先に・やめて・〜じゃなくて・〜しなくていい）は、元の依頼文より強い。いらなくなった節は drop（取得目標のある節を done にすると、現物が無いので却下される）、待たせる節は set state=blocked にし、' +
 '新しい節を add して current にする。元の依頼文を理由に元の節へ戻さない。'),
+    ('set で title を変える時は、doneWhen と where も新しい題に合わせて作り直す（古い位置や条件を引きずらない）。' +
+'理由: title だけ変えると doneWhen と where は前の題のまま残り、前の場所までの距離が「未」と毎回入力に出続け、新しい題の済みを正しく測れない。title だけが変わって残った時は、結果と live の今の節に「この済む条件は題を変える前のものです」と出る（消えはしない）。'),
     '持ち主の言い直しで依頼そのものが変わった時は goal に新しい依頼を 1 文で書く（live の plan.goal に出て、元の依頼文より優先する）。節の題も set title で直す。id は live の plan.ids（済んでいない節の id）にある物だけ。',
     '計画が変わった時・節が済んだ時・止まった時に出す（毎回は要らない）。体の手と同じ応答で出してよい。',
     '約束（残す物と用途）: promise（item・count・use。期間は until、代わりに足りる条件は instead。id を書けば改訂）、release（id・why）。約束を書くのは自分だけ。',
@@ -408,6 +411,7 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
       if (result.problem) return toolFailure('invalid_input', `計画は変えていない: ${result.problem}\n${planText(tree)}`, { retryable: false });
       const problem = parts.validateUpdate?.(tree, result.tree);
       if (problem) return toolFailure('invalid_input', `計画は変えていない: ${problem}\n${planText(tree)}`, { retryable: false });
+      const before = new Set(tree.nodes.filter(node => node.staleCondition).map(node => node.id));
       const dropped = result.changed ? droppedOpenProblem(tree, result.tree) : null;
       if (dropped) return toolFailure('invalid_input', `計画は変えていない: ${dropped}\n${planText(tree)}`, { retryable: false });
       if (result.changed) {
@@ -432,8 +436,11 @@ export function createFcaPlanTools(parts: { taskId: string; checkpoint: unknown;
 `${tree.current ?? '-'}` +
 ""));
       }
+      // A title changed with the done condition and the place left as they were: said as a fact in the result (the live's now says it for as long as it stands); nothing is removed.
+      const retitled = result.changed ? result.tree.nodes.filter(node => node.staleCondition && !before.has(node.id)).map(node => node.id) : [];
+      const stale = retitled.length ? `\n${retitled.join('・')}: ${STALE_CONDITION_WORDS}\n` : '';
       const turned = result.rejected?.length ? `一部だけ通した。通らなかった op（これだけ直して出し直す）:\n${result.rejected.join('\n')}\n` : '';
-      return toolOk(`${turned}${result.changed ? planText(tree) : `変化なし\n${planText(tree)}`}`);
+      return toolOk(`${turned}${result.changed ? planText(tree) : `変化なし\n${planText(tree)}`}${stale}`);
     },
   };
   return { tools, port };
