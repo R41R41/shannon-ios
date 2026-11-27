@@ -148,7 +148,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
     // 11/27: 760 -> 820 for the fish line's reach (one note beside a fish in the food candidates: about 40).
     // 11/27: 820 -> 860 for the full pack's cost (a go and a vertical do not stop on it; the hands that do are named)
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(860);
+    // 11/27: 860 -> 920 for the facts and plan rows together (obsidian with no diamond pickaxe; the height line is on a separate frame)
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(920);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });

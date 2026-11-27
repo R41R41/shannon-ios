@@ -563,7 +563,7 @@ export function carryDone(held: PlanTree, next: PlanTree): PlanTree {
 }
 
 /** The plans handed to tasks from outside their decisions: a seed at the first read, the strong model's answer when it comes. */
-interface Slot { seed: PlanTree | null; answer: PlanTree | null; asked: boolean; pending?: boolean }
+interface Slot { seed: PlanTree | null; answer: PlanTree | null; asked: boolean; pending?: boolean; began?: number; settled?: boolean }
 const slots = new Map<string, Slot>();
 function slotOf(taskId: string): Slot {
   let slot = slots.get(taskId);
@@ -640,6 +640,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
   slot.pending = true;
   const planner = parts.planner;
   const abort = new AbortController(), began = Date.now();
+  slot.began = began;
   const timer = setTimeout(() => abort.abort(), FIRST_PLAN.giveUpMs);
   timer.unref?.();
   const say = (line: string) => { try { parts.log(line); } catch { /* logging never fails a step */ } };
@@ -661,6 +662,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
     const tree = abort.signal.aborted ? null
       : planFromAnswer(strongholdFirst(answer, eyesForStronghold(asked), say), new Date().toISOString(), say);
     if (tree) slot.answer = tree;
+    slot.settled = true;
     say(("Shannon Minecraft first plan " +
 `${tree ? 'planned' : 'missing'}` +
 " task=" +
@@ -670,7 +672,7 @@ export function startFirstPlan(parts: { taskId: string; goal: string; held: Plan
 " ms=" +
 `${Date.now() - began}` +
 ""));
-  }, () => say(`Shannon Minecraft first plan failed task=${parts.taskId} ms=${Date.now() - began}`)).finally(() => clearTimeout(timer));
+  }, () => { slot.settled = true; say(`Shannon Minecraft first plan failed task=${parts.taskId} ms=${Date.now() - began}`); }).finally(() => clearTimeout(timer));
 }
 
 /** r4: the world with the body's scan: as it is when it holds one, else read again until one comes or `SCAN_WAIT.ms` passes. */
@@ -685,6 +687,19 @@ async function withScan(r4: { world(): Record<string, unknown> | null; waitMs?: 
     if (world?.scan) return world;
   }
   return world;
+}
+
+/** How long the words of the waiting (`firstPlanWaiting`) stand: a plan that has not come by then is read as not coming, and the node's own line is said as it is. */
+export const FIRST_PLAN_WAITING_MS = 90_000;
+/**
+ * The task's first plan is being written (asked, no answer yet, failure or give-up) and has been for less than `FIRST_PLAN_WAITING_MS`; the node the decision reads is then the default plan's, a stand-in.
+ * Null when no plan was asked, it came, it failed, or the wait is past the bound (the ordinary words come back).
+ */
+export function firstPlanWaiting(taskId: string, now: number = Date.now()): { sinceMs: number } | null {
+  const slot = slots.get(taskId);
+  if (!slot?.pending || slot.settled || slot.began === undefined) return null;
+  const sinceMs = now - slot.began;
+  return sinceMs >= 0 && sinceMs < FIRST_PLAN_WAITING_MS ? { sinceMs } : null;
 }
 
 /** For tests: no task holds a first plan. */

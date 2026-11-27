@@ -5,6 +5,9 @@ import { carriedFood } from './minecraftLlmcLive.js';
 import { requestFlag } from './minecraftLlmcFightFacts.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
 import { dayBedLine, dayNoBedLine, nightChoiceLine } from './minecraftNightArms.js';
+import { firstPlanWaiting } from './minecraftFirstPlan.js';
+import { frameDigLine } from './minecraftEndFrameDig.js';
+import { noPickObsidianLine, spareDigWords } from './minecraftLlmcFightFacts.js';
 import { sleepStateLine } from './minecraftLlmcSleepHold.js';
 import { furnaceMeanwhileLine } from './minecraftFurnaceMeanwhile.js';
 import { nowKinds, PLAN_FACTS_KEY, planFactsOf, type PlanFacts } from './minecraftPlanFacts.js';
@@ -180,6 +183,8 @@ export function readinessParts(
       foodAbsentLine(facts.world, facts.food, facts.dimension, tree?.nodes.find(node => node.id === tree.current), facts.counts, tree?.nodes, facts.at ?? null),
       targetRequirements(tree?.nodes.find(node => node.id === tree.current), facts.counts, tree ?? undefined),
       endLackLine(facts, nowKinds(planFacts), llmc.journeyReadiness),
+      frameDigLine(facts.world, facts.counts, feetIn(facts.world)),
+      llmc.journeyReadiness !== false ? noPickObsidianLine(facts.counts, facts.dimension, preparationStage(facts.dimension, facts.counts, nowKinds(planFacts)) === 'end') : null,
     ]
       .filter(Boolean)
       .join('。') || null;
@@ -214,11 +219,14 @@ export function readinessParts(
   // end1109o10: 「朝へ回す」 alone left the night with no now; the first open node of the ore (iron, then the diamonds) is said as the night's.
   const underNode = huntWaits ? nodes.find(node => node.state !== 'done' && node.state !== 'blocked' && node.id !== current?.id
     && !nodes.some(kid => kid.parentId === node.id && kid.state !== 'done') && /鉄(?!ゴーレム)|ダイヤ|iron|diamond/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)) : undefined;
+  const waiting = !!taskId && !!firstPlanWaiting(taskId);
+  const spare = spareDigWords(facts.counts, facts.dimension);
   const onceFacts = taskId ? (preparationFacts(taskId, tree, observation), waterNodeFacts(taskId, tree, observation), shiftFacts(taskId, observation), staleNodeFacts(taskId, tree, observation))
     : undefined;
   return {
     ...(planNow ? { planNow: huntWaits ? `${[meanwhile, night].filter(Boolean).join('。')}。今の節 ${planNow} は地上の用事なので朝へ回す（夜の地上は骸骨・クリーパー・ゾンビが多い。朝になったら続ける）。${underNode ? `夜の間は地下の節 [${underNode.id}] ${underNode.title} を進める（地下の暗さは昼も夜も同じ）` : '夜の間は地下で鉱石を掘る'}`
-      : planNowOrdered(planNow, meanwhile, night, first, !!choice) } : {}),
+      : waiting ? planNowWhileFirstPlan(current ? `[${current.id}] ${current.title ?? ''}` : planNow, meanwhile, choice ? night : null, first)
+      : planNowOrdered(spare && llmc.journeyReadiness !== false ? `${planNow}。${spare}` : planNow, meanwhile, night, first, !!choice) } : {}),
     ...(shortage ? { shortage } : {}),
     ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes, facts.at ?? null), route),
     ...(planFacts ? { planFacts } : {}),
@@ -237,6 +245,29 @@ export function planNowOrdered(planNow: string, meanwhile: string | null, night:
   return night && !nightIsChoice ? `${head}。${night}` : head;
 }
 
+/**
+ * Seen in a real run: the first plan took 36 s to come, and the decision in between read the default plan's node (`原木 12`) with 「今の節を進める」 and 「待てば 9 分 なにも進まない」 beside it, and sent a
+ * long go 100 m north, 113 m back (about 2 minutes); the plan's own note beside it said to wait with a probe, and the two did not agree. While the first plan is being written (`firstPlanWaiting`,
+ * and not past its bound) the now is said as a stand-in: the node's title only, the wait, what is allowed (what is within 24 m), what is not (a long go) and why. The day's bed paragraph (the
+ * 「進める」 and the cost of waiting) is left out for these seconds; the furnace's hands, the food's first step and the night's own choice (dusk) are kept.
+ */
+export function planNowWhileFirstPlan(node: string, meanwhile: string | null, nightChoice: string | null, first: string | null): string {
+  const words = `最初の計画を書いている最中（この世界に合わせた計画が数十秒で届く）。計画の節は、今の節 ${node.slice(0, 60)} も次の節（村・ベッドなど）も、旧の準備順の既定計画の物なので、計画が届くまで始めない。`
+    + '数十秒の間に出してよい手は、probe・view・wait 5 のような短い手と、24m 内で取れる物の短い手だけ。長い go（歩きが 30 秒を超える物）と、木・村・ベッドへの遠出は出さない。理由: 既定計画は旧の準備順で、'
+    + '北の木や村へ出ると要塞と逆の向きに歩いて戻る往復になり、約 2 分を失った。計画が届けばこの文は消えて今の節が替わる';
+  return [meanwhile, nightChoice, first, words].filter(Boolean).join('。');
+}
+
+/** What the missing pieces take in iron ingots (a helmet 5, a chestplate 8, leggings 7, boots 4: `IRON_USES`' 兜 and 胸 and the plan's own numbers), summed, beside what the pack holds (ingots; raw iron is smelted to one each). */
+const ARMOUR_IRON: Readonly<Record<string, number>> = { 頭: 5, 胴: 8, 脚: 7, 足: 4 };
+export function armourIronWords(missing: readonly string[], counts: ReadonlyMap<string, number>): string {
+  const parts = missing.filter(label => ARMOUR_IRON[label]);
+  if (!parts.length) return '';
+  const total = parts.reduce((sum, label) => sum + ARMOUR_IRON[label]!, 0);
+  const ingots = carried(counts, 'iron_ingot'), raw = carried(counts, 'raw_iron');
+  return `。欠けた部位ぜんぶの鉄 ${parts.map(label => `${label} ${ARMOUR_IRON[label]}`).join('＋')}＝${total}（手元 インゴット ${ingots}・生の鉄 ${raw}）。足は鉄のブーツでよい（金のブーツはネザーに入る時だけ）`;
+}
+
 const ARMOUR_SLOTS: ReadonlyArray<readonly [string, string]> = [['helmet', '頭'], ['chestplate', '胴'], ['leggings', '脚'], ['boots', '足']];
 const EYES_FOR_FRAMES = 12;
 /**
@@ -250,7 +281,7 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   const lacks: string[] = [];
   const beds = [...counts].reduce((sum, [name, n]) => sum + (BED_ITEM.test(name) ? n : 0), 0);
   if (beds < END_BEDS) lacks.push(`ベッド ${beds}/${END_BEDS}（あと ${END_BEDS - beds}）`);
-  if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}（あと ${END_OBSIDIAN - count('obsidian')}）`);
+  if (count('obsidian') < END_OBSIDIAN) lacks.push(`黒曜石 ${count('obsidian')}/${END_OBSIDIAN}（あと ${END_OBSIDIAN - count('obsidian')}）${count('diamond_pickaxe') + count('netherite_pickaxe') > 0 ? '' : '。掘る手段が無い（ダイヤのつるはしが荷に無い）'}`);
   if (!count('bow')) lacks.push(`弓なし（作るなら糸 ${count('string')}/3・棒 ${count('stick')}/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）`);
   if (count('arrow') < 12) lacks.push(`矢 ${count('arrow')}/12（羽根 ${count('feather')}・火打石 ${count('flint')}・棒 ${count('stick')}）`);
   const picks = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
@@ -261,7 +292,7 @@ export function endLackLine(facts: NonNullable<ReturnType<typeof readinessOf>>, 
   }).sort((a, b) => b.left - a.left)[0];
   if (picks && picks.left < picks.max / 2) lacks.push(`${picks.name} 耐久 ${picks.left}/${picks.max}`);
   const worn = wornItems(world.worn), missing = ARMOUR_SLOTS.filter(([slot]) => !worn.some(name => name.endsWith(`_${slot}`))).map(([, label]) => label);
-  if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）`);
+  if (missing.length) lacks.push(`防具 ${4 - missing.length}/4（${missing.join('・')}が無い）${armourIronWords(missing, counts)}`);
   const eyes = count('ender_eye');
   if (eyes < EYES_FOR_FRAMES) lacks.push(`アイ ${eyes}/${EYES_FOR_FRAMES}（割れた分の作り足し: パール ${count('ender_pearl')}・粉 ${count('blaze_powder')}・ロッド ${count('blaze_rod')}）`);
   // The same sentence is in the heading just before (`END_PREP_AFTER_STRONGHOLD`); here it is said short, for the line read alone.

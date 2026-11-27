@@ -164,9 +164,22 @@ export const itemWord = (item: string): string => WORDS[item] ?? item;
  * ending in it: `spruce_planks` is `planks`). */
 export const isItemOf = (name: string, item: string): boolean => name === item || name.endsWith(`_${item}`);
 
+const ARMOUR_METALS: Readonly<Record<string, string>> = { 鉄: 'iron', 金: 'golden', ダイヤ: 'diamond' };
+const ARMOUR_PIECES: Readonly<Record<string, string>> = { 兜: 'helmet', ヘルメット: 'helmet', 頭: 'helmet', 胸当て: 'chestplate', 胸: 'chestplate', チェストプレート: 'chestplate',
+  脚: 'leggings', レギンス: 'leggings', 足: 'boots', ブーツ: 'boots', 靴: 'boots' };
+/** A piece of armour: worn or carried, it is the purpose served (tools, a shield and a flint and steel still close by the hand's own ingredient line, as they did). */
+export const KEPT_PRODUCT = /^(?:iron|golden|diamond|netherite|stone|wooden|leather)_(?:helmet|chestplate|leggings|boots)$/u;
+/** 「鉄の脚」「鉄のレギンス」「金のブーツ」「足」 as the item they name (a piece of armour in its metal; the metal defaults to iron when only the piece is said). */
+function armourOf(literal: string): string | null {
+  const match = /^(?:(鉄|金|ダイヤ)の)?(兜|ヘルメット|頭|胸当て|胸|チェストプレート|脚|レギンス|足|ブーツ|靴)$/u.exec(literal);
+  return match ? `${ARMOUR_METALS[match[1] ?? '鉄']}_${ARMOUR_PIECES[match[2]!]}` : null;
+}
+
 /** Only literal recipe item names and unambiguous product labels, not an inference from a free-form purpose. */
 export function purposeProduct(use: string): string | null {
   const literal = use.trim().replace(/(?:用|を作る)$/u, '');
+  const armour = armourOf(literal);
+  if (armour && recipeOf(armour)) return armour;
   const aliases: Readonly<Record<string, string>> = {
     火打ち金: 'flint_and_steel',
     火打石と打ち金: 'flint_and_steel',

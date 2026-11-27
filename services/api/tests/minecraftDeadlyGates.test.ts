@@ -127,7 +127,7 @@ describe('the End', () => {
     forgetEndGather();
     const sevenBeds = kit.map(([name, n]) => [name, name === 'white_bed' ? 7 : n] as [string, number]);
     const held = deadlyGateHold(walkIn, overworld([...sevenBeds, ['iron_sword', 1]]), 'g12')?.line ?? '';
-    for (const word of ['7/8', '残り約 10 分', '地上へ取りに戻る往復はこの残りより長い']) expect(held, word).toContain(word);
+    for (const word of ['7/8', '残り約 10 分', '取りに戻る往復の分数を、この残りの 10 分と並べて選ぶ']) expect(held, word).toContain(word);
   });
   it('lets the fallback in once the gathering of beds has had ten minutes, with an iron sword; the bow and arrows are aims (the review of 11/5, item 8; thru-1110 11/9)', () => {
     forgetEndGather();

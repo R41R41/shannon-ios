@@ -1,7 +1,7 @@
 import { gainsOf } from './minecraftPromiseGains.js';
 import {
 round1,key,sumShown,reasonOf,seenOf,haveIn,deltaFor,relationOf,isWorn,isMoved,byOf,appended,closedWhy,insteadLack,itemWord,
-isItemOf,purposeProduct,sameHand
+isItemOf,purposeProduct,sameHand,KEPT_PRODUCT
 } from './minecraftLedgerEvents.js';
 import { AHEAD_LIMIT,CONNECTIONS_LIMIT } from './minecraftLedgerTypes.js';
 import type { LedgerAhead,LedgerSeen,LedgerInput,LedgerAdded,LedgerResult,Entry } from './minecraftLedgerTypes.js';
@@ -159,7 +159,10 @@ const closeUsedReservation = () => {
       && next.ledger.filter(line => line.kind === 'consumed' && line.item === promise.item && line.promiseRev === promise.rev &&
          line.reason === 'craft_ingredient'
         && sameHand(line.id, gain.id)).reduce((total, line) => total + line.count, 0) >= promise.count);
-    if (usedForProduct) {
+    // The product of a kept kind (a piece of armour, a tool, a shield) worn or carried now serves the purpose too: when the furnace's take and the make are one hand the ledger holds only
+    // the difference, with no `craft_ingredient` line of its own, and the reservation stayed open and read 「足りない」 at every decision after the armour was worn.
+    const heldProduct = !!product && !usedForProduct && KEPT_PRODUCT.test(product) && !!now && relation !== 'older' && carried(now.facts.counts, product) > 0;
+    if (usedForProduct || heldProduct) {
       const line: PromiseEvent = { id: `plan:used:${promise.rev}`, at: input.at, kind: 'closed', count: 0, have: next.have ?? 0, reason:
          `用途 ${product} に使った` };
       next = { ...appended(next, [line]), state: 'closed', closedBy: 'used' };

@@ -114,7 +114,7 @@ describe('(3) the first plan: what it keeps, what it says, the adoption and the 
     expect(CURRENT_PLAN_STRUCTURE).toContain('題を「行く事」（例: 交点の手前まで歩く）にし、doneWhen を at:x,y,z~30@overworld');
     expect(CURRENT_PLAN_STRUCTURE).toContain('空にしない');
     expect(CURRENT_PLAN_STRUCTURE).toContain('理由: 空の doneWhen では頭の入力に「済む条件」も「今: 未…（距離）」も出ず');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('座標がまだ無い探索の節（目を投げて位置を絞る前、目が 0 個の序盤）は今まで通り doneWhen を空にしてよく');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('座標がまだ無い探索の節（目を投げて位置を絞る前、目が 0 個の序盤）は at: を書かない（書くと作った座標が済む条件になる）。see:・have: の形で閉じる印を書く');
     expect(CURRENT_PLAN_STRUCTURE).toContain('防具の欠け・食料・掘る道具の欠けは、海を渡り要塞の中で戦う前の備えなので、要塞の前の短い節（出発の準備）にしてよい');
     expect(CURRENT_PLAN_STRUCTURE).toContain('削らず、順だけ要塞の後ろ・エンドへ入る節の前に置く');
     expect(firstPlanSystemFor('エンドラを討伐して')).toContain('要塞へ向かう節の書き方');
