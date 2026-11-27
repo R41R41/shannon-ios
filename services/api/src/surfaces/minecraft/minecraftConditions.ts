@@ -4,7 +4,7 @@ import { carriedItemCounts } from './minecraftItems.js';
 import { carriedFood, FOOD_POINTS } from './minecraftLlmcLive.js';
 import { foodPreparation } from './minecraftFoodPreparation.js';
 import { foodPointsWords, type CookingGain } from './minecraftFoodWords.js';
-import { crystalsLeft } from './minecraftEndView.js';
+import { crystalsLeft, crystalsStandingNow, crystalsUnseenNow } from './minecraftEndView.js';
 import { seenMarks } from './minecraftSeenMarks.js';
 import { foodNearOf, villageFoodOf, woodNearFromResources, woodNearOf } from './minecraftStockLevels.js';
 
@@ -32,6 +32,9 @@ export interface DoneFacts { counts: ReadonlyMap<string, number>; dimension: str
   /** The marks in view now (`see:fortress`, `minecraftSeenMarks.ts`) and the end crystals left (`crystals<=0`); the frame may say neither. */
   seen?: ReadonlySet<string>;
   crystals?: number | null;
+  /** Of those, the crystals known to stand and the spikes the body has not been near enough to read (11/28: the count held 2 for 10 minutes with none standing). */
+  crystalsStanding?: number | null;
+  crystalsUnseen?: number | null;
   /** The village the landmarks name: its beds (the body's count of beds, not halves), the seconds a round is said to take (null: not said) and its distance. */
   village?: { beds: number; seconds: number | null; distance: number } | null;
   /** The logs and trees the body counted near her (`state.world.woodNear`; null: the frame has none, an older body). */
@@ -91,7 +94,7 @@ export function doneFacts(observation: BodyObservation | null): DoneFacts | null
   const dim = typeof dimension === 'string' ? dimension.replace(/^minecraft:/u, '') : null;
   return { counts: carriedItemCounts(frame, observation!.facts), feet, food: carriedFood(frame, observation!.facts).points, dimension: dim,
     hp: finite(frame.health), hunger: finite(frame.food), free: finite(frame.freeSlots), night: nightOf(frame, dim), utilities: utilitiesOf(frame),
-    seen: seenMarks(frame), crystals: crystalsLeft(observation), village: villageOf(frame, feet), woodNear: woodNearOf(frame.woodNear) ?? woodNearFromResources(frame.nearbyResources), foodNear: foodNearOf(frame.nearbyResources),
+    seen: seenMarks(frame), crystals: crystalsLeft(observation), crystalsStanding: crystalsStandingNow(observation), crystalsUnseen: crystalsUnseenNow(observation), village: villageOf(frame, feet), woodNear: woodNearOf(frame.woodNear) ?? woodNearFromResources(frame.nearbyResources), foodNear: foodNearOf(frame.nearbyResources),
     foodVillage: villageFoodOf(frame.nearbyResources)?.food ?? null, foodHay: villageFoodOf(frame.nearbyResources)?.hay ?? null };
 }
 

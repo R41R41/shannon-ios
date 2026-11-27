@@ -173,6 +173,11 @@ export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): bool
   return predicate.some(clauses => clauses.every(clause => holds(clause, facts)));
 }
 /** A clause as the status says it: `iron_leggings 0/1`, `食料 32/40 点`, `次元 the_nether`, `(10,64,5) から 12m`. */
+function unseenCrystalWords(facts: DoneFacts): string {
+  const unseen = facts.crystalsUnseen ?? null, standing = facts.crystalsStanding ?? null;
+  return unseen !== null && unseen > 0 && standing !== null
+    ? `。うち確かめていない台座 ${unseen}（結晶が立っているとは限らない。見えている結晶は ${standing} 本。台座へ近づくと体が数え直す）` : '';
+}
 function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {
     case 'have': {
@@ -186,7 +191,7 @@ function clauseWords(clause: DoneClause, facts: DoneFacts): string {
     case 'stock': return clause.what === 'food' ? foodStockWords(facts.food, facts.foodNear, facts.foodHay) : woodStockWords(woodLogs(facts.counts), facts.woodNear);
     case 'see': return clause.what === 'gate_spawn' ? `ゲートの ${GATE_SPAWN_M}m 内のリスポーン地点はまだ無い（ベッドを place して use）`
       : `${SEEN_WORDS[clause.what]}はまだ見えていない`;
-    case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）`
+    case 'crystals': return typeof facts.crystals === 'number' ? `エンドクリスタル 残り ${facts.crystals}（${clause.max} 以下が条件）${unseenCrystalWords(facts)}`
       : 'エンドクリスタルの残りは体がまだ数えていない';
     case 'dim': return `次元 ${clause.dimension}（今 ${facts.dimension ?? '不明'}）`;
     case 'at': return facts.feet ? `(${clause.x},${clause.y},${clause.z}) から ${Math.round(Math.hypot(facts.feet.x - clause.x, facts.feet.y - clause.y,

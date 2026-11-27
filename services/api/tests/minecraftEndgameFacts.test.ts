@@ -94,7 +94,7 @@ describe('facts of the way to the dragon', () => {
   it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch', () => {
     const view = endViewOf(frame({ dimension: 'the_end' }, end));
     expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6) 自分から 10m・頭の箱まで 4.2m（剣が届く）・#77');
-    expect(crystalLine(view)).toBe('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
+    expect(crystalLine(view)).toContain('エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
       + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
     expect(breathLine(view)).toBe('竜の息の雲: (4,8) 避ける半径 9（雲の今の半径 7）（中で立ち止まらない）');
     expect(fireballLine(view)).toBe('火の玉: 2 個が飛んでいる（体の反射が避ける）');
@@ -212,7 +212,7 @@ describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
 
   it('says the arrival, the dragon in flight and the dragon on the perch out of reach and in reach', () => {
     expect(dragonLine(view('arrival'))).toBeNull();
-    expect(crystalLine(view('arrival'))).toBe('エンドクリスタル: 残り 10/10（まだ見ていない台座 10）');
+    expect(crystalLine(view('arrival'))).toContain('エンドクリスタル: 残り 10/10（まだ見ていない台座 10）。見えている結晶は 0 本。');
     expect(perchLine(view('arrival'))).toBeNull();
     expect(dragonLine(view('dragon_flying'))).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (-39,93,39) 自分から 53m・#53');
     expect(dragonLine(view('dragon_perched_out_of_reach'))).toBe(
@@ -445,7 +445,7 @@ describe('the arrival platform buried in the island (e04b, 11/9)', () => {
     const strafe = (phaseFor: number) => dragonLine(endViewOf(frame({ dimension: 'the_end' }, { dragon: { id: 9, health: 200, phase: 1, phaseName: 'strafe_player',
       phaseFor, perched: false, position: { x: 118, y: 63, z: -5 }, distance: 24 } })));
     expect(strafe(5)).not.toContain('秒目');
-    expect(strafe(95.4)).toContain('狙いを定めて火の玉（phase 1・この phase 95 秒目。竜はあなたが見えて火の玉を撃つまでこの phase を続け、その間は止まり木へ降りない）');
+    expect(strafe(95.4)).toContain('狙いを定めて火の玉（phase 1・この phase 95 秒目。竜は火の玉を 1 発撃つまでこの phase を続け（時間切れは無い）、その間は止まり木へ降りない。');
   });
 });
 

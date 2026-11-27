@@ -142,6 +142,8 @@ export interface EndView {
   dragon: EndDragon | null;
   perch: Point | null;
   crystals: { remaining: number | null; gone: number | null; caged: number | null; unseen: number | null; visible: number | null; list: EndCrystal[];
+    /** Where the spikes whose crystal the body has not told of are (x, z): the spikes it counts in `remaining` without a crystal in `list`. */
+    unseenSpots?: Array<{ x: number; z: number }>;
     openings?: EndCrystalOpenings[]; shootSets?: EndShootSet[]; stats?: EndCrystalStats };
   breath: EndCloud[];
   fireballs: number;
@@ -273,6 +275,12 @@ function crystalOf(raw: unknown): EndCrystal[] {
   return [{ id: num(item.id), position, caged, distance: num(item.distance), healing: item.healing === true, blast: num(item.blast) }];
 }
 
+function spotOf(raw: unknown): Array<{ x: number; z: number }> {
+  const item = rec(raw);
+  const x = num(item?.x), z = num(item?.z);
+  return x === null || z === null ? [] : [{ x, z }];
+}
+
 function cloudOf(raw: unknown): EndCloud[] {
   const cloud = rec(raw);
   const x = num(cloud?.x);
@@ -286,6 +294,7 @@ function fromBody(world: Rec): EndView {
   return { feet: point(world.position), dragon: dragonOf(world.dragon), perch: point(world.perch),
     crystals: { remaining: num(crystals?.remaining), gone: num(crystals?.gone), caged: num(crystals?.caged), visible: null,
       unseen: Array.isArray(crystals?.unseen) ? crystals.unseen.length : null,
+      ...(Array.isArray(crystals?.unseen) ? { unseenSpots: crystals.unseen.flatMap(spotOf).slice(0, 10) } : {}),
       list: (Array.isArray(crystals?.list) ? crystals.list : []).flatMap(crystalOf).slice(0, 10),
       ...(Array.isArray(crystals?.openings) ? { openings: crystals.openings.flatMap(openingsOf).slice(0, 10) } : {}),
       ...(Array.isArray(crystals?.shootSets) ? { shootSets: crystals.shootSets.flatMap(shootSetOf)
@@ -326,4 +335,32 @@ export function endViewOf(observation: BodyObservation | null): EndView | null {
 export function crystalsLeft(observation: BodyObservation | null): number | null {
   const left = endViewOf(observation)?.crystals.remaining ?? null;
   return left !== null && Number.isInteger(left) && left >= 0 && left <= 99 ? left : null;
+}
+
+/**
+ * The crystals known to stand: the body's `remaining` counts every spike whose crystal it has not seen destroyed, and a spike it has not been near enough to read (`unseen`) stays in
+ * that count whether a crystal stands there or not (run 17, 11/28: two crystals were already destroyed, the count stayed at 2 for 10 minutes and the head waited for crystals that did not exist).
+ * So what stands for sure is the larger of the loaded list and `remaining` less the unseen spikes; null when the body does not count.
+ */
+export function standingCrystals(end: EndView | null): number | null {
+  const crystals = end?.crystals;
+  if (!crystals || crystals.remaining === null) return null;
+  return Math.max(crystals.list.length, crystals.remaining - (crystals.unseen ?? 0));
+}
+
+/** The spikes counted in the remaining that no crystal has been seen on (a count; null when the body does not say). */
+export function unseenSpikes(end: EndView | null): number | null {
+  const unseen = end?.crystals.unseen ?? null;
+  return unseen !== null && unseen > 0 ? unseen : null;
+}
+
+/** `standingCrystals` for an observation (null outside the End or when not counted). */
+export function crystalsStandingNow(observation: BodyObservation | null): number | null {
+  const left = standingCrystals(endViewOf(observation));
+  return left !== null && Number.isInteger(left) && left >= 0 && left <= 99 ? left : null;
+}
+
+/** The unseen spikes of an observation. */
+export function crystalsUnseenNow(observation: BodyObservation | null): number | null {
+  return unseenSpikes(endViewOf(observation));
 }

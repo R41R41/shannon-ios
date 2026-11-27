@@ -1,3 +1,4 @@
+import { standingCrystals, unseenSpikes } from './minecraftEndView.js';
 import type { EndCloud, EndCrystal, EndDragon, EndView, Point } from './minecraftEndView.js';
 import { blocked, NAMES, readLayers } from './minecraftLlmcPreflightMap.js';
 import { framesOf } from './minecraftSeenMarks.js';
@@ -56,7 +57,8 @@ function stateWords(dragon: EndDragon): string {
 export const STRAFE_LONG_SECONDS = 20;
 function strafeWords(dragon: EndDragon): string {
   if (dragon.phase !== 1 || dragon.phaseFor === null || dragon.phaseFor < STRAFE_LONG_SECONDS) return '';
-  return `・この phase ${round(dragon.phaseFor)} 秒目。竜はあなたが見えて火の玉を撃つまでこの phase を続け、その間は止まり木へ降りない`;
+  return `・この phase ${round(dragon.phaseFor)} 秒目。竜は火の玉を 1 発撃つまでこの phase を続け（時間切れは無い）、その間は止まり木へ降りない。`
+    + '撃つのは、竜から 64m 以内で間にブロックが無く見通せる時だけ: 壁・窪み・天井の下に居る間は撃てず、待っても終わらない（実走 17 回目: 窪みで 641 秒）';
 }
 
 /** The roof from the body's column line over her feet (`縦 (100,0) 上: y=50〜52 .×3 / y=53〜57 E×5 / y=58〜65 .×8 …`): "open" when the column shows no solid block over her, null when there is no column line. */
@@ -186,7 +188,10 @@ function crystalWords(crystal: EndCrystal): string {
  * Said beside the plan's current node when crystals stand and the node names none of them (11/28: a plan of one 「ベッド」 node held the head waiting for 18 of 18 decisions while the crystal line said to climb).
  * An input, not a gate: the crystal line's own hands are the way, and the node comes back after.
  */
-export function crystalsBeforeNodeNote(left: number | null, nodeText: string): string | null {
+export function crystalsBeforeNodeNote(left: number | null, nodeText: string, unseen: number | null = null): string | null {
+  if (left === 0 && unseen !== null && unseen > 0 && !/結晶|crystal|クリスタル/iu.test(nodeText)) {
+    return `。見えている結晶は 0 本で、結晶の残りは確かめていない台座 ${unseen} 個（そこに結晶があるとは限らない）。結晶の行の座標へ地表を go で近づけば体が数え直す。結晶が立っていないなら、この節へ進んでよい（ベッドの手は出せる）`;
+  }
   if (left === null || left < 1 || /結晶|crystal|クリスタル/iu.test(nodeText)) return null;
   return `。今の判断で出す手: 結晶の行の「今登れる」の手（待ちの手は出さない）。この節（ベッド・待ち）に結晶を壊す手は無いが、結晶が ${left} 本残る間はベッドの傷が次の座りまでに戻り（1 本でも竜は毎秒 2 回復する）、座りを待っても竜は倒せない。檻つきも同じ。結晶が 0 本になったらこの節へ戻る`;
 }
@@ -207,8 +212,37 @@ export function crystalLine(end: EndView | null, short = false): string | null {
   const counts = ([['壊れた', crystals.gone], ['檻つき', crystals.caged], ['まだ見ていない台座', crystals.unseen]] as const)
     .flatMap(([label, value]) => value !== null && value > 0 ? [`${label} ${value}`] : []);
   const list = crystals.list.slice(0, 3).map(crystalWords);
+  const unseen = unseenWords(end);
   return `エンドクリスタル: 残り ${crystals.remaining}/10${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
-    + `${searchWords ? `。${searchWords}` : ''}`;
+    + `${unseen ? `。${unseen}` : ''}${searchWords ? `。${searchWords}` : ''}`;
+}
+
+/**
+ * The body's reach for telling a destroyed crystal from one it has not been told of (`crystalTellingReach`: 32 m, up to 48 m with a long view distance), held for 3 s (`GONE_AFTER_MS`).
+ * Run 17 (11/28): both crystals left were already destroyed, but their spikes stayed in the count as 「まだ見ていない台座」 and the head, told 「檻なしの結晶 2 本」,
+ * went back to a destroyed crystal's pillar for 10 minutes. The unseen spikes are named as spikes (where, how far), not as crystals.
+ */
+export const SPIKE_TELLING_METRES = 32;
+function unseenSpotsWords(end: EndView | null, limit = 4): string {
+  const feet = end?.feet ?? null;
+  return (end?.crystals.unseenSpots ?? []).map(spot => ({ spot, far: feet ? Math.hypot(spot.x - feet.x, spot.z - feet.z) : null }))
+    .sort((a, b) => (a.far ?? Infinity) - (b.far ?? Infinity)).slice(0, limit)
+    .map(({ spot, far }) => `(${spot.x},${spot.z})${far === null ? '' : ` 自分から ${round(far)}m`}`).join('・');
+}
+function unseenWords(end: EndView | null): string | null {
+  const unseen = unseenSpikes(end);
+  if (unseen === null) return null;
+  const spots = unseenSpotsWords(end);
+  const near = `${SPIKE_TELLING_METRES}m 以内に 3 秒居ると体が数え直す（結晶があれば list に出る）`;
+  return standingCrystals(end) === 0
+    ? `見えている結晶は 0 本。残りの ${end?.crystals.remaining ?? unseen} は確かめていない台座の数で、結晶が立っているとは限らない（壊れていても近づくまで数えは減らない）${spots ? `。台座: ${spots}` : ''}。${near}`
+    : `ほかに確かめていない台座 ${unseen}${spots ? `: ${spots}` : ''}（立っているとは限らない。${near}）`;
+}
+/** The note a bed line carries while only unseen spikes stand in the count: the crystals she can see are none, so the bed is not held back for them. */
+function unseenBedNote(end: EndView | null): string {
+  const unseen = unseenSpikes(end);
+  return unseen !== null && standingCrystals(end) === 0
+    ? `。注: 確かめていない台座 ${unseen} 個に結晶が立っていれば竜は毎秒 2 回復する。見えている結晶は 0 本なので、この手は出せる（座りは短いので、台座を確かめる往復で逃さない）` : '';
 }
 
 /**
@@ -301,7 +335,7 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   if (!dragon || dragon.phase === null || !SITTING.has(dragon.phase) || !offer) return null;
   // e04c (11/9): one bed took her 200→173 with ten crystals standing, and she was back at 200 about 13 s after taking off.
   // 11/27 (vanilla 1.21.11): one crystal left heals her 1 per 10 ticks, the same as ten (not by the count), so the bed waits until none is left, caged ones too.
-  const standing = end?.crystals.remaining ?? null;
+  const standing = standingCrystals(end);
   if (standing !== null && standing >= 1) return `ベッドの手: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。実走で 173→200 を約 13 秒。ベッドは檻つきも含めて結晶を 0 本にしてから）`;
   const bed = bedItem ?? 'red_bed', foot = place(offer.foot);
   const build = offer.build.length ? ` → place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く' : 'ベッドの下の支え。黒曜石が無ければ end_stone・cobblestone でもよい'}）` : '';
@@ -314,7 +348,7 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   const credit = last ? ' → attack target=ender_dragon seconds=2 onFail="continue"' : '';
   const why = last ? `。竜の体力 ${round(dragon.health!)} はこのベッドで尽きる見込み: ベッドだけで倒すと手柄が付かず advancement end/kill_dragon が出ないので、use の前に 1 回打つ（届かなくてもそのまま use）` : '';
   return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}]${credit} → use at=[${foot}]`
-    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。use が傷になるのは竜の頭が枕から 3m 以内の時だけ（結果の「頭の箱まで」が 3 を大きく超えたら空振り）。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）`;
+    + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。use が傷になるのは竜の頭が枕から 3m 以内の時だけ（結果の「頭の箱まで」が 3 を大きく超えたら空振り）。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）${unseenBedNote(end)}`;
 }
 
 /**
@@ -324,11 +358,11 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
 export function dragonBurstLine(end: EndView | null, bedItem: string | null = null): string | null {
   const dragon = end?.dragon;
   if (!dragon || dragon.phase !== 2 || dragon.id === null || !bedItem) return null;
-  const standing = end?.crystals.remaining ?? null;
+  const standing = standingCrystals(end);
   if (standing !== null && standing >= 1) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。ベッドは檻つきも含めて結晶を 0 本にしてから。先に結晶を壊す）`;
   return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中。座るのを待たない）: すぐ mc_probe kind=bedsite target=#${dragon.id}（packet_history_pending なら 1 秒後にもう一度）`
     + ` → 返った stand へ go → footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
-    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。`;
+    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。${unseenBedNote(end)}`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
@@ -368,8 +402,9 @@ export function dragonWaitUrgentLine(end: EndView | null): string | null {
 
 /** While any crystal stands (caged ones too) she heals 2 a second between sits, however many stand, so the crystals come before waiting for the next sit (e04c 11/9; 11/27 the heal is not by the count). */
 function crystalsFirst(end: EndView | null): string {
-  const standing = end?.crystals.remaining ?? null;
-  return standing !== null && standing >= 1 ? `結晶が ${standing} 本残る間は待たず、結晶を壊しに行く（1 本でも竜は毎秒 2 回復し、座りの傷が周回中に戻るため。檻つきも壊す）。` : '';
+  const standing = standingCrystals(end), unseen = unseenSpikes(end);
+  if (standing !== null && standing >= 1) return `結晶が ${standing} 本残る間は待たず、結晶を壊しに行く（1 本でも竜は毎秒 2 回復し、座りの傷が周回中に戻るため。檻つきも壊す）。`;
+  return standing === 0 && unseen !== null ? `見えている結晶は 0 本（残りは確かめていない台座 ${unseen}）: 待つ間に台座へ近づいて確かめる手が先（結晶の行）。` : '';
 }
 
 /** Waiting on the perch itself while she flies: her landing breath falls there, and the basin has no way out that the floor reflex can walk. */
@@ -433,7 +468,7 @@ function climbTarget(end: EndView | null): EndCrystal | null {
  */
 function cagedLeft(end: EndView | null): number | null {
   const list = end?.crystals.list ?? [];
-  const left = end?.crystals.remaining ?? list.length;
+  const left = standingCrystals(end) ?? list.length;
   return list.length > 0 && list.length >= left && list.every(crystal => crystal.caged === true) ? list.length : null;
 }
 
@@ -579,8 +614,8 @@ export function waitStreakLine(view: Pick<HeightView, 'minutes' | 'hits' | 'lost
  * crystal in one shot; what the arrows do not cover is the climb. Null: the arrows or the crystals are not counted, or no uncaged crystal is left.
  */
 export function arrowBudgetLine(end: EndView | null, arrows: number | null): string | null {
-  const left = end?.crystals.remaining;
-  if (arrows === null || left === null || left === undefined) return null;
+  const left = standingCrystals(end);
+  if (arrows === null || left === null) return null;
   const open = left - (end?.crystals.caged ?? 0);
   if (open <= 0) return null;
   return `檻なしの結晶 ${open} 本・矢 ${arrows} 本（1 本 1 発で壊れる）。${arrows < open ? `矢が ${open - arrows} 本足りない分は柱を登る形になる` : '矢は結晶の数に足りている'}`;
@@ -648,6 +683,17 @@ export function noBowLine(end: EndView | null, sit: string | null = null): strin
     if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: 結晶の座標は下の行にあるので sight や around で調べ直さず、1 つの判断で pillarUp で結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）→ すぐ降りる（降りる手と費用は「高所:」の行）。blast_unsafe で断られた時だけ dig at=[格子${barsOf(end, atCage.id) || '（行の格子の座標）'}] collect=false → place block=obsidian で覆い直してから attack。降りないで待たない${tail}`;
     return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
   }
+  // Run 17 (11/28): no crystal in view and the count held by unseen spikes only: there is no pillar to climb and nothing to strike; what is left to do is to go and look.
+  if (standingCrystals(end) === 0 && unseenSpikes(end) !== null) {
+    const spots = unseenSpotsWords(end);
+    return `クリスタルの射点: 見えている結晶は 0 本で、登る柱も殴る的も無い。残りは確かめていない台座だけ${spots ? `: ${spots}` : ''}。`
+      + `地表を go で台座の ${SPIKE_TELLING_METRES}m 以内まで近づき 3 秒居る（結晶が見えれば list に出て、無ければ壊れたと数えて残りが減る）。残りが 0 になれば結晶の節は終わる`;
+  }
+  if (phase === 1 && dragon?.phaseFor !== null && dragon?.phaseFor !== undefined && dragon.phaseFor >= STRAFE_LONG_SECONDS) {
+    return `${head}。今は登らない（柱の上で phase 1 の竜に当たって飛ばされた 11/9 の実走）。ただし phase 1 が ${round(dragon.phaseFor)} 秒続いていて、待っても終わらない`
+      + '（竜は火の玉を 1 発撃つまで phase 1 のままで、撃つのは竜から 64m 以内で見通せる時だけ。窪み・壁の中・天井の下では撃てない）: '
+      + `穴や窪みを出て、上が開けた地表（${foot}など）に立ち、火の玉を 1 発撃たせる。玉の飛ぶ線と着弾の雲から横へ外れて立ち、撃たれたら phase 0 に戻るので、30m 以上離れたらすぐ登る${tail}`;
+  }
   if (phase === 1 || phase === 8) {
     return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}。高所の橋で渡ることも同じ: 火の玉の線に立つ）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
   }
@@ -681,7 +727,7 @@ export function createClimbWatch() {
   let since: number | null = null, baseY = 0, gone: number | null = null;
   return {
     line(end: EndView | null, shooting: boolean | null, now: number): string | null {
-      const feet = end?.feet ?? null, left = end?.crystals.remaining ?? end?.crystals.list.length ?? 0;
+      const feet = end?.feet ?? null, left = standingCrystals(end) ?? end?.crystals.list.length ?? 0;
       const goneNow = end?.crystals.gone ?? null;
       if (shooting !== false || !feet || left <= 0 || !climbNow(end) || feet.y - baseY >= CLIMB_RISE || (since !== null && goneNow !== gone)) {
         since = shooting === false && feet && left > 0 && climbNow(end) ? now : null;
@@ -712,7 +758,7 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   const bedHand = dragonBedLine(end, bedItem) ?? dragonBurstLine(end, bedItem), basin = dragonBasinLine(end);
   if (bedHand) lines.push(bedHand);
   // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
-  if (basin) lines.push(bedHand || (end?.crystals.remaining ?? 0) > 0 ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);
+  if (basin) lines.push(bedHand || (standingCrystals(end) ?? 0) > 0 ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);
   const wait = dragonWaitLine(end);
   if (wait) lines.push(wait);
   return lines;
