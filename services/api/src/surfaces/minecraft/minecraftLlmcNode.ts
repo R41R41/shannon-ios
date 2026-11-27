@@ -8,6 +8,8 @@ import { blazeShutLong } from './minecraftLlmcDeadlyGates.js';
 import { readinessOf, requiredLack } from './minecraftLlmcReadiness.js';
 import { whereCheckLine } from './minecraftLlmcWhereCheck.js';
 import { acquired } from './minecraftConditions.js';
+import { crystalsLeft } from './minecraftEndView.js';
+import { crystalsBeforeNodeNote } from './minecraftEndFacts.js';
 import { STALE_CONDITION_WORDS } from './minecraftPlanRequirements.js';
 import { crossingOfWorld, crossingWords } from './minecraftEyeLedger.js';
 
@@ -193,7 +195,8 @@ export function planNowOf(tree: PlanTree | null, view: unknown, observation: Bod
   // The place it names, read against her feet and the body's count of what is round her (`whereCheckLine`: said at the node, where the coordinate is).
   const check = node.state !== 'done' ? whereCheckLine(node, observation) : null;
   const stale = node.state !== 'done' && node.staleCondition ? `（${STALE_CONDITION_WORDS}）` : '';
-  return `${currentNodeLine(held, shown?.path, status, node.state !== 'done' && tree ? reachWords(node, tree.nodes, observation) : null)}${stale}${check ?? ''}`;
+  const line = `${currentNodeLine(held, shown?.path, status, node.state !== 'done' && tree ? reachWords(node, tree.nodes, observation) : null)}${stale}${check ?? ''}`;
+  return node.state !== 'done' && facts?.dimension === 'the_end' ? `${line}${crystalsBeforeNodeNote(crystalsLeft(observation), line) ?? ''}` : line;
 }
 
 /**

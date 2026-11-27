@@ -182,6 +182,15 @@ function crystalWords(crystal: EndCrystal): string {
   return `${name}${place(crystal.position)} ${metres(crystal.distance)}${tags.length ? ` ${tags.join('・')}` : ''}`.trim();
 }
 
+/**
+ * Said beside the plan's current node when crystals stand and the node names none of them (11/28: a plan of one 「ベッド」 node held the head waiting for 18 of 18 decisions while the crystal line said to climb).
+ * An input, not a gate: the crystal line's own hands are the way, and the node comes back after.
+ */
+export function crystalsBeforeNodeNote(left: number | null, nodeText: string): string | null {
+  if (left === null || left < 1 || /結晶|crystal|クリスタル/iu.test(nodeText)) return null;
+  return `。今の判断で出す手: 結晶の行の「今登れる」の手（待ちの手は出さない）。この節（ベッド・待ち）に結晶を壊す手は無いが、結晶が ${left} 本残る間はベッドの傷が次の座りまでに戻り（1 本でも竜は毎秒 2 回復する）、座りを待っても竜は倒せない。檻つきも同じ。結晶が 0 本になったらこの節へ戻る`;
+}
+
 /** 「エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
 export function crystalLine(end: EndView | null, short = false): string | null {
   const crystals = end?.crystals;
@@ -622,7 +631,7 @@ export function noBowLine(end: EndView | null, sit: string | null = null): strin
   const aloft = aloftBy(end);
   if (aloft !== null) {
     const atCage = cageAtFeet(end);
-    if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: 結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）→ すぐ降りる（降りる手と費用は「高所:」の行）。blast_unsafe で断られた時だけ dig at=[格子${barsOf(end, atCage.id) || '（行の格子の座標）'}] collect=false → place block=obsidian で覆い直してから attack。降りないで待たない${tail}`;
+    if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: 結晶の座標は下の行にあるので sight や around で調べ直さず、1 つの判断で pillarUp で結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）→ すぐ降りる（降りる手と費用は「高所:」の行）。blast_unsafe で断られた時だけ dig at=[格子${barsOf(end, atCage.id) || '（行の格子の座標）'}] collect=false → place block=obsidian で覆い直してから attack。降りないで待たない${tail}`;
     return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
   }
   if (phase === 1 || phase === 8) {

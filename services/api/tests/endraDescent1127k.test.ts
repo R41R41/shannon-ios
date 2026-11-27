@@ -120,7 +120,7 @@ describe('the caged crystals are broken too (11/27: every crystal goes down befo
   it('on the pillar of a caged crystal the line says the bars, the strike and the way down', () => {
     const top = { ...view(40), feet: { x: -42, y: 81, z: -1 } } as EndView;
     const line = noBowLine(top);
-    expect(line).toContain('今は檻つき #1016 の柱の上（結晶の 2 段下）: 結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）');
+    expect(line).toContain('今は檻つき #1016 の柱の上（結晶の 2 段下）: 結晶の座標は下の行にあるので sight や around で調べ直さず、1 つの判断で pillarUp で結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）');
     expect(line).toContain('降りないで待たない');
   });
 
@@ -201,5 +201,17 @@ describe('the arrows\' angle', () => {
     const low = crystalOpeningLine(view(20))!;
     expect(low).not.toContain('仰角');
     expect(low).not.toContain('山なり');
+  });
+});
+
+describe('the plan node beside crystals (11/28)', () => {
+  it('says to climb first when crystals stand and the node names none, and stays silent otherwise', async () => {
+    const { crystalsBeforeNodeNote } = await import('../src/surfaces/minecraft/minecraftEndFacts.js');
+    const note = crystalsBeforeNodeNote(2, '[p3] ベッドで竜を倒す＠止まり木の脇');
+    expect(note).toContain('結晶の行の「今登れる」の手');
+    expect(note).toContain('待ちの手は出さない');
+    expect(crystalsBeforeNodeNote(0, '[p3] ベッドで竜を倒す')).toBeNull();
+    expect(crystalsBeforeNodeNote(null, '[p3] ベッド')).toBeNull();
+    expect(crystalsBeforeNodeNote(2, '[p3] 結晶を全部壊す')).toBeNull();
   });
 });
