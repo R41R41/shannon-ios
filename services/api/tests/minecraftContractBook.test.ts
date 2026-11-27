@@ -41,6 +41,7 @@ const isQueuePackingLine = (text: string) => text.startsWith('- 列の積み方�
 const STACK_1126 = ['\n## 続きの手は同じ act に積む', '- 次に何をするかが今の時点', '- 続きが分かっている並びの例', '  作って着る', '  掘って作る', '  倒して拾う', '  行って働く', '- 失敗した時（体のきまり）', '- 積まない時'];
 // 11/26 (the limits of each hand's seconds and range, one line after the fight lines): the historical contract is made without it.
 const isLimitsLine = (text: string) => text.startsWith('- 手の秒と範囲の上限');
+const isBurstLine = (text: string) => text.startsWith('- 竜のベッド（エンド）:');
 const isStackLine = (text: string) => STACK_1126.some(head => text.startsWith(head));
 const REVISIONS_1113: ReadonlyArray<readonly [string | RegExp, string]> = [
   ['[collect=false] [exposeOk] [seconds=N]', '[collect=false] [seconds=N]'],
@@ -66,7 +67,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and the schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('56c8b4f3fdc706882b39b6e08791aeb220b1afa196bcf85f710587cda2a1da56');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('e6db086b71e62c7d37eec656b8fe2530742cdb5833bd5c1fd55253c4b5f422e6');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('848d8b9cc2cca9535e006ece66c959568186d367e48dca2dedebdcb82f4a96b2');
     const current = book();
     expect(current.pages).toHaveLength(10);
@@ -82,7 +83,7 @@ describe('the canonical Minecraft input-contract book', () => {
     const legacyShoot = 'shoot 相手(#id か名前) か X,Y,Z [item=bow] [charge=秒] [n=本数]  弓で撃つ。長い欄名（canDig=・canPlace=）も dig=・place= と同じに読む。';
     const fragments = SHORT_ACT_MANUAL_FRAGMENTS;
     // The inline ids are the lines' positions: without the tidy lines the later ones are numbered as before.
-    const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text) && !isQueuePackingLine(part.text) && !isStackLine(part.text) && !isLimitsLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
+    const historical = fragments.filter(part => part.id !== 'hunt' && !isTidyLine(part.text) && !isQueuePackingLine(part.text) && !isStackLine(part.text) && !isLimitsLine(part.text) && !isBurstLine(part.text)).map((part, index) => ({ ...part, ...(part.inline ? { id: `inline-${index}` } : {}), text: part.id === 'special'
       ? LEGACY_SPECIAL_8C : undo1113(part.text).replace(CURRENT_FURNACE_PRE, LEGACY_FURNACE_PRE).replace(CURRENT_ATTACK_POINTER, '').replace(CURRENT_HUNT_FIELDS, '')
         .replace(CURRENT_SELF_DEFENCE, LEGACY_SELF_DEFENCE).replace(CURRENT_GO_DROP, LEGACY_GO_DROP) }));
     expect(minecraftContractHash(historical.filter(part => part.id !== 'shoot')))

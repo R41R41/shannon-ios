@@ -72,7 +72,7 @@ export function readProbeResult(text: string | undefined): ProbeResult | { text:
 }
 /** The definition text of `mc.probe` (fixed: part of the cached prefix). */
 export const PROBE_DESCRIPTION = [
-  'bedsite(target:#竜ID): 現在のphase 2の進入に対するベッド配置候補を読む。立場・支持と施工順・足側/枕側・必要黒曜石と実在庫を返す。'
+  'bedsite(target:#竜ID): 竜が止まり木へ降りてくる途中（phase 2）に、すぐ読む。現在のphase 2の進入に対するベッド配置候補を読む（座ってからは current_phase2_required）。立場・支持と施工順・足側/枕側・必要黒曜石と実在庫を返す。'
     + '体は動かず施工しない。初回は観測不足を返す場合がある。候補は同じ接続・生命・進入だけの観測で、安全の保証ではない。選択と施工は頭が行い、bed_burstで起爆前に再確認する。',
   'route(to, from, range: 掘る・置くを混ぜた最短の道の見積り。歩く・掘る・置く数と秒、道の点。水源・溶岩は避ける。着けない時は行ける所まで。見積りだけで動かない): 長い道は go の前にこれで数を読む。',
   '体の周りを調べる（読むだけ・速い・体は動かない）。詰まった時・驚いた時に、手を変える前に事実を確かめる。答えは危ない事実が先。',

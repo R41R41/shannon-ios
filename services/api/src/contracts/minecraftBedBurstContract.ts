@@ -1,9 +1,13 @@
 import type { ActHand } from './minecraftActTypes.js';
 
 /** The head chooses the bed, dragon, inventory limit and the retreat; the body synchronizes only this approach's short burst. */
+export const BED_BURST_MAX_SECONDS = 40;
+
 export const BED_BURST_DESCRIPTION = 'bed_burst はエンドで指定したベッド配置を1進入だけ短く起爆する手。'
+  + '使う時: 竜が止まり木へ降りてくる途中（phase 2）が見えたら、座るのを待たずにすぐ probe kind=bedsite,target=#id を読む。bedsite は phase 2 の間だけ候補を返し、座ってからは current_phase2_required で読めない。'
+  + '手順は1つの act に go（返った stand）→ place（返った黒曜石のマス）→ bed_burst → 退避go（分けて出すと phase 2 の間に間に合わない）。ベッドを置いて使うのは体で、頭が place するのは黒曜石の足場と壁だけ（ベッドは count 個持っていればよい）。'
   + '先に probe kind=bedsite,target=#id で現在の候補を読み、その配置を頭が選んで施工する。未観測の配置では起爆しない。'
-  + 'at:[足側,枕側] は同じ高さで水平に隣接する絶対整数座標2つ、target は竜の #id、count はベッド使用上限1〜5、seconds は上限1〜20秒を全部書く。'
+  + 'at:[足側,枕側] は同じ高さで水平に隣接する絶対整数座標2つ、target は竜の #id、count はベッド使用上限1〜5、seconds は上限1〜40秒（30〜40を書く。phase 2 の飛行13〜21秒と着地の7〜10秒の分が要る）を全部書く。'
   + '現在のphase 2→3、または現在のphase 3だけを扱い、次の着地は待たない。配置選び・足場と支持の施工・材料集めはしない。'
   + '安全な機会なし・着地終了・上限で短く終了し、確認済み爆発数を返す。所有権取消・死亡・世界切替は中断する。'
   + '準備拒否でも頭が選んだ退避goへ進める時はbed_burstにonFail:continueを付け、同じactの後続へ退避goを置く。'
@@ -29,7 +33,7 @@ export function bedBurstTargetProblem(target: unknown): string | null {
 
 function bedLimitsProblem(hand: ActHand): string | null {
   if (!Number.isInteger(hand.count) || hand.count! < 1 || hand.count! > 5) return 'count は1〜5の整数';
-  if (!Number.isFinite(hand.seconds) || hand.seconds! < 1 || hand.seconds! > 20) return 'seconds は1〜20';
+  if (!Number.isFinite(hand.seconds) || hand.seconds! < 1 || hand.seconds! > BED_BURST_MAX_SECONDS) return `seconds は1〜${BED_BURST_MAX_SECONDS}`;
   return null;
 }
 

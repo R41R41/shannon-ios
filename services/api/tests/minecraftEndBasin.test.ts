@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { climbNow, dragonBasinLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { climbNow, dragonBasinLine, dragonBurstLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -219,5 +219,52 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     expect(dragonWaitLine(view(only([cell(40, 6)]), 9))).toBeNull();
     expect(dragonWaitLine(view(only([]), 3))).toBeNull();
     expect(dragonWaitLine(view(only([{ x: 'a', y: 1, z: 2 }]), 3))).toBeNull();
+  });
+});
+
+describe('the bed burst line while she comes down to the perch (phase 2, run 16)', () => {
+  const burstOf = (lines: string[]) => lines.find(line => line.startsWith('ベッド連爆'));
+  it('names the probe, the hands in order and the cut-off at the sit, with the dragon id', () => {
+    const line = burstOf(endFightLines(view(approach(), 2), 'white_bed'))!;
+    expect(line).toContain('mc_probe kind=bedsite target=#90');
+    expect(line).toContain('{"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#90","count":5,"seconds":35}');
+    expect(line.indexOf('bedsite')).toBeLessThan(line.indexOf('place'));
+    expect(line.indexOf('place')).toBeLessThan(line.indexOf('"do":"bed_burst"'));
+    expect(line).toContain('座ってからでは bedsite が読めない');
+  });
+  it('shows nothing without a held bed, while sitting, in other phases and with no dragon id; says not now with three crystals standing', () => {
+    expect(burstOf(endFightLines(view(approach(), 2), null))).toBeUndefined();
+    for (const phase of [0, 1, 3, 4, 5, 6, 7, 8]) expect(dragonBurstLine(view(approach(), phase), 'white_bed')).toBeNull();
+    const w = world(approach(), 2);
+    expect(dragonBurstLine(endViewOf(frame({ ...w, dragon: { ...w.dragon, id: null } })), 'white_bed')).toBeNull();
+    const three = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 3 } }));
+    expect(dragonBurstLine(three, 'white_bed')).toContain('今は使わない');
+  });
+  it('merged 1127p+1127o: with any crystal standing (caged ones too) no burst chance is offered and the crystal-breaking line leads; at 0 the burst is offered', () => {
+    const w = world(approach(), 2);
+    for (const remaining of [1, 2, 3]) {
+      const end = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining } }));
+      const lines = endFightLines(end, 'white_bed');
+      expect(dragonBurstLine(end, 'white_bed')).toContain('今は使わない');
+      expect(dragonBurstLine(end, 'white_bed')).toContain('結晶を 0 本にしてから');
+      expect(burstOf(lines)).toContain('今は使わない');
+      expect(lines.join('|')).not.toContain('ベッド連爆の機会');
+      expect(lines.join('|')).not.toContain('mc_probe kind=bedsite');
+    }
+    const crystal = (id: number, x: number, caged: boolean, distance: number) => ({ id, position: at(x, 100), caged, distance });
+    const caged = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 2, list: [crystal(14, 40, true, 20), crystal(18, -40, true, 45)] } }));
+    expect(noBowLine(caged)).toContain('檻つき 2 本: ');
+    expect(noBowLine(caged)).toContain('attack target=end_crystal');
+    expect(endFightLines(caged, 'white_bed').join('|')).not.toContain('ベッド連爆の機会');
+    const none = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 0, list: [] } }));
+    expect(dragonBurstLine(none, 'white_bed')).toContain('ベッド連爆の機会');
+    expect(burstOf(endFightLines(none, 'white_bed'))).toContain('bed_burst');
+  });
+  it('keeps the sitting bed line and tells that a use counts only within 3 m of the head', () => {
+    const bed = [{ stand: at(20), walkMeters: 4, foot: at(22), head: at(23), build: [], selfExpected: 3, dragonExpected: 40 }];
+    const lines = endFightLines(view({ ...approach(), bed }), 'white_bed');
+    const sit = lines.find(line => line.startsWith('ベッドの手（体が測った候補）'))!;
+    expect(sit).toContain('竜の頭が枕から 3m 以内の時だけ');
+    expect(burstOf(lines)).toBeUndefined();
   });
 });
