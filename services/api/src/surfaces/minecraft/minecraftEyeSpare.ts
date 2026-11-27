@@ -49,6 +49,7 @@ export function eyeBasisOf(world: Record<string, unknown>): EyeBasis {
 
 /** The reason of the spare, as it is said beside the count (before the frames are found). */
 export function spareReason(basis: EyeBasis): string {
-  return `枠 ${FRAME_EYES}＋予備 ${basis.spare}。予備は、枠が見つかるまでにこれから投げる約 ${basis.ahead} 本が ${BREAK_ONE_IN} 回に 1 回割れる分（最低 ${MIN_SPARE}）。`
+  const why = basis.ahead > 0 ? `予備は、枠が見つかるまでにこれから投げる約 ${basis.ahead} 本が ${BREAK_ONE_IN} 回に 1 回割れる分（最低 ${MIN_SPARE}）。` : `予備は最低の ${MIN_SPARE}（投げる見込みの本数は済んだが、枠が見つかるまでの投げはまだ割れる）。`;
+  return `枠 ${FRAME_EYES}＋予備 ${basis.spare}。${why}`
     + '無いと割れた 1 個で空き枠に 1 個足りず、要塞の前でパール待ちになる';
 }
