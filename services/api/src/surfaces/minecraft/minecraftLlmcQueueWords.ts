@@ -2,13 +2,16 @@ import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { conditionText } from '../../contracts/minecraftActCondition.js';
 import type { ActCondition } from '../../contracts/minecraftActCondition.js';
 import { unitFromOutcome, type DependState, type ItemOutcome } from '../../contracts/continueContract.js';
-import type { ActInput } from '../../contracts/minecraftActContract.js';
+import type { ActInput, ActPos } from '../../contracts/minecraftActContract.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import type { MinecraftControlReceipt, MinecraftQueueProgress } from '../../contracts/minecraftControlContract.js';
 import { toolFailure, type ToolResult } from '../../mind/tools/toolRegistryPorts.js';
 import { conditionWords } from './minecraftConditions.js';
 import { llmcResult } from './minecraftLlmc.js';
 import { withDrops } from './minecraftLlmcDropsLine.js';
+import { altitudeLine,hopSize,LONG_GO_M,type AltitudeInput,type GoHop } from './minecraftLlmcAltitude.js';
+import { posIn,queueGoal } from './minecraftLlmcHazardFacts.js';
+import { finite,rec,world } from './minecraftLlmcHealth.js';
 import { droppedWords, keptWords, releasedWords, replayWords, unknownWords } from './minecraftLlmcResultWords.js';
 
 /** The words of the head's mirror of the body's queue (`minecraftLlmcQueue.ts`): what an item's end is told as,
@@ -172,20 +175,33 @@ export function timingLine(timing: { wakeMs: number; leftMs: number }, firstLeft
 
 /**
  * try1124b stall (the owner's test of 11/24, 07:15 to 07:22): 40 finished gos had a median of 6 steps and 1.6 s while a decision takes 2 to 3 s, so the body stood between
- * acts for most of the run; the model copied its own last short moves (「短く進む」). The line puts her recent moves and the decision time side by side, the facts the model
- * did not have, and says what a longer move is. Said only when her last moves were short (a median under 14 m over 3 or more).
+ * acts for most of the run; the model copied its own last short moves (「短く進む」). The line puts her recent gos and the decision time side by side, the facts the model
+ * did not have. Said only when her last go was a short one (its goal under 15 m away) and the median of the last 5 was under 14 m, over 3 or more.
+ *
+ * Run of 11/27: the line counted only the gos that arrived, so the long gos that were stopped (by their seconds, their digging limit, a hostile) never entered it and it said
+ * 「3・31・2・11・9 m」 for 40 minutes while the model was sending long gos; the line read 「this length leaves the body standing」 and was wrong. A go that stopped now
+ * counts with the distance its goal was and how it ended, and the line is not said when the last go's goal was 15 m or more away. It gives the facts only: a go's size beside
+ * the goal's, the seconds, and what the decision time does to the body's standing.
  */
 export const SHORT_HOP_M = 14;
 /** The line's first words: the plan made again is not shown the line unless short moves are what stopped her (`minecraftLlmcReplanBrief.ts`). */
 export const HOPS_LINE_HEAD = '直近の go は ';
-export function hopsLine(hops: readonly number[], decisionsMs: readonly number[]): string | null {
-  const recent = hops.slice(-5);
+const reachWords = (hop: GoHop): string => {
+  const metres = (value: number) => Math.round(value * 10) / 10;
+  return hop.stop === null ? `行き先 ${metres(hopSize(hop))} m に対し進んだ ${metres(hop.done)} m（着いた）`
+    : `行き先 ${metres(hopSize(hop))} m に対し進んだ ${metres(hop.done)} m（${hop.stop}）`;
+};
+export function hopsLine(hops: readonly (GoHop | number)[], decisionsMs: readonly number[]): string | null {
+  // A bare number is a go that arrived, that many metres from where it began.
+  const recent = hops.slice(-5).map((hop): GoHop => typeof hop === 'number'
+    ? { done: hop, target: hop, stop: null, seconds: null, fromY: null, toY: null } : hop);
   if (recent.length < 3) return null;
+  if (hopSize(recent[recent.length - 1]!) >= LONG_GO_M) return null;
   const median = (values: readonly number[]) => [...values].sort((x, y) => x - y)[Math.floor(values.length / 2)]!;
-  const metres = median(recent);
+  const metres = median(recent.map(hopSize));
   if (metres >= SHORT_HOP_M) return null;
   const decision = decisionsMs.length ? Math.max(2, Math.round(median(decisionsMs.slice(-10)) / 1000)) : 3;
-  return `${HOPS_LINE_HEAD}${recent.map(m => Math.round(m)).join("・")} m（中央 ${Math.round(metres)} m で約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている。移動の go は 15 m 以上（地図の外の本当の行き先でよい）にするか、go を 2〜3 本 1 つの act に並べる`;
+  return `${HOPS_LINE_HEAD}${recent.map(reachWords).join('・')}（行き先の中央 ${Math.round(metres)} m で go 1 本は約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている`;
 }
 
 /**
@@ -216,23 +232,41 @@ export function reissueLine(agoMs: readonly number[]): string | null {
   return `この 1 分で、走っている手を ${recent.length} 回止めて出し直した（約 ${every} 秒ごと）。止めるたびに体は歩き出しからやり直し、go は着く前に切れる。今の手と同じ向きなら出し直さず走らせ、向き・目標が変わる事実（敵が別の側に回った・体力が急に落ちた・足場が無い）がある時だけ止める`;
 }
 
+/** What the queue keeps for the line of height and speed (`minecraftLlmcAltitude.ts`): the last go's goal, the y it lost, the speeds its gos measured. */
+export type AltitudeSource = Pick<AltitudeInput, 'lastDropM' | 'samples' | 'tune'> & { lastGoal: ActPos | null; surfaceGoal?: ActPos | null };
+/** The line's input from the frame (feet, dimension), the queue's open items (where its last go goes, else where the last go that came back went) and what the queue kept. */
+function altitudeInput(frame: BodyObservation | null, items: readonly Pick<QueueWordsItem, 'input'>[], kept: AltitudeSource): AltitudeInput {
+  const w = world(frame), at = rec(w.position), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
+  const feet = x !== null && y !== null && z !== null ? { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) } : posIn(typeof w.at === 'string' ? w.at : null);
+  const dimension = typeof w.dimension === 'string' ? w.dimension.replace(/^minecraft:/u, '') : null;
+  // The goal that makes a climb is the one read: the open go's, else the last go that came back, else the last the model named at the surface (a go to a workbench under the ground
+  // is not the way she means to go).
+  const open = queueGoal(items.map(item => item.input));
+  const climbs = (goal: ActPos | null | undefined): goal is ActPos => !!goal && !!feet && goal.y - feet.y >= 20;
+  const remembered = !climbs(open) && !climbs(kept.lastGoal) && climbs(kept.surfaceGoal);
+  const goal = [open, kept.lastGoal, kept.surfaceGoal].find(climbs) ?? open ?? kept.lastGoal;
+  return { dimension, feet, goal, ...(remembered ? { remembered: true } : {}), lastDropM: kept.lastDropM, samples: kept.samples, tune: kept.tune, underAttack: underAttack(frame) };
+}
+
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it
  * has no item (the
  * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number },
-  timing?: { wakeMs: number; leftMs: number; hops?: readonly number[]; decisionsMs?: readonly number[]; reissuedAgoMs?: readonly number[];
-    droppedLately?: readonly string[] }): string[] {
+  timing?: { wakeMs: number; leftMs: number; hops?: readonly (GoHop | number)[]; decisionsMs?: readonly number[]; reissuedAgoMs?: readonly number[];
+    droppedLately?: readonly string[]; altitude?: AltitudeSource }): string[] {
   // A line that says 「移動の go は 15 m 以上にせよ」 is for a calm stretch of work; with enemies on her or her health low it sent a flight to a target 31 m away (the lake was 12 m off).
   const hopsWords = timing?.hops && !underAttack(frame) ? hopsLine(timing.hops, timing.decisionsMs ?? []) : null;
+  const altitudeWords = timing?.altitude ? altitudeLine(altitudeInput(frame, items, timing.altitude)) : null;
   const reissueWords = timing?.reissuedAgoMs ? reissueLine(timing.reissuedAgoMs) : null;
   const droppedWords = droppedLine(timing?.droppedLately ?? []);
-  if (!items.length) return ['列に項目なし', ...(droppedWords ? [droppedWords] : []), ...(hopsWords ? [hopsWords] : []), ...(reissueWords ? [reissueWords] : [])];
+  if (!items.length) return ['列に項目なし', ...(droppedWords ? [droppedWords] : []), ...(hopsWords ? [hopsWords] : []), ...(altitudeWords ? [altitudeWords] : []), ...(reissueWords ? [reissueWords] : [])];
   const room = QUEUE_MAX - items.length;
   const last = items[items.length - 1]!.item;
   return [...items.map((item, index) => itemLine(item, index, frame, running)),
     ...(timing ? [timingLine(timing, running.leftMs)] : []),
     ...(hopsWords ? [hopsWords] : []),
+    ...(altitudeWords ? [altitudeWords] : []),
     ...(reissueWords ? [reissueWords] : []),
     ...(droppedWords ? [droppedWords] : []),
     // Loop 11/10: the room is said with what it is for: the next work behind the running item, not a look at its result.

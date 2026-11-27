@@ -1,3 +1,5 @@
+import { goDestination,goSamples,hopsOfResult,lastGoGoal,sampleOf,SPEED_KEPT,surfaceGoGoal,type SpeedSample } from './minecraftLlmcAltitude.js';
+import { DESCENT_SURFACE_Y } from './minecraftPlanDone.js';
 import { createQueueProgress } from './minecraftLlmcQueueProgress.js';
 import { createQueueAdmission } from './minecraftLlmcQueueAdmission.js';
 import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,recentGos,GO_HOPS_KEPT,reissues,queueWakeMs,
@@ -17,7 +19,8 @@ import { offer as offerOnceFact } from './minecraftLlmcOnceFacts.js';
 import { placementCorrections } from './minecraftLlmcResultWords.js';
 import { urgentWatch } from './minecraftLlmc.js';
 import { noteItemStart } from './minecraftLlmcNode.js';
-import { DROPPED_LATELY_MS,itemLabel,itemResult,neverRan,queueLines,QUEUE_MAX,unitOfReceipt,unknownResult } from './minecraftLlmcQueueWords.js';
+import { feetOf } from './minecraftLlmc.js';
+import { DROPPED_LATELY_MS,type AltitudeSource,itemLabel,itemResult,neverRan,queueLines,QUEUE_MAX,unitOfReceipt,unknownResult } from './minecraftLlmcQueueWords.js';
 import { correctionWords } from './minecraftLlmcResultWords.js';
 import { headBoot as thisHeadBoot } from './minecraftHeadBoot.js';
 import { madeInOf,withMadeIn,withThought } from './minecraftMadeIn.js';
@@ -168,16 +171,26 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     if (Object.keys(tune).length) keep(verticalSpeeds, deps.taskId, tune);
   }
 
-  /** try1124b stall: the metres of each go that arrived, kept for the line that tells the model how far its moves have been. */
-  function learnHops(item: Pick<QueueItem, 'input'>, receipt: MinecraftControlReceipt): void {
+  /**
+   * try1124b stall: the gos that came back, kept for the line that tells the model how far its moves have been (and, with the y at both ends and the seconds, the line of height
+   * and speed). A go that stopped is kept with the distance of its goal and how it ended: counting only the gos that arrived made the line say 「3・31・2・11・9 m」 for 40
+   * minutes while the model sent long ones (`minecraftLlmcAltitude.ts`).
+   */
+  function learnHops(item: Pick<QueueItem, 'input' | 'from'>, receipt: MinecraftControlReceipt, ms: number): void {
     const result = readActResult(receipt.result);
     if (!result) return;
-    const metres = result.lines.filter(line => line.status === 'done' && item.input.hands[line.i - 1]?.do === 'go'
-      && line.progress?.unit === 'meter' && typeof line.progress.done === 'number' && line.progress.done > 0)
-      // 0 m is a go that ran a planned path (its length is in steps), not a short hop: counting it pulled the median down
-      // and told the model that a 52 s move had left the body standing.
-      .map(line => line.progress!.done as number);
-    if (metres.length) keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...metres].slice(-GO_HOPS_KEPT));
+    const here = feetOf(deps.observe());
+    const hops = hopsOfResult(result, item.input.hands, ms, item.from?.y ?? null, here?.y ?? null);
+    for (const [index, hand] of item.input.hands.entries()) {
+      const line = result.lines.find(entry => entry.i === index + 1);
+      const goal = hand.do === 'go' && line?.status !== 'skipped' ? goDestination(hand) : null;
+      if (goal) { keep(lastGoGoal, deps.taskId, goal);
+        if (goal.y >= DESCENT_SURFACE_Y) keep(surfaceGoGoal, deps.taskId, goal); }
+    }
+    if (!hops.length) return;
+    keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...hops].slice(-GO_HOPS_KEPT));
+    const samples = hops.map(sampleOf).filter((sample): sample is SpeedSample => sample !== null);
+    if (samples.length) keep(goSamples, deps.taskId, [...(goSamples.get(deps.taskId) ?? []), ...samples].slice(-SPEED_KEPT));
   }
 
   /** An item whose real result came (the first receipt, or the one after an unknown that is the correction). */
@@ -203,7 +216,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     noteBadEnd(item, item.unit, taken, result.ok);
     if (!taken) { book(item, receipt);
       learnSpeed(item, receipt);
-      learnHops(item, receipt);
+      learnHops(item, receipt, ms);
       for (const listener of listeners) tell(listener, item, result, receipt); }
     record(receivedRow(rowContext(item), receipt));
     settleFlag();
@@ -591,10 +604,15 @@ void restoreReceipts();
     },
     lines(frame) {
       const queue = open();
+      const altitudeSource = (): AltitudeSource => {
+        const last = (recentGos.get(deps.taskId) ?? []).at(-1);
+        return { lastGoal: lastGoGoal.get(deps.taskId) ?? null, surfaceGoal: surfaceGoGoal.get(deps.taskId) ?? null, samples: goSamples.get(deps.taskId) ?? [], tune: verticalSpeeds.get(deps.taskId) ?? {},
+          lastDropM: last && last.fromY !== null && last.toY !== null ? last.fromY - last.toY : null };
+      };
       const first = queue[0];
       return queueLines(queue.map(item => ({ ...item, dependStates: item.dependsOn?.map(ref => [ref, dependStateOfRef(ref)] as const),
          reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 },
-         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], decisionsMs: decisionTimes.get(deps.taskId) ?? [],
+         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], altitude: altitudeSource(), decisionsMs: decisionTimes.get(deps.taskId) ?? [],
            reissuedAgoMs: (reissues.get(deps.taskId) ?? []).map(at => now() - at),
            droppedLately: dropLog.filter(entry => entry.at >= now() - DROPPED_LATELY_MS).map(entry => entry.why) });
     },

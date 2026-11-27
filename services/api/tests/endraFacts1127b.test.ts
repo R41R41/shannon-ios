@@ -76,7 +76,8 @@ describe('the full pack: why 10, what fills a slot, which way of freeing room ho
   const lines = ['dirt×64', 'cobblestone×64'];
   it('says it beside the free count while under 10, with tidy only where tidy is offered', () => {
     const four = packLines(lines, { free: 4 }).join('\n');
-    expect(four).toContain('掘り進む手（go の dig・mine・dig）の前に空きを 10 以上にする');
+    expect(four).toContain('mine と拾う dig の前に空きを 10 以上にする');
+    expect(four).toContain('go・vertical で掘り進む手は満杯でも止まらないので、その前に drop を足さなくてよい');
     expect(four).toContain('掘る岩の種類ごとに 1 マス埋まる');
     expect(four).toContain('水が近い所や 3 m 以内では投げた物を拾い直す');
     expect(four).toContain('3 m 以上離れてから drop する');

@@ -147,7 +147,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     console.info(`continueFacts size ${JSON.stringify({ ...added, factsTokensByVersion: { normal: added.factsTokens, ...others } })}`);
     // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
     // 11/27: 760 -> 820 for the fish line's reach (one note beside a fish in the food candidates: about 40).
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(820);
+    // 11/27: 820 -> 860 for the full pack's cost (a go and a vertical do not stop on it; the hands that do are named)
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(860);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });
@@ -404,7 +405,7 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     const near = frame({ inventory: merged, freeSlots: 2 });
     const go = { do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone', 'cobbled_deepslate'], maxDig: 200 } as ActHand;
     const line = digPackLine(near, [go], [], 'run47-dig')!;
-    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。拾える見込みは約 262 個まで・この act の掘る上限は合わせて 200（足りる）。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
+    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。拾える見込みは約 262 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
     expect(line).not.toMatch(/しなさい|してください|すること|べき|しろ/u);
     // the same count is not said again; another count is
     expect(digPackLine(near, [go], [], 'run47-dig')).toBeNull();
