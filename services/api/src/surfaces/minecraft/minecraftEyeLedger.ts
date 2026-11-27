@@ -10,6 +10,7 @@ import {
   type EyeThrow,
   type Fix,
 } from './minecraftEyeTriangulation.js';
+import type { FramesKnown } from './minecraftSeenMarks.js';
 
 /**
  * The ledger of the eyes of ender she has thrown in this task (the head's own record; the body reports each flight in its act result,
@@ -88,6 +89,27 @@ const grouped = (value: number): string => Math.round(value).toLocaleString('en-
 const tenth = (value: number): string => String(Math.round(value * 10) / 10);
 const FRAME_SEARCH = '枠は mc_probe kind=frames（x z にその所・radius 128）で探す。部屋は入口から 7〜72 ブロック離れていた（隔離ラボの 5 世界）';
 
+/**
+ * The frames' probe before a throw: `mc_probe kind=frames` takes 0.3 seconds and no eye, and it reads the frames of every loaded chunk (about 200 m round her), past the radius it is given.
+ * A fourth eye was thrown at a point 155 m from frames the body already remembered; the eye broke. Said with its reason wherever a throw is offered.
+ */
+export const PROBE_FIRST = '投げる前に先に mc_probe kind=frames を撃つ（0.3 秒で済み、目を使わない。半径の外でも読み込まれた範囲の約 200m まで枠を拾う）。枠が見えれば、投げる必要も目を割るおそれも無い';
+
+/**
+ * The frames are known in this world (in view, or in the body's own record): where, how many hold an eye, how many more are needed, and why no throw. With the eye count known, an
+ * empty-frame count that the hand reaches opens the portal for certain, and a throw that breaks leaves one short; unknown, it is read at the frames.
+ */
+export function frameFoundWords(known: FramesKnown, feet: { x: number; z: number } | null, held: number): string {
+  const spot = `(${Math.round(known.at.x)},${Math.round(known.at.y)},${Math.round(known.at.z)})`;
+  const there = feet ? `の ${grouped(Math.hypot(known.at.x - feet.x, known.at.z - feet.z))}m ${compassWord(bearingBetween(feet, known.at))}` : '';
+  const inEye = known.eyes === null ? '目入りは枠のそばで読む（mc_probe kind=frames）まで分からない' : `目入り ${known.eyes}`;
+  const need = known.eyes === null ? `必要は ${known.frames} 個まで（目入りの分だけ減る）` : `必要 ${Math.max(0, known.frames - known.eyes)}`;
+  const reach = known.eyes === null ? '' : held >= known.frames - known.eyes
+    ? `。手持ちが必要数に届いている間は、枠は開く（投げて割れると 1 個足りなくなる）` : `。手持ちが必要数に ${known.frames - known.eyes - held} 個足りない（アイ 1 個＝パール 1＋粉 1）`;
+  return `枠は ${spot}${there ? ` ${there}` : ''}で見つかっている（枠 ${known.frames}・${inEye}・${need}・手持ち ${held}）${reach}。`
+    + 'もう投げない: 投げると 5 回に 1 回割れ、割れた時はパールがもう 1 個要る。枠へ歩く';
+}
+
 function pickWords(item: StoredThrow, now: number): string {
   if (item.broke) return '（割れた）';
   if (item.fate === 'unknown') return '（落ちたか割れたか見えなかった）';
@@ -102,15 +124,17 @@ function throwWords(item: StoredThrow, now: number): string {
 }
 
 /** The lines the throws say: the count, the latest ones, the point they give (or why none) and where to throw from next. */
-export function ledgerLines(throws: readonly StoredThrow[], feet: { x: number; z: number } | null, now: number): string[] {
+export function ledgerLines(throws: readonly StoredThrow[], feet: { x: number; z: number } | null, now: number, known?: { frames: FramesKnown; held: number }): string[] {
   if (!throws.length) return [];
   const broke = throws.filter(item => item.broke).length;
   const head = `目玉の帳簿: 投げた ${throws.length} 個（割れた ${broke}）。新しい順: ${throws.slice(-3).reverse().map(item => throwWords(item, now)).join(' / ')}`;
+  // The frames are known in this world: they are the place to walk to, and the point the lines give is no longer a guide to look for (nothing is offered to throw).
+  if (known) return [head, frameFoundWords(known.frames, feet, known.held)];
   const direct = directPoint(throws);
   if (direct) return [head, directLine(direct, feet)];
   const fix = honestFix(throws);
   if (!fix) return [head, noFixLine(throws, throws[throws.length - 1]!)];
-  return [head, ...fixLines(fix, feet)];
+  return [head, ...fixLines(fix, feet, spreadDegrees(throws))];
 }
 
 /** A throw this near the line of an earlier one, sideways, draws the same line (S5's rig of 11/5: the throws along the line counted as tries). */
@@ -183,12 +207,22 @@ export const walkWords = (distance: number): string =>
   `約 ${grouped(distance)} m。地上なら 約 ${seconds(distance, WALK_FAST)}〜${seconds(distance, WALK_SLOW)} 秒（${WALK_SLOW}〜${WALK_FAST} m/s）、`
   + `海の泳ぎなら 約 ${seconds(distance, SEA_FAST)}〜${seconds(distance, SEA_SLOW)} 秒（${SEA_SLOW}〜${SEA_FAST} m/s。実測 0.5 前後、往復や止まりを含む通しは ${SEA_NET} m/s）。水の割合で間を取る`;
 
-function fixLines(fix: Fix, feet: { x: number; z: number } | null): string[] {
+/**
+ * Two lines that meet at under a degree cross far from where either is wrong: the point slides along them (a fact of the geometry). That the bearing could be trusted and the point stayed within
+ * 30 m was seen in one run only, so it is said as a hypothesis, and the third throw the owner allowed stays open while no frames are in sight.
+ */
+function slideWords(spread: number | null): string {
+  if (spread === null || spread >= 1) return '';
+  return `線のなす角は ${tenth(spread)}°（1° 未満）: 交点は線に沿って滑りやすい。仮説（1 回の実走の観測）: 線の向きは確かで、点は線に沿って ±30m ほどのずれに収まり、投げ直さずに向きを信じて進めた。`
+    + '枠が見えない間は、近づいてからの 3 本目は許されている。';
+}
+
+function fixLines(fix: Fix, feet: { x: number; z: number } | null, spread: number | null = null): string[] {
   const ring = Math.round(Math.hypot(fix.x, fix.z));
   const there = feet ? `あなたから ${compassWord(bearingBetween(feet, fix))} ${grouped(Math.hypot(fix.x - feet.x, fix.z - feet.z))}m。` : '';
   const far = fix.errorBlocks > 150 ? '誤差が大きい間は方角の目安。近づいてから投げ直す（0.5° 以上の 2 本なら誤差は ±数十 m。枠が見えない・近づいて線が食い違った時は 3 本目を投げてよい）。' : '';
   const walk = feet ? `交点まで${walkWords(Math.hypot(fix.x - feet.x, fix.z - feet.z))}。` : '';
-  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${walk}${far}`
+  const line = `交点 ${place(fix.x, fix.z)}（計算上の見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${walk}${far}${slideWords(spread)}${PROBE_FIRST}。`
     + `原点から ${grouped(ring)}m（最初の 3 つの要塞は 1,280〜2,816m の輪）`;
   // At 128 m of error or less the frames' probe reaches from the point and the hold keeps the eyes (`minecraftEyeThrowHold.ts`): no throw before it is offered.
   const near = feet && fix.errorBlocks > 128 ? nearThrowPlace(feet, fix, Math.max(60, fix.errorBlocks)) : null;
@@ -283,7 +317,7 @@ export function eyeLedgerFact(rawThrows: unknown, feet: { x: number; z: number }
   const again = near ? `投げ直しは交点の ${Math.max(60, fix.errorBlocks)}m 手前 ${place(near.x, near.z)} から。` : '';
   const weak = fix.errorBlocks > 150 || (spread !== null && spread < 2)
     ? `交点は点でなく目安（見積り ±${fix.errorBlocks}m・線のなす角 ${spread === null ? '不明' : tenth(spread)}°。角が小さい線は遠くで少しずれるだけで大きく動く）。近づいて 1〜2 本投げ直す前提で歩く。` : '';
-  return [`${count}。交点 ${place(fix.x, fix.z)}（見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${weak}${again}`.trim()];
+  return [`${count}。交点 ${place(fix.x, fix.z)}（見積り ±${fix.errorBlocks}m・${fix.throws} 本が一致）。${there}${weak}${slideWords(spread)}${again}${PROBE_FIRST}。`.trim()];
 }
 
 /** The point the eyes give, as the plan's node shows it (11/27, run 9: the node of the walk to it said nothing of how far it was). */
@@ -341,7 +375,7 @@ export function createEyeLedger(saved: unknown) {
     },
     throws: (now?: number): readonly StoredThrow[] => alive(state.throws, now),
     fix: (now?: number): Fix | null => honestFix(alive(state.throws, now)),
-    lines: (feet: { x: number; z: number } | null, now: number): string[] => ledgerLines(alive(state.throws, now), feet, now),
+    lines: (feet: { x: number; z: number } | null, now: number, known?: { frames: FramesKnown; held: number }): string[] => ledgerLines(alive(state.throws, now), feet, now, known),
     /** The room was found or the End entered: the throws are of no more use. */
     clear(): void {
       spent = true;

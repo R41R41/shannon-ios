@@ -269,6 +269,7 @@ class PlanEdit {
     const problem = setProblem(op);
     if (problem) return problem;
     if (op.state) node.state = op.state;
+    const retitled = !!op.title && op.title.trim() !== node.title;
     if (op.title) node.title = op.title.trim();
     setTarget(node, op.target);
     if (op.kind !== undefined) {
@@ -286,6 +287,8 @@ class PlanEdit {
       else if (op[key] !== undefined) node[key] = op[key];
     }
     if (node.state !== 'blocked') delete node.reason;
+    if (op.doneWhen !== undefined || op.where !== undefined) delete node.staleCondition;
+    else if (retitled && (node.doneWhen || node.where)) node.staleCondition = true;
     return null;
   }
   split(op: Extract<PlanOp, { op: 'split' }>): string | null {

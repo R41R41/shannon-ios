@@ -1,6 +1,6 @@
 import type { BodyObservation } from '../../contracts/bodyControlContract.js';
 import { carried, doneFacts, type DoneFacts } from './minecraftConditions.js';
-import { createEyeLedger, type EyeLedger } from './minecraftEyeLedger.js';
+import { createEyeLedger, frameFoundWords, type EyeLedger } from './minecraftEyeLedger.js';
 import { bearingBetween, compassWord } from './minecraftEyeTriangulation.js';
 import { createBlazeWatch, footingLine } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
@@ -12,6 +12,7 @@ import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
 import { deathLossLine, pearlLine, pearlSearchLines, searchingForPearls, type PearlSearch } from './minecraftPearlFacts.js';
 import { readActResult } from '../../contracts/minecraftActContract.js';
+import { rememberedFramesOf } from './minecraftSeenMarks.js';
 import { undergroundInOverworld } from './minecraftPlanDone.js';
 import { createWoolWatch } from './minecraftWoolFacts.js';
 
@@ -80,8 +81,14 @@ function netherCompareLines(ledger: EyeLedger, facts: DoneFacts, now: number): s
 }
 
 /** The ledger before the portal room is found, with a single coordinate conversion for travel through the Nether. */
-function eyeLinesOf(ledger: EyeLedger, facts: DoneFacts, now: number): string[] {
+function eyeLinesOf(ledger: EyeLedger, facts: DoneFacts, now: number, world: Record<string, unknown>): string[] {
   if (facts.seen?.has('end_portal_frame') === true) return [];
+  // The frames the body remembers in this world (not yet in the map's marks): the ledger says where they are and that nothing is thrown from here.
+  const known = facts.dimension === 'overworld' ? rememberedFramesOf(world) : null;
+  if (facts.dimension === 'overworld' && known) {
+    const held = carried(facts.counts, 'ender_eye'), lines = ledger.lines(facts.feet, now, { frames: known, held });
+    return lines.length ? lines : [frameFoundWords(known, facts.feet, held)];
+  }
   if (facts.dimension === 'overworld') return [...ledger.lines(facts.feet, now), ...netherCompareLines(ledger, facts, now)];
   if (facts.dimension !== 'the_nether') return [];
   const fix = ledger.fix(now);
@@ -147,7 +154,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       if (facts.dimension === 'overworld') ledger.seed(world.eyeThrows, now());
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
       const end = endViewOf(observation);
-      return compose(world, end, facts, eyeLinesOf(ledger, facts, now()), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
+      return compose(world, end, facts, eyeLinesOf(ledger, facts, now(), world), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
         wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow, search, dropsGivenUp,
         deathKnown: deaths.known() });
