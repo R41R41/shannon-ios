@@ -187,12 +187,12 @@ function diamondLines(counts: ReadonlyMap<string, number>, left: number, max: nu
   const lines: string[] = [];
   if (!SPARE_PICKS.some(name => (counts.get(name) ?? 0) > 0)) {
     const stone = partLine('stone_pickaxe', counts);
-    lines.push(`体は一番安い道具から使う設計。石のツルハシが荷にあれば、石・土・砂利・石炭・鉄鉱石は石で足りるので、ダイヤの減りを抑えられる。今は荷の石以上のツルハシがダイヤ 1 本のみで、掘るたびにダイヤが減っている（石のツルハシ: ${stone ?? '丸石 3・棒 2'}）`);
+    lines.push(`体は一番安い道具から使う設計。石のツルハシが荷にあれば、石・土・砂利・石炭・鉄鉱石は石で足りるので、ダイヤの減りを抑えられる。今は荷の石以上のツルハシがダイヤ 1 本のみで、掘るたびにダイヤが減っている（石のツルハシ: ${stone ?? '丸石 3・棒 2'}）。ダイヤを端の石掘り（go の dig・縦穴の石の層）に使わない: 石の道具が尽きたら掘る手を減らし、丸石 3・棒 2 と作業台（板 4）が近くにあれば先に石のつるはしを作る。ダイヤの残りは黒曜石と、高所から降りる・逃げる分`);
   }
   const have = counts.get('obsidian') ?? 0;
   const need: Array<[string, number]> = [['点検', Math.max(0, OBSIDIAN_CHECK - have)], ['戦い用', Math.max(0, OBSIDIAN_FIGHT - have)], ['ゲート作り直し', OBSIDIAN_GATE]];
   const said = need.map(([name, n]) => `${name}${name === 'ゲート作り直し' ? '' : 'あと '}${n}${n <= left ? '→足りる' : '→足りない'}`).join('・');
-  lines.push(`黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り ${left}/${max} は黒曜石 ${left} 個分（今 ${have} 個持ち。必要: ${said}）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。壊れたら作り直しはダイヤ 3 が要る`);
+  lines.push(`黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り ${left}/${max} は黒曜石 ${left} 個分（今 ${have} 個持ち。必要: ${said}）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。ただし高所で降りる・逃げる命が先で、その時は黒曜石でなく降りるのに使ってよい。壊れたら作り直しはダイヤ 3 が要る`);
   return lines;
 }
 /**

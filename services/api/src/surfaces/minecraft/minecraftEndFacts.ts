@@ -208,6 +208,12 @@ export function crystalLine(end: EndView | null, short = false): string | null {
  * line, and the head stood 3 minutes where it could not shoot (the bar is 20 m up the pillar). A caged place now says the bar is taken
  * on the pillar first, and an uncaged crystal with no place yet is named with the way to get one.
  */
+/**
+ * 11/27 (a run: five shots at one crystal from 83 degrees up, none hit; seven direct shots, four hit): an arrow at a high angle takes long to arrive and the crystal does not stand still in the wind of the wings, so
+ * the angle is said beside the place, and what to do after a miss.
+ */
+export const HIGH_ARC_DEGREES = 60;
+const ARC_WORDS = `仰角が ${HIGH_ARC_DEGREES}° を超える山なりは当たりにくい（実走: 83° で 5 射 0 命中、直射 7 射で 4 命中）。1 回外れたら同じ所から続けず、別の結晶か別の射点へ。射線が通る（仰角の低い）結晶を先に`;
 export function crystalOpeningLine(end: EndView | null): string | null {
   const feet = end?.feet;
   const entries = (end?.crystals.openings ?? []).flatMap(crystal => (crystal.caged === true ? crystal.afterCageRemoved : crystal.positions)
@@ -224,14 +230,15 @@ export function crystalOpeningLine(end: EndView | null): string | null {
     const block = crystal.blockedBy;
     const cage = crystal.caged === true
       ? `檻つき: 柱を登って格子${block ? ` (${[block.name, place(block)].filter(Boolean).join(' ')})` : ''} を dig で取った後なら` : '';
-    return `${id}${cage}撃てる位置 ${place(shot)}${shot.distance === null ? '' : ` 距離 ${tenth(shot.distance)}m`}`;
+    return `${id}${cage}撃てる位置 ${place(shot)}${shot.distance === null ? '' : ` 距離 ${tenth(shot.distance)}m`}${shot.pitchDeg !== null && Math.abs(shot.pitchDeg) > HIGH_ARC_DEGREES ? ` 仰角 ${round(Math.abs(shot.pitchDeg))}°（山なり）` : ''}`;
   });
   const placed = new Set((end?.crystals.openings ?? []).filter(crystal => crystal.caged !== true && crystal.positions.length > 0).map(crystal => crystal.id));
   const unplaced = end?.crystals.openings ? (end.crystals.list ?? []).filter(crystal => crystal.caged !== true && !placed.has(crystal.id)).slice(0, 2)
     .map(crystal => `${crystal.id === null ? '' : `#${crystal.id} `}${place(crystal.position) ?? ''}`.trim()).filter(Boolean) : [];
   const far = unplaced.length ? [`檻なし ${unplaced.join('・')} は今の床から射点なし（64m 以内の開けた床へ近づくと出る）`] : [];
   const all = [...words, ...far];
-  return all.length ? `クリスタルの射点: ${all.join('・')}` : null;
+  const arc = entries.some(({ shot }) => shot.pitchDeg !== null && Math.abs(shot.pitchDeg) > HIGH_ARC_DEGREES) ? `。${ARC_WORDS}` : '';
+  return all.length ? `クリスタルの射点: ${all.join('・')}${arc}` : null;
 }
 
 /** Two groups at most; the ids name exactly the crystals the body says are shootable now. */
@@ -310,8 +317,22 @@ export function dragonWaitLine(end: EndView | null): string | null {
     : (spot.walkSeconds === null ? '' : ` 歩く約 ${tenth(spot.walkSeconds)} 秒`);
   const cells = (dragon.approach?.wait ?? []).slice(0, 3).map(spot => `${place(spot)}${seconds(spot)}`);
   if (!cells.length) return null;
+  const line = waitCells(end, sitting, cells);
+  return line + aloftWaitWords(end);
+}
+function waitCells(end: EndView | null, sitting: boolean, cells: string[]): string {
   return sitting ? `待ち場の候補（竜の向きの横 10〜14m の足場）${cells.length} 件: ${cells.join(' / ')}`
     : `${tooNearPerch(end)}${crystalsFirst(end)}待ち場の候補（次の座りを待つ所、止まり木から 10〜14m）${cells.length} 件: ${cells.join(' / ')}`;
+}
+
+/** The wait line while she is aloft (11/27): how much higher her feet are than the cells, how long coming down takes, and that a sit cannot be reached from up there. */
+function aloftWaitWords(end: EndView | null): string {
+  const drop = aloftBy(end), feetY = end?.feet?.y ?? null, spots = end?.dragon?.approach?.wait ?? [];
+  if (drop === null || feetY === null || !spots.length) return '';
+  const nearest = [...spots].sort((a, b) => (a.walkMeters ?? Infinity) - (b.walkMeters ?? Infinity))[0]!;
+  const above = Math.round(feetY - nearest.y), walk = nearest.walkMeters === null ? null : Math.round(nearest.walkMeters / 4);
+  return `。今の足は待ち場より ${above} m 高い。降りる時間の目安: 飛び降り 約 3 秒${walk === null ? '' : `＋着水から待ち場まで歩く約 ${walk} 秒`}、掘って降りるなら 1 段ごとに足す（黒曜石 約 9.4 秒・エンドストーン 約 0.6 秒）。`
+    + '座りは約 27 秒で、ここからは座りに間に合わず剣もベッドも届かない（座りに間に合うのは、先に降りて待ち場に立った時）';
 }
 
 /** The waiting line for an urgent decision: only while she flies and the body stands on the perch (e03 11/9: after a fireball's reflex the urgent
@@ -393,22 +414,139 @@ function cagedLeft(end: EndView | null): number | null {
 
 /** The drop under the feet (m) from which she is taken to be aloft (on a pillar's top or a bridge in the air): the bow-less line then starts from the ground, not from the feet. */
 export const ALOFT_FROM_METRES = 10;
-const aloftBy = (end: EndView | null): number | null => {
+export const aloftBy = (end: EndView | null): number | null => {
   const drop = end?.drop;
   return typeof drop === 'number' && Number.isFinite(drop) && drop >= ALOFT_FROM_METRES ? drop : null;
 };
 
 /**
- * Aloft (the drop under her feet is 10 m or more): what a fall costs is on the footing line; this says what the line's plan is from here. A crystal's pillar was
- * crossed on a bridge laid in the air from the top of another until the blocks ran out, and she stood on a one-wide foothold 40 high for four minutes.
+ * Aloft (the drop under her feet is 10 m or more): the ways down and what each costs are the descent line (`descentLine`); this says what the bow-less line's plan is from here.
+ * A crystal's pillar was crossed on a bridge laid in the air from the top of another until the blocks ran out, and she stood on a one-wide foothold 40 high for four minutes.
  */
 function aloftLine(end: EndView | null, drop: number, target: EndCrystal | null, name: string | null, phase: number | null): string {
   const ground = end?.feet ? Math.round(end.feet.y - drop) : null;
   const rise = target && ground !== null ? Math.round(target.position.y - ground) - 2 : null;
   const dragon = phase === 1 || phase === 8 ? `竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}: 高所の橋で渡ることも、登ることと同じ（火の玉の線に立つ）。` : '';
   const then = name && rise !== null && rise > 0 ? `降りた後に ${name} の柱を登るなら、地面から約 ${rise} 段。` : '';
-  return `今は宙・塔の上（地面まで ${drop} m）。${dragon}先に降りて地面で end_stone を掘る（柱は掘りながら降りられる: vertical down shaft）。`
+  return `今は宙・塔の上（地面まで ${drop} m）。降りる手は費用つきで「高所:」の行に並べた。${dragon}`
     + `高さのまま橋で渡ると置く物が尽き宙に残る。次の柱へ短く渡るのは、置ける足場の行の往復分が足りる時だけ。${then}`;
+}
+
+/** The ground the dragon's waiting cells stand on (the lowest of them): an estimate of the island's floor when no footing line measured it. */
+const waitGround = (end: EndView | null): number | null => {
+  const ys = (end?.dragon?.approach?.wait ?? []).map(spot => spot.y).filter(y => Number.isFinite(y));
+  return ys.length ? Math.floor(Math.min(...ys)) : null;
+};
+
+/** The numbers of the jump: the run's greatest fall that the bucket took, the lab's, and the cap of go's maxDrop. */
+export const FALL_SEEN_METRES = 25;
+export const FALL_LAB_METRES = 90;
+export const MAX_DROP_CAP = 70;
+const OBSIDIAN_SECONDS = 9.4, END_STONE_SECONDS = 0.6;
+
+export type HeightBasis = 'measured' | 'remembered' | 'estimated';
+/** What the height watch hands to the lines: the End view with its drop filled, and what the head counted of the stay up there. */
+export interface HeightView { end: EndView | null; basis: HeightBasis | null; minutes: number | null; hits: number; lost: number; waits: number; sit: string | null }
+
+/** Acts of waiting in a row after which the streak line speaks (one run: about 60 waits on a pillar's top). */
+export const WAIT_STREAK = 10;
+/**
+ * The head's own count of a stay up high (nothing here is the body's): where the ground is (a footing line measured it, or the last measure, or the waiting cells' height), when she
+ * went up, what health she lost there between two inputs, the acts of waiting in a row, and the dragon's health across her sits. 11/27: on a nine-wide obsidian top there is no gap, so
+ * no footing line, so no drop: the input said nothing of the 39 m for 13 minutes, and a wait was chosen about 60 times until the breath killed her.
+ */
+export function createHeightWatch() {
+  let ground: number | null = null, since: number | null = null, lastHealth: number | null = null, hits = 0, lost = 0, waits = 0;
+  let sitting = false, sitFrom: number | null = null, sitLast: number | null = null, sitEnd: { health: number; at: number } | null = null;
+  let lastSit: { from: number; to: number } | null = null, regained: { to: number; seconds: number; gain: number } | null = null;
+  return {
+    /** An act's result: acts made of waits only, in a row. */
+    noteActs(kinds: readonly string[]): void {
+      waits = kinds.length > 0 && kinds.every(kind => kind === 'wait' || kind === 'sleep') ? waits + 1 : 0;
+    },
+    view(end: EndView | null, health: number | null, now: number): HeightView {
+      const feetY = end?.feet?.y ?? null;
+      let drop: number | null = null, basis: HeightBasis | null = null;
+      if (feetY !== null) {
+        if (typeof end?.drop === 'number' && Number.isFinite(end.drop) && end.drop >= 0) { drop = end.drop; basis = 'measured'; ground = feetY - end.drop; }
+        else if (ground !== null && feetY - ground > 0) { drop = Math.round(feetY - ground); basis = 'remembered'; }
+        else { const floor = waitGround(end); if (floor !== null && feetY - floor > 0) { drop = Math.round(feetY - floor); basis = 'estimated'; } }
+      }
+      const aloft = drop !== null && drop >= ALOFT_FROM_METRES;
+      if (aloft) since ??= now; else { since = null; hits = 0; lost = 0; }
+      if (health !== null) {
+        if (aloft && lastHealth !== null && health < lastHealth - 0.5) { hits += 1; lost += lastHealth - health; }
+        lastHealth = health;
+      }
+      const dragon = end?.dragon ?? null, dh = dragon?.health ?? null, sits = dragon?.phase !== null && dragon?.phase !== undefined && SITTING.has(dragon.phase);
+      if (dh !== null) {
+        if (sits && !sitting) { sitFrom = dh; if (sitEnd) regained = { to: dh, seconds: Math.round((now - sitEnd.at) / 1000), gain: Math.round(dh - sitEnd.health) }; }
+        if (sits) sitLast = dh;
+        if (!sits && sitting && sitFrom !== null && sitLast !== null) { lastSit = { from: sitFrom, to: sitLast }; sitEnd = { health: sitLast, at: now }; }
+        sitting = sits;
+      }
+      const sit = lastSit ? `前の座りで竜 ${round(lastSit.from)}→${round(lastSit.to)}（傷 ${round(lastSit.from - lastSit.to)}）`
+        + (regained ? `、次の座りの手前では ${round(regained.to)}（${regained.seconds} 秒で ${regained.gain >= 0 ? '+' : ''}${regained.gain}）` : '（次の座りの手前の体力は、その座りで分かる）') : null;
+      const minutes = aloft && since !== null ? Math.round((now - since) / 6000) / 10 : null;
+      return { end: end && drop !== null ? { ...end, drop } : end, basis, minutes, hits, lost: Math.round(lost * 10) / 10, waits, sit };
+    },
+  };
+}
+
+/** What the descent line reads of her pack and the block she stands on (from the frame; the body does not say which slot the bucket is in). */
+export interface HeightCtx { under: string | null; underSymbol: string | null; top: number | null; bucket: boolean; pickaxe: { name: string; left: number; max: number } | null }
+export function heightCtxOf(world: Rec, counts: ReadonlyMap<string, number>): HeightCtx {
+  const map = typeof world.localMap === 'string' ? readLayers(world.localMap) : null;
+  const layer = map?.layers.get(map.feet.y - 1);
+  const symbol = map && layer ? layer.get(`${map.feet.x},${map.feet.z}`) ?? null : null;
+  const top = layer ? [...layer.values()].filter(cell => blocked(cell)).length : null;
+  const picks = (Array.isArray(world.inventory) ? world.inventory : []).flatMap(raw => {
+    const item = rec(raw), durability = rec(item?.durability), left = Number(durability?.left), max = Number(durability?.max);
+    const name = String(item?.name ?? '').replace(/^minecraft:/u, '');
+    return item && /_pickaxe$/u.test(name) && Number.isFinite(left) && Number.isFinite(max) ? [{ name, left, max }] : [];
+  });
+  const fit = picks.filter(pick => symbol !== 'O' || /^(?:diamond|netherite)_pickaxe$/u.test(pick.name)).sort((a, b) => b.left - a.left);
+  return { under: symbol ? NAMES[symbol] ?? null : null, underSymbol: symbol, top, bucket: (counts.get('water_bucket') ?? 0) > 0, pickaxe: fit[0] ?? null };
+}
+
+/**
+ * The height line (11/27): every time she stands on a top 10 m or more over the ground (a pillar, a bridge, a ledge or the natural obsidian top), where the ground is and the ways down with what each costs
+ * in one sentence. Facts: none of the three is chosen for her and the jump is not said to be the last hand. The jump's numbers are what was measured: the run's greatest fall that the bucket took
+ * (the whole fall from the highest point to the ground, the water poured about 4 m before it; no damage) and the lab's.
+ */
+export function descentLine(end: EndView | null, view: Pick<HeightView, 'basis' | 'minutes' | 'hits' | 'lost'> | null, ctx: HeightCtx | null): string | null {
+  const drop = aloftBy(end);
+  if (drop === null || !end?.feet) return null;
+  const standY = Math.round(end.feet.y), ground = standY - drop;
+  const basis = view?.basis === 'estimated' ? '待ち場の高さからの見積もり' : view?.basis === 'remembered' ? '前に測った地面' : '足場の測定';
+  const wide = ctx?.top !== null && ctx?.top !== undefined && ctx.top >= 9 ? `（幅の広い天辺。地図の範囲で ${ctx.top} マス以上）` : '';
+  const head = `高所: 足の下は y=${standY - 1}${ctx?.under ? ` の${ctx.under}` : ''}${wide}、地面は約 y=${ground}（${basis}）で ${drop} 段`;
+  const stay = view?.minutes !== null && view?.minutes !== undefined && (view.minutes >= 0.5 || view.hits > 0)
+    ? `。ここに ${view.minutes} 分居て、体力が減った回数 ${view.hits}・合計 ${view.lost}（入力と入力の間で数えた）` : '';
+  const cap = Math.min(MAX_DROP_CAP, drop + 3);
+  const cell = [...(end.dragon?.approach?.wait ?? [])].sort((x, y) => (x.walkMeters ?? Infinity) - (y.walkMeters ?? Infinity))[0];
+  const target = cell ? `${Math.floor(cell.x)},${Math.floor(cell.y)},${Math.floor(cell.z)} range=3` : '<地面の足場> range=3';
+  const fall = ctx?.bucket
+    ? `(a) 飛び降り＝go ${target} maxDrop=${cap}（待ち場の候補か地面の足場へ。水バケツが手か hotbar に無ければ、先に同じ act の頭に equip water_bucket）。体が落ちる途中、地面の約 4m 手前で床へ水を置いて着水する（約 3 秒）。`
+      + `着水の実績: 実走 3 回（総落差 ${FALL_SEEN_METRES}・17・13m）はすべて被害 0、ラボは垂直 10・25・${FALL_LAB_METRES}m を各 1 回で成功。今の ${drop}m はラボの範囲内で、実走ではこの高さは未経験。`
+      + `水で止められなかった時（水を置けない・外れ。実績は 0 回）は約 ${Math.max(0, drop - 3)} の被害で、20 を超えると即死。条件: 真下が固い床・体力が十分。火の玉が飛んでいる入力（「火の玉:」の行がある間）と、息の雲が足元にある入力では出さず、行が無い次の入力で出す（竜が phase 1 のままでも、玉が飛んでいない入力は続く）`
+    : '(a) 飛び降り＝水バケツが荷に無いので水で止められない（20 ブロックで被害 17、それ以上は死ぬ）';
+  const steps = Math.max(1, drop - 1), obsidian = ctx?.underSymbol === 'O';
+  const seconds = obsidian ? Math.round(steps * OBSIDIAN_SECONDS) : ctx?.underSymbol === 'E' ? Math.round(steps * END_STONE_SECONDS) : null;
+  const dig = ctx?.underSymbol ? (DIG_NAMES[ctx.underSymbol] ?? []).join(',') : '';
+  const pick = ctx?.pickaxe ? `つるはし ${ctx.pickaxe.name} 残り ${ctx.pickaxe.left}/${ctx.pickaxe.max}` : '使えるつるはしが無い';
+  const short = obsidian && (ctx?.pickaxe?.left ?? 0) < steps;
+  const shaft = `(b) 掘って降りる＝vertical down shaft y=${ground}${dig ? ` dig=${dig}` : ''} liquid=stop で ${steps} 段${seconds !== null ? `・約 ${seconds} 秒` : ''}（${pick}`
+    + `${short ? `。黒曜石は 1 段 1 使いで足りない（必要 ${steps}・残り ${ctx?.pickaxe?.left ?? 0}）` : ''}）。ダイヤの残りは黒曜石用だが、降りる・逃げる命が先: 降りるのに使ってよい`;
+  const wait = `(c) 待つ＝高所に長居した実走 2 回はどちらも死んだ（落下 1・息の雲 1）。今回はここに ${view?.minutes ?? 0} 分居て、体力が ${view?.hits ?? 0} 回減り合計 ${view?.lost ?? 0}。この天辺にも火の玉と息の雲は来て、雲の中から歩いて出る道が無い時がある。ここからは座りに間に合わず剣もベッドも届かない`;
+  return `${head}${stay}。降りる手と費用: ${fall}／${shaft}／${wait}`;
+}
+
+/** After ten waits in a row: the reason and the cost of waiting in one line, so the earlier reasons are not copied. */
+export function waitStreakLine(view: Pick<HeightView, 'minutes' | 'hits' | 'lost' | 'waits'> | null, aloft: boolean): string | null {
+  if (!view || view.waits < WAIT_STREAK) return null;
+  return `待つ手が ${view.waits} 回続いている${aloft ? `（高所に ${view.minutes ?? 0} 分・体力が減った回数 ${view.hits}・合計 ${view.lost}）` : ''}。`
+    + '前の判断に書いた待つ理由を写さず、今の入力（足の高さ・体力・竜の位置・降りる手の費用）から理由と費用を書き直す。待つ手を続けるなら、何が変わるのを待つのかを why に書く';
 }
 
 /**
@@ -423,7 +561,26 @@ export function arrowBudgetLine(end: EndView | null, arrows: number | null): str
   return `檻なしの結晶 ${open} 本・矢 ${arrows} 本（1 本 1 発で壊れる）。${arrows < open ? `矢が ${open - arrows} 本足りない分は柱を登る形になる` : '矢は結晶の数に足りている'}`;
 }
 
-export function noBowLine(end: EndView | null): string {
+/**
+ * The caged crystals left when none is open (11/27: the line said 「檻つきは残したまま竜を倒す」 as a rule, a design that no run had passed). Facts and the two conditions that keep the old accidents out:
+ * the dragon's health, a sit's damage and the heal, what the caged climb costs, and what the dragon's sits did to its health; no walking to a cage while she sits or is about to.
+ */
+function cagedWords(end: EndView | null, caged: number, sit: string | null): string {
+  const health = end?.dragon?.health ?? null, list = end?.crystals.list ?? [];
+  const feetY = end?.feet?.y ?? null, drop = typeof end?.drop === 'number' ? end.drop : 0;
+  const ground = feetY === null ? null : Math.round(feetY - drop);
+  const names = list.slice(0, 2).map(crystal => {
+    const rise = ground === null ? null : Math.max(0, Math.round(crystal.position.y - ground) - 2);
+    return `${crystal.id === null ? '' : `#${crystal.id} `}${place(crystal.position)}${rise === null ? '' : `（地面から約 ${rise} 段・材料 ${rise + 3} 個`}${rise === null ? '' : '・格子を dig で取る）'}`;
+  }).join('・');
+  const low = health !== null && health <= 50;
+  return `檻なしの結晶はもう無い。檻つき ${caged} 本が残る${names ? `: ${names}` : ''}。`
+    + `竜の体力${health === null ? 'は見えない' : ` ${tenth(health)}`}。ベッド 1 座りの傷は 61〜121、結晶が残る間は +2 体力/秒で回復しうる（実走: ベッド 1 回で 200→173 にした竜が約 13 秒で 200 に戻った）。`
+    + `${sit ? `${sit}。` : ''}${low ? '体力 50 以下: 窪みの剣か残りのベッドで届く。檻へは行かない。' : '体力が 50 より多い間は、座りのたびにベッドを続けて使って傷を重ねるか、檻つきを壊して回復を止めるかを、上の費用で比べて決める。'}`
+    + '檻つきの柱へ登る時は、その柱の上で降りる手（高所の行）も先に確かめる。竜の座りが近い・座っている間は檻へ歩かない（座りは約 27 秒）。飛んでいる間は待ち場の行の所で次の座りを待つ';
+}
+
+export function noBowLine(end: EndView | null, sit: string | null = null): string {
   const head = 'クリスタルの射点: 弓か矢が無いので射点は使わない（結晶は柱の脇を積んで登って殴る）';
   const dragon = end?.dragon ?? null;
   const phase = dragon?.phase ?? null;
@@ -440,11 +597,10 @@ export function noBowLine(end: EndView | null): string {
   const tail = '。檻つきの結晶は後回し。柱の上で黒曜石を掘って材料にしない';
   if (phase === 9) return `${head}${tail}`;
   const caged = cagedLeft(end);
-  if (caged !== null && caged <= 2) {
-    return `${head}。檻なしの結晶はもう無い（残りは檻つき ${caged} 本）: 檻つきは残したまま竜を倒す。竜が座ったらベッドの手の行、飛んでいる間は待ち場の行の所で次の座りを待つ（柱は登らない）`;
-  }
+  // 11/27: the aloft words come before the caged ones (the caged branch returned first, and from a pillar's top the head waited 13 minutes with no word of the height).
   const aloft = aloftBy(end);
-  if (aloft !== null) return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
+  if (aloft !== null) return `${head}。${aloftLine(end, aloft, target, name, phase)}${caged !== null && caged <= 2 ? `檻なしの結晶はもう無い。竜はベッドか剣で倒す。檻つきは下の事実で判断${tail.replace(/^。檻つきの結晶は後回し/u, '')}` : tail}`;
+  if (caged !== null && caged <= 2) return `${head}。${cagedWords(end, caged, sit)}`;
   if (phase === 1 || phase === 8) {
     return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}。高所の橋で渡ることも同じ: 火の玉の線に立つ）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
   }
@@ -498,10 +654,11 @@ export function createClimbWatch() {
 }
 
 /** At most six existing fight lines, plus one basin line for normal decisions. Join hazards when the existing observations need the room. */
-export function endFightLines(end: EndView | null, bedItem: string | null = null, shooting: boolean | null = null, arrows: number | null = null): string[] {
+export function endFightLines(end: EndView | null, bedItem: string | null = null, shooting: boolean | null = null, arrows: number | null = null, height: { lead: readonly string[]; sit: string | null } | null = null): string[] {
   // e03 (11/9): with no bow the shooting places still named the perch "(1,62,1) から 4 基", and the head kept waiting there until a fireball's cloud killed it.
-  const shots = shooting === false ? (end?.crystals.openings || end?.crystals.shootSets ? [noBowLine(end)] : []) : [crystalOpeningLine(end), crystalShootSetsLine(end)];
-  const lines = [dragonLine(end), crystalLine(end), arrowBudgetLine(end, arrows), ...shots].filter((line): line is string => line !== null);
+  const shots = shooting === false ? (end?.crystals.openings || end?.crystals.shootSets ? [noBowLine(end, height?.sit ?? null)] : []) : [crystalOpeningLine(end), crystalShootSetsLine(end)];
+  const cagedOnly = shooting !== false && aloftBy(end) === null && (cagedLeft(end) ?? 3) <= 2 ? [`クリスタルの射点: ${cagedWords(end, cagedLeft(end)!, height?.sit ?? null)}`] : [];
+  const lines = [...(height?.lead ?? []), dragonLine(end), crystalLine(end), arrowBudgetLine(end, arrows), ...shots, ...cagedOnly].filter((line): line is string => line !== null);
   const positions = dragonApproachLine(end) ?? perchLine(end);
   const hazards = [breathLine(end), fireballLine(end)].filter((line): line is string => line !== null);
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));

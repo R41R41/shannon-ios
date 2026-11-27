@@ -202,7 +202,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     // Only the two caged ones left: the bed, not a pillar.
     const cagedOnly = endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance: 40 },
       crystals: { ...base.crystals, remaining: 2, list: [crystal(14, 40, true, 20), crystal(18, -40, true, 45)] } }));
-    expect(noBowLine(cagedOnly)).toContain('檻なしの結晶はもう無い（残りは檻つき 2 本）');
+    expect(noBowLine(cagedOnly)).toContain('檻なしの結晶はもう無い。檻つき 2 本が残る');
     expect(noBowLine(cagedOnly)).not.toContain('pillar up');
     expect(climbNow(cagedOnly)).toBe(false);
   });

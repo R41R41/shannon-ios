@@ -6,7 +6,7 @@ import { createBlazeWatch, footingLine } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createDeathWatch, deathReturnLine, givenUpBy, type DeathKnown } from './minecraftDeathReturn.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
-import { createClimbWatch, crystalLine, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
+import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
@@ -42,11 +42,15 @@ const some = (line: string | null): string[] => line ? [line] : [];
 /** The lines of one decision from the frame and the ledger's lines (pure). */
 function compose(world: Record<string, unknown>, end: EndView | null, facts: DoneFacts, eyeLines: readonly string[],
   watched: { blaze: string | null; hunt: string | null; trail?: string | null; wool?: string | null; climb?: ((shooting: boolean | null) => string | null); pearlNow?: boolean; search?: PearlSearch;
-    dropsGivenUp?: string | null; deathKnown?: DeathKnown | null }): EndgameLines {
+    dropsGivenUp?: string | null; deathKnown?: DeathKnown | null; height?: HeightView | null }): EndgameLines {
   const { blaze, hunt } = watched;
   const arrows = ['arrow', 'spectral_arrow', 'tipped_arrow'].reduce((sum, item) => sum + (facts.counts.get(item) ?? 0), 0);
   const shooting = facts.counts.size ? (facts.counts.get('bow') ?? 0) > 0 && arrows > 0 : null;
-  const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting, facts.counts.size ? arrows : null);
+  // 11/27: the height line and the wait streak lead the fight lines (and stay in the short set): from a top 10 m or more up, the ways down are the first thing the input says.
+  const height = watched.height ?? null;
+  const descent = some(descentLine(end, height, heightCtxOf(world, facts.counts))), streak = some(waitStreakLine(height, aloftBy(end) !== null));
+  const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting, facts.counts.size ? arrows : null,
+    { lead: [...descent, ...streak], sit: height?.sit ?? null });
   const stall = some(watched.climb?.(shooting) ?? null);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
   const frames = some(frameLine(world, carried(facts.counts, 'ender_eye'), supply));
@@ -60,7 +64,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const footing = some(footingLine(facts.counts, facts.dimension));
   const enclosed = [...some(enclosedLine(world)), ...some(pillarLine(world))];
   const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...some(deathLossLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
-  const urgent = [...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
+  const urgent = [...descent, ...streak, ...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true)),
     ...some(dragonWaitUrgentLine(end))];
   return { lines: [...night, ...some(watched.wool ?? null), ...enclosed, ...fight, ...footing, ...stall, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
@@ -105,6 +109,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const hunt = createEnderHunt((saved as { minecraftEnderHunt?: unknown } | null)?.minecraftEnderHunt);
   const wool = createWoolWatch();
   const climb = createClimbWatch();
+  const height = createHeightWatch();
   const trail = createDescentTrail((saved as { minecraftDescentTrail?: unknown } | null)?.minecraftDescentTrail);
   /** What she carried of the road's things before a death and the gates of each dimension, for the way back to its drops (`minecraftDeathReturn.ts`). */
   const deaths = createDeathWatch(saved);
@@ -119,6 +124,8 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
     /** An act's result (the receipt's id and its result JSON): a thrown eye goes in the ledger. */
     noteResult(id: string | undefined, resultJson: string | undefined, observation: BodyObservation | null): void {
       ledger.note(id, resultJson, doneFacts(observation)?.dimension ?? null, now());
+      const acted = readActResult(resultJson);
+      if (acted) height.noteActs(acted.lines.map(line => line.do));
       deaths.note(worldOf(observation), doneFacts(observation), now());
       blaze.note(id, resultJson, now());
       hunt.note(id, resultJson, now());
@@ -154,11 +161,12 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       if (facts.dimension === 'overworld') ledger.seed(world.eyeThrows, now());
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
       const viewed = endViewOf(observation);
-      const end = viewed && footingDrop !== null ? { ...viewed, drop: footingDrop } : viewed;
+      const seen = height.view(viewed && footingDrop !== null ? { ...viewed, drop: footingDrop } : viewed, facts.hp ?? null, now());
+      const end = seen.end;
       return compose(world, end, facts, eyeLinesOf(ledger, facts, now(), world), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
         wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow, search, dropsGivenUp,
-        deathKnown: deaths.known() });
+        deathKnown: deaths.known(), height: seen });
     },
     /** The eyes' ledger, for the hold that keeps the frames' eyes (`minecraftEyeThrowHold.ts`). */
     ledger,

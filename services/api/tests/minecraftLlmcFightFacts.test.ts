@@ -145,7 +145,7 @@ describe('the blows a fight takes and the shield left (11/26)', () => {
     expect(lines[1]).toContain('体は一番安い道具から使う設計');
     expect(lines[1]).toContain('石のツルハシ: 持ち: 丸石 5・棒 2。作り直すなら 丸石 3・棒 2');
     expect(lines[1]).toContain('今は荷の石以上のツルハシがダイヤ 1 本のみ');
-    expect(lines[2]).toBe('黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り 10/1561 は黒曜石 10 個分（今 7 個持ち。必要: 点検あと 1→足りる・戦い用あと 5→足りる・ゲート作り直し10→足りる）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。壊れたら作り直しはダイヤ 3 が要る');
+    expect(lines[2]).toBe('黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り 10/1561 は黒曜石 10 個分（今 7 個持ち。必要: 点検あと 1→足りる・戦い用あと 5→足りる・ゲート作り直し10→足りる）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。ただし高所で降りる・逃げる命が先で、その時は黒曜石でなく降りるのに使ってよい。壊れたら作り直しはダイヤ 3 が要る');
     expect(lines).toHaveLength(3);
     expect(toolLines({ inventory: [...inventory, { name: 'diamond_pickaxe', count: 1, durability: { left: 3, max: 1561 } }] }).filter(line => line.startsWith('黒曜石を壊せる'))).toHaveLength(1);
   });

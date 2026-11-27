@@ -87,7 +87,7 @@ describe('the bow-less crystal line from the ground when she is aloft', () => {
   it('aloft by 10 m or more it says to come down first, counts the pillar from the ground, and does not press a climb', () => {
     const line = noBowLine(view(40));
     expect(line).toContain('今は宙・塔の上（地面まで 40 m）');
-    expect(line).toContain('先に降りて地面で end_stone を掘る（柱は掘りながら降りられる: vertical down shaft）');
+    expect(line).toContain('降りる手は費用つきで「高所:」の行に並べた');
     expect(line).toContain('高さのまま橋で渡ると置く物が尽き宙に残る');
     expect(line).toContain('次の柱へ短く渡るのは、置ける足場の行の往復分が足りる時だけ');
     // The crystal stands at y=100 and the ground is at 61: 100 − 61 − 2 = 37 from the ground (from the feet, 101, it would not be a climb at all).
