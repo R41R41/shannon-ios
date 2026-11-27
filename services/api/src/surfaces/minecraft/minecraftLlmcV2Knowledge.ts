@@ -656,7 +656,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'end_stone を掘って進む道（地中の y）は遅い（1 個約 0.6 秒で、36m に約 3 分かかった）ので、歩ける地表の道を取る。'
       + '例外は、結晶の柱の根へ canDig=["end_stone"] で寄る時だけ。',
     '- 宙の足場から降りる・渡る手の書き方: vertical は canDig（掘ってよい物。降りるだけでも要る）と liquid が要る。'
-      + '例: {do:"vertical", dir:"down", shape:"shaft", toY:地面の高さ, canDig:["end_stone","cobblestone"], liquid:"stop"}（liquid は stop・seal・seal_water。エンドでは stop）。'
+      + '例: vertical dir=down shape=shaft toY=地面の高さ canDig=end_stone,cobblestone liquid=stop（liquid は stop・seal・seal_water。エンドでは stop）。'
       + 'どれかが欠けると act 全体が送られず、どの手も動かない。前の act が「送られていない」と live の先頭に出たら、足りない所だけ直して同じ手を出し直す（別の手に変えると、降りる手は動かないまま）。',
     '- live の「竜」「エンドクリスタル」「竜の息の雲」「火の玉」「止まり木」の行は体の観測そのもの。体が決めないのは、どこに立つか・いつ振るか・いつ逃げるか'
       + '（床の逃げ以外）・どのクリスタルを先に壊すか・ベッドを使うか。',

@@ -139,7 +139,7 @@ describe('an act that was refused before it was sent is told at the head of the 
 
 describe('the knowledge: the new words are in the End section only', () => {
   const NEW = ['宙の橋・足場（柱の天辺、自分で置いた橋の先）の上で、自分が置いた床と足元の横（隣の黒曜石・柱の天辺を含む）を掘らない', '待つ手（wait・probe など動かない手）を走らせたまま、次の手を積まず text だけで返事を終えない',
-    'toY:地面の高さ, canDig:["end_stone","cobblestone"], liquid:"stop"', '水バケツを pack に持っていたら、先に equip で hotbar・手へ出す', 'go の to は立つマス（足の高さ。床のブロックの 1 つ上）'];
+    'toY=地面の高さ canDig=end_stone,cobblestone liquid=stop', '水バケツを pack に持っていたら、先に equip で hotbar・手へ出す', 'go の to は立つマス（足の高さ。床のブロックの 1 つ上）'];
   it('has them once in the End section and in no other stage or the shared sections', () => {
     const rest = [V2_ALWAYS, ...STAGE_IDS.filter(id => id !== 'end').map(id => V2_STAGES[id])].join('\n');
     for (const words of NEW) {
