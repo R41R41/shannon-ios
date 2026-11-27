@@ -188,7 +188,7 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
         if (goal.y >= DESCENT_SURFACE_Y) keep(surfaceGoGoal, deps.taskId, goal); }
     }
     if (!hops.length) return;
-    keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...hops].slice(-GO_HOPS_KEPT));
+    keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...hops.map(hop => ({ ...hop, at: now() }))].slice(-GO_HOPS_KEPT));
     const samples = hops.map(sampleOf).filter((sample): sample is SpeedSample => sample !== null);
     if (samples.length) keep(goSamples, deps.taskId, [...(goSamples.get(deps.taskId) ?? []), ...samples].slice(-SPEED_KEPT));
   }
@@ -612,7 +612,7 @@ void restoreReceipts();
       const first = queue[0];
       return queueLines(queue.map(item => ({ ...item, dependStates: item.dependsOn?.map(ref => [ref, dependStateOfRef(ref)] as const),
          reason: item.reason })), frame, { progress: first ? progressOf(first) : null, leftMs: first ? remainingMs(first) : 0 },
-         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], altitude: altitudeSource(), decisionsMs: decisionTimes.get(deps.taskId) ?? [],
+         { wakeMs: queueWakeMs(deps.taskId), leftMs: api.leftMs?.() ?? 0, hops: recentGos.get(deps.taskId) ?? [], nowMs: now(), altitude: altitudeSource(), decisionsMs: decisionTimes.get(deps.taskId) ?? [],
            reissuedAgoMs: (reissues.get(deps.taskId) ?? []).map(at => now() - at),
            droppedLately: dropLog.filter(entry => entry.at >= now() - DROPPED_LATELY_MS).map(entry => entry.why) });
     },

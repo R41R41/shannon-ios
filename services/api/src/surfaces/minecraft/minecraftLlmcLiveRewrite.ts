@@ -3,6 +3,7 @@ import { mergeEnemies, OMIT, relText } from './minecraftLlmcLiveEnemies.js';
 import { liquidLines } from './minecraftLlmcLiquid.js';
 import { waterFailures } from './minecraftLlmcWaterSwitch.js';
 import { FOOD_PASS, NIGHT_PASS } from './minecraftNightArms.js';
+import { BLOCKS } from './minecraftLlmcPrepRules.js';
 import { obsidianWays } from './minecraftLlmcObsidianWays.js';
 import { packLines, type TidyContext } from './minecraftLlmcPack.js';
 import { keepWordsOf, planMaterials } from './minecraftLlmcTidyKeep.js';
@@ -278,6 +279,7 @@ function mapFields(bodyIn: Rec, value: unknown, notes: RewriteNotes, watched: Wa
 const END_KINDS: ReadonlySet<PlanKind> = new Set<PlanKind>(['end', 'stronghold', 'pearl', 'dragon']);
 /** What the plan's nodes and the body's remembered places say to the tidy words (flow design C-5): materials held back, a table or furnace within 16 m. */
 const NEAR_STATION_M = 16;
+const END_SCAFFOLD = 64;
 function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
   const carried = new Map<string, number>();
   for (const line of inventory) {
@@ -298,7 +300,10 @@ function tidyContext(inventory: readonly string[], bodyIn: Rec): TidyContext {
     const metres = typeof text === 'string' ? /^(\d+(?:\.\d+)?)m/u.exec(text.trim())?.[1] : undefined;
     return metres !== undefined && Number(metres) <= NEAR_STATION_M;
   });
-  return { ...(held.size ? { held: (item: string) => held.get(item) ?? 0, keepWords: keepWordsOf(held) } : {}),
+  // 11/27: the blocks the End's scaffold counts (64) while the plan's now or next is of the End; what she carries of them, so a tidy does not throw the scaffold away unseen.
+  const blockStacks = [...carried].filter(([name, n]) => BLOCKS.test(name) && n > 0).sort((a, b) => b[1] - a[1]);
+  const blocks = hasKind(kinds, END_KINDS) && blockStacks.length ? { blocks: { have: blockStacks.reduce((sum, [, n]) => sum + n, 0), need: END_SCAFFOLD, held: blockStacks.slice(0, 4) } } : {};
+  return { ...(held.size ? { held: (item: string) => held.get(item) ?? 0, keepWords: keepWordsOf(held) } : {}), ...blocks,
     near: { table: within(['crafting_table']), furnace: within(['furnace', 'blast_furnace', 'smoker']) } };
 }
 /** Flow design E: the iron armour's numbers, only while the current or next node is the iron armour. */

@@ -191,12 +191,16 @@ const reachWords = (hop: GoHop): string => {
   return hop.stop === null ? `行き先 ${metres(hopSize(hop))} m に対し進んだ ${metres(hop.done)} m（着いた）`
     : `行き先 ${metres(hopSize(hop))} m に対し進んだ ${metres(hop.done)} m（${hop.stop}）`;
 };
-export function hopsLine(hops: readonly (GoHop | number)[], decisionsMs: readonly number[]): string | null {
+export const HOPS_STALE_MS = 2 * 60_000;
+export function hopsLine(hops: readonly (GoHop | number)[], decisionsMs: readonly number[], nowMs?: number): string | null {
   // A bare number is a go that arrived, that many metres from where it began.
   const recent = hops.slice(-5).map((hop): GoHop => typeof hop === 'number'
     ? { done: hop, target: hop, stop: null, seconds: null, fromY: null, toY: null } : hop);
   if (recent.length < 3) return null;
   if (hopSize(recent[recent.length - 1]!) >= LONG_GO_M) return null;
+  // 11/27: the line stood for 5 minutes in a stretch of waiting (nine `wait`s, no go) and read as advice about the next move; it is about the last gos, so it goes when the last one is 2 minutes old.
+  const lastAt = recent[recent.length - 1]!.at;
+  if (nowMs !== undefined && lastAt !== undefined && nowMs - lastAt >= HOPS_STALE_MS) return null;
   const median = (values: readonly number[]) => [...values].sort((x, y) => x - y)[Math.floor(values.length / 2)]!;
   const metres = median(recent.map(hopSize));
   if (metres >= SHORT_HOP_M) return null;
@@ -253,10 +257,10 @@ function altitudeInput(frame: BodyObservation | null, items: readonly Pick<Queue
  * reflexes and the hands that no item runs are not said to stop). */
 export function queueLines(items: readonly QueueWordsItem[], frame: BodyObservation | null,
   running: { progress: MinecraftQueueProgress | null; leftMs: number },
-  timing?: { wakeMs: number; leftMs: number; hops?: readonly (GoHop | number)[]; decisionsMs?: readonly number[]; reissuedAgoMs?: readonly number[];
+  timing?: { wakeMs: number; leftMs: number; hops?: readonly (GoHop | number)[]; nowMs?: number; decisionsMs?: readonly number[]; reissuedAgoMs?: readonly number[];
     droppedLately?: readonly string[]; altitude?: AltitudeSource }): string[] {
   // A line that says 「移動の go は 15 m 以上にせよ」 is for a calm stretch of work; with enemies on her or her health low it sent a flight to a target 31 m away (the lake was 12 m off).
-  const hopsWords = timing?.hops && !underAttack(frame) ? hopsLine(timing.hops, timing.decisionsMs ?? []) : null;
+  const hopsWords = timing?.hops && !underAttack(frame) ? hopsLine(timing.hops, timing.decisionsMs ?? [], timing.nowMs) : null;
   const altitudeWords = timing?.altitude ? altitudeLine(altitudeInput(frame, items, timing.altitude)) : null;
   const reissueWords = timing?.reissuedAgoMs ? reissueLine(timing.reissuedAgoMs) : null;
   const droppedWords = droppedLine(timing?.droppedLately ?? []);

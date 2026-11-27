@@ -28,6 +28,8 @@ export interface GoHop {
   /** The feet's y when the go began and when it ended (null: not known). */
   fromY: number | null;
   toY: number | null;
+  /** When it came back (ms since the epoch), for the line of short hops to stand only while the hops are recent; absent in older records. */
+  at?: number;
 }
 
 /** The size of a hop for the line of short moves: how far its goal was, else how far it got. */
