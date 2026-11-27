@@ -222,7 +222,7 @@ export function groundNote(feetY: number, drop: number): string {
 }
 /** The drop a footing line measures (a bare 「落差 N」; not 「以上」, lava or water: those say no ground), or null. */
 export function footingDropOf(line: string | null | undefined): number | null {
-  if (!line || /以上|溶岩|下は水/u.test(line)) return null;
+  if (!line || /以上|溶岩|下は水|void|虚空|未ロード|下は (?:cave_)?air/u.test(line)) return null;
   const drop = Number(/落差 (\d+)/u.exec(line)?.[1]);
   return Number.isInteger(drop) ? drop : null;
 }

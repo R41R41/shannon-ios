@@ -152,7 +152,7 @@ function endBridgeSentence(total: number, observation: BodyObservation | null, g
   }
   const need = 2 * metres + SCAFFOLD_KEPT_AT_END, room = Math.max(0, total - metres - SCAFFOLD_KEPT_AT_END);
   return `橋 約 ${metres} m（直線距離からの概算で、引き直しで外れる）: 往復 2×${metres} 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個＝${need} 個が要る。`
-    + (total >= need ? `go の maxPlace の上限は ${room}（合計 − 戻る橋 ${metres} − 降りる用 ${SCAFFOLD_KEPT_AT_END}）` : `合計 ${total} 個では足りない: 橋で渡らず、降りて地面で材料を掘る`);
+    + (total >= need ? `go の maxPlace の上限は ${room}（合計 − 戻る橋 ${metres} − 降りる用 ${SCAFFOLD_KEPT_AT_END}）` : `合計 ${total} 個では足りない: 宙・塔の上に居るなら橋で渡らず、降りて地面で材料を掘る（地面・出現の台から島へ渡る時は、戻らないなら片道 ${metres} 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個の ${metres + SCAFFOLD_KEPT_AT_END} 個で足りる）`);
 }
 
 /**
