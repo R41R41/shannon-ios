@@ -121,10 +121,10 @@ describe('a long phase 1', () => {
 
   it('keeps the no-climb rule for a short phase 1, and for a long one gives the floor height and what ends it (finding 4)', () => {
     expect(noBowLine(dragonView(5))).toContain('今は登らない（竜は火の玉を狙う phase 1');
-    const long = noBowLine(dragonView(300));
+    const long = [dragonLine(dragonView(300))!, noBowLine(dragonView(300))].join('\n');
     expect(long).toContain('今は登らない');
     expect(long).toContain('phase 1 が 300 秒続いている');
-    expect(long).toContain('火の玉を 1 発撃った時だけ');
+    expect(long).toContain('火の玉を 1 発撃つまでこの phase を続け');
     expect(long).toContain('y=62〜66');
     expect(climbNow(dragonView(300))).toBe(false);
   });
@@ -134,9 +134,9 @@ describe('a long phase 1', () => {
     const farView = { ...base, dragon: { ...base.dragon!, distance: 60, position: { x: 50, y: 110, z: 0 } } } as never;
     const noDistance = { ...base, dragon: { ...base.dragon!, distance: null, position: null } } as never;
     for (const view of [base, farView, noDistance]) {
-      const line = noBowLine(view);
+      const line = [dragonLine(view)!, noBowLine(view)].join('\n');
       expect(line).toContain('約 130 ブロック飛ばされて');
-      expect(line).toContain('火の玉を 1 発撃った時だけ');
+      expect(line).toContain('火の玉を 1 発撃つまでこの phase を続け');
       expect(line).not.toMatch(/30m より遠い|竜が近い|上が開けた地表|開けた地表へ出て|撃たせてよい|横へ外れ|柱や高所に登らず/u);
     }
   });

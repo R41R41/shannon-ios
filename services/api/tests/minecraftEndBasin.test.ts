@@ -172,7 +172,7 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
     expect(short(at(12))).not.toContain('待ち場の候補');
   });
   it('says the shooting places cannot be used without a bow or arrows, and keeps them when that is unknown', () => {
-    const without = endFightLines(view(), null, false).join('\n');
+    const without = endFightLines(endViewOf(frame({ ...world(), crystals: { ...world().crystals, remaining: 1 } })), null, false).join('\n');
     expect(without).toContain('クリスタルの射点: 弓か矢が無いので射点は使わない');
     expect(without).toContain('今登れる（竜は止まり木。計画の節がベッドや待ちでも、結晶が残る間はこれが先）');
     expect(without).not.toMatch(/撃てる位置|同じ射点/u);

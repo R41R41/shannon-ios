@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { ACT_CONTRACT_VERSION } from '../src/contracts/minecraftActTypes.js';
-import { createHeightWatch, crystalLine, dragonBedLine, dragonBurstLine, dragonWaitLine, endFightLines, noBowLine, waitSpanLine, waitStreakLine, SPIKE_TELLING_WORDS } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { createHeightWatch, crystalLine, dragonBedLine, dragonLine, dragonBurstLine, dragonWaitLine, endFightLines, noBowLine, waitSpanLine, waitStreakLine, SPIKE_TELLING_WORDS } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
 
@@ -69,9 +69,11 @@ describe('the run of waits is the task\'s, not the step\'s (finding 1)', () => {
 describe('a long phase 1 is facts, with no verdict on the distance (finding 2)', () => {
   it('names no distance and no measure when the input has no distance, with the spikes unread', () => {
     const view = viewOf({}, { distance: null, position: null, phaseFor: 300 });
-    const line = noBowLine(view);
-    expect(line).toContain('火の玉を 1 発撃った時だけ');
+    const line = [dragonLine(view)!, noBowLine(view)].join('\n');
+    expect(line).toContain('火の玉を 1 発撃つまでこの phase を続け');
     expect(line).toContain('約 130 ブロック飛ばされて');
+    expect(line).not.toContain('柱の上かどうかは関係なく');
+    expect(line).toContain('柱を登っている最中');
     expect(line).not.toMatch(/30m より遠い|竜が近い|開けた地表|撃たせてよい|横へ外れ/u);
   });
 });
@@ -124,5 +126,37 @@ describe('over the spikes, the way is to a spike, said once (findings 6, 7 and 8
     expect(text.split(SPIKE_TELLING_WORDS).length - 1).toBe(1);
     expect(text.split('島の地表の高さ').length - 1).toBeLessThanOrEqual(1);
     expect(crystalLine(view)).toContain(SPIKE_TELLING_WORDS);
+  });
+});
+
+describe('review of 69791020 (a to f)', () => {
+  it('says the バニラ firing conditions and the 11/9 run once across the fight lines of a long phase 1', () => {
+    const long = viewOf({}, { phaseFor: 300 });
+    const text = [dragonLine(long)!, noBowLine(long)].join('\n');
+    expect(text.split('撃つ条件（バニラのソース）').length - 1).toBe(1);
+    expect(text.split('11/9 の実走').length - 1).toBe(1);
+  });
+
+  it('the knowledge no longer tells her to wait on the ground for phase 1 to end, and does not call the surface open', async () => {
+    const { readFileSync } = await import('node:fs');
+    const text = readFileSync(new URL('../src/surfaces/minecraft/minecraftLlmcV2Knowledge.ts', import.meta.url), 'utf8');
+    expect(text).not.toContain('竜が周回に戻るか座るのを待つ');
+    expect(text).not.toContain('見通しが通る高さ');
+  });
+
+  it('a confirmed 0 of 10 says no climb: no 今は登らない, no obsidian-on-the-pillar line', () => {
+    const view = viewOf({ crystals: { remaining: 0, gone: 10, caged: 0, list: [], unseen: [] } }, { phaseFor: 30 });
+    const line = noBowLine(view);
+    expect(line).toContain('結晶は 0 本');
+    expect(line).not.toMatch(/今は登らない|柱の上で黒曜石|今登れる/u);
+  });
+
+  it('with no count and a crystal standing in the list, the bed and the burst and the sword are held back', () => {
+    const crystal = { id: 3, position: { x: 13, y: 76, z: -40 }, caged: false, distance: 20 };
+    const sit = viewOf({ crystals: { unseen: [], list: [crystal] } }, { phase: 6, approach: { strike: [], stage: [], retreat: [], wait, bed: [{ stand: { x: 1, y: 63, z: 1 }, foot: { x: 2, y: 63, z: 2 }, head: { x: 3, y: 63, z: 2 }, build: [], dragonExpected: 90, selfExpected: 2, walkMeters: 3 }] } });
+    expect(sit.crystals.remaining).toBeNull();
+    expect(dragonBedLine(sit, 'red_bed')).toContain('ベッドの手: 今は使わない（結晶が 1 本残る間');
+    const landing = viewOf({ crystals: { unseen: [], list: [crystal] } }, { phase: 2, id: 7 });
+    expect(dragonBurstLine(landing, 'red_bed')).toContain('今は使わない');
   });
 });
