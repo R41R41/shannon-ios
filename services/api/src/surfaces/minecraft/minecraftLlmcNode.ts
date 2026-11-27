@@ -129,6 +129,20 @@ export function planNowLine(view: { now?: unknown; path?: unknown } | null): str
 
 const NOW_LIMIT = 200;
 /**
+ * A distance the head wrote into a node's where (「残り約 771m」) stays in the plan as long as the node does: the line said 771 m for about 35 minutes while the real distance went to 177 m. The now says
+ * the place by its coordinates; the distance that holds now is the body's own (`reachWords`, 「交点まで N m」), from the feet.
+ */
+export function whereWithoutDistance(where: string | undefined): string | undefined {
+  if (!where) return where;
+  const stripped = where
+    .replace(/[（(]\s*(?:残り|あと|距離)\s*約?\s*[\d,.]+\s*(?:km|m|メートル)[^）)]*[）)]/gu, '')
+    .replace(/(?:残り|あと|距離)\s*約?\s*[\d,.]+\s*(?:km|m|メートル)(?:ほど|ぐらい|くらい)?/gu, '')
+    .replace(/約\s*[\d,.]+\s*(?:km|m|メートル)(?:ほど|ぐらい|くらい|\s*先)?/gu, '')
+    .replace(/[（(]\s*[）)]/gu, '').replace(/^[\s、，,・／/]+|[\s、，,・／/]+$/gu, '').replace(/[、，]{2,}/gu, '、');
+  return stripped || undefined;
+}
+
+/**
  * Notion 09-1c 2-5 (the current node was one string cut at 200 characters from its end, so a long where or path
  * could cut its done-condition; and the
  * condition was not read beside it): the current node from its own fields, with how far the frame meets its condition
@@ -142,7 +156,7 @@ const NOW_LIMIT = 200;
 export function currentNodeLine(node: { id: string; title: string; where?: string | undefined; doneWhen?: string | undefined; note?: string | undefined },
   pathOf: unknown, status: string | null, reach: string | null = null): string {
   const path = Array.isArray(pathOf) ? pathOf.filter((item): item is string => typeof item === 'string') : [];
-  const head = `[${node.id}] ${node.title}`;
+  const head = `[${node.id}] ${whereWithoutDistance(node.title) ?? node.title}`;
   // Run 9 of 11/27: a node of the walk to the point had no condition of its own, so nothing said how far the point was; `reach` (「交点まで N m」) stands in its place
   // (the node's own radius is the plan's to write; no condition is taken from the node above).
   const shown = !node.doneWhen && reach ? `未: ${reach}` : status;
@@ -150,9 +164,10 @@ export function currentNodeLine(node: { id: string; title: string; where?: strin
   const way = path.length ? `（道: ${path.slice(-2).join(' › ')}）` : '';
   const note = node.note ? ` ${node.note}` : '';
   const place = (where: string | undefined) => where ? `＠${where}` : '';
-  const shorter = node.where?.slice(0, 40);
-  for (const line of [`${head}${condition}${place(node.where)}${note}${way}`, `${head}${condition}${place(node.where)}${note}`,
-    `${head}${condition}${place(node.where)}`, `${head}${condition}${place(shorter)}`]) {
+  const shownWhere = whereWithoutDistance(node.where);
+  const shorter = shownWhere?.slice(0, 40);
+  for (const line of [`${head}${condition}${place(shownWhere)}${note}${way}`, `${head}${condition}${place(shownWhere)}${note}`,
+    `${head}${condition}${place(shownWhere)}`, `${head}${condition}${place(shorter)}`]) {
     if (line.length <= NOW_LIMIT) return line;
   }
   return `${head}${condition}`.slice(0, NOW_LIMIT);

@@ -195,6 +195,31 @@ function diamondLines(counts: ReadonlyMap<string, number>, left: number, max: nu
   lines.push(`黒曜石を壊せるのはダイヤのつるはしだけ（1 個＝1 使い）。残り ${left}/${max} は黒曜石 ${left} 個分（今 ${have} 個持ち。必要: ${said}）。残り少ないダイヤは黒曜石用に持ち続ける: 捨てない・空けない（体も最後の 1 本は投げない）。壊れたら作り直しはダイヤ 3 が要る`);
   return lines;
 }
+/**
+ * The diamond pickaxe wore out digging stone (73 of 1561 to nothing in about eight minutes) and the lines that told its obsidian use vanished with it (they hang on the pickaxe being in the pack), so the
+ * input said only 「黒曜石 7/8（あと 1）」 as if a mine would do. When no diamond (or netherite) pickaxe is carried and the obsidian is short of the fight's number: obsidian cannot be dug, what is held,
+ * and what making the pickaxe again takes (3 diamonds, 2 sticks, a table). A separate line from the pickaxe's own (`diamondLines`); null when one is carried, nothing is wanted, or in the End.
+ */
+export function noPickObsidianLine(counts: ReadonlyMap<string, number>, dimension: string | null, wanted = false, short = false): string | null {
+  if (dimension === 'the_end' || carried(counts, 'diamond_pickaxe') > 0 || carried(counts, 'netherite_pickaxe') > 0) return null;
+  const have = carried(counts, 'obsidian');
+  if (have >= OBSIDIAN_FIGHT || (have <= 0 && !wanted)) return null;
+  const diamonds = carried(counts, 'diamond');
+  if (short) return `黒曜石は掘れない（ダイヤのつるはしが荷に無い。手元 ${have}・作り直しはダイヤ 3）`;
+  return `黒曜石は掘れない（荷にダイヤのつるはしが無い）。手元 ${have}（点検 ${OBSIDIAN_CHECK}・戦い ${OBSIDIAN_FIGHT}）。作り直しはダイヤ 3＋棒 2＋作業台（手元のダイヤ ${diamonds}${diamonds >= 3 ? "＝作れる" : "＝足りない"}）`;
+}
+/**
+ * When the diamond pickaxe is the only pickaxe (no stone or iron one), every stone and ore dug wears it (the body takes the cheapest tool that breaks the block, and with one tool that is the diamond one),
+ * and the obsidian's use runs out. The hands to take before the next dig, as the node's candidate (not a fact to read about the pickaxe): wood, planks, sticks, a stone pickaxe, with the table. Null: a
+ * spare pickaxe is carried, no diamond pickaxe is carried, or she is not in the overworld.
+ */
+export function spareDigWords(counts: ReadonlyMap<string, number>, dimension: string | null): string | null {
+  if ((dimension !== null && dimension !== 'overworld') || carried(counts, 'diamond_pickaxe') <= 0 || SPARE_PICKS.some(name => carried(counts, name) > 0)) return null;
+  const logs = [...counts].reduce((sum, [name, n]) => sum + (/(?:^|_)log$/u.test(name) ? n : 0), 0);
+  const planks = [...counts].reduce((sum, [name, n]) => sum + (/_planks$/u.test(name) ? n : 0), 0);
+  const table = carried(counts, 'crafting_table') > 0 ? '作業台は持っている' : '作業台が要る（板 4。足元の近くに置く）';
+  return `今の手の候補（掘る手の前に）: 荷の掘る道具がダイヤのつるはし 1 本だけで、石を掘るだけでも毎回減る。石のつるはしを作る: 原木→板→棒 2→丸石 3（${table}。手元 原木 ${logs}・板 ${planks}・棒 ${carried(counts, 'stick')}・丸石 ${carried(counts, 'cobblestone')}）。ダイヤのは黒曜石用に取っておく`;
+}
 export function toolLines(world: Record<string, unknown>): string[] {
   const counts = carriedItemCounts(world, undefined);
   const extra: string[] = [];
@@ -206,7 +231,8 @@ export function toolLines(world: Record<string, unknown>): string[] {
     if (id === 'diamond_pickaxe' && extra.length === 0) extra.push(...diamondLines(counts, left, max));
     return [`${id} 残り ${left}/${max}（1/3 を切っている${make ? `。${make}` : ''}）`];
   }).slice(0, 3);
-  return [...lines, ...extra];
+  const noPick = noPickObsidianLine(counts, typeof world.dimension === 'string' ? world.dimension : null, false, true);
+  return [...lines, ...extra, ...(noPick ? [noPick] : [])];
 }
 
 /** Dusk or night in the overworld (the day's tick from 12000: the one-thing request's night line applies). */

@@ -110,7 +110,7 @@ describe('(d) the End shortage as one line of numbers', () => {
   it('d0132: beds 6/8, obsidian 7/8, no bow, arrows 0/12, the pickaxe, the armour 2/4, the eyes and what makes up for a broken one', () => {
     const facts = readinessOf(frame(world()))!;
     expect(endLackLine(facts, ['stronghold'])).toBe('エンドへ入る前に要る物のうち足りない分（数。点検物（ベッド・黒曜石・足場・弓矢）は要塞の後ろでよい。取りに出る節は要らない。身を守る物（防具の欠け・食料・掘る道具）は、近くの材料で作れる分だけ発つ前に作ってよい）: ベッド 6/8（あと 2）・黒曜石 7/8（あと 1）・弓なし（作るなら糸 0/3・棒 0/3。弓・矢は道中で材料が手に入った時だけ作る物で、取りに出る節は要らない）・矢 0/12（羽根 0・火打石 2・棒 0）'
-      + '・diamond_pickaxe 耐久 73/1561・防具 2/4（脚・足が無い）・アイ 11/12（割れた分の作り足し: パール 0・粉 1・ロッド 0）');
+      + '・diamond_pickaxe 耐久 73/1561・防具 2/4（脚・足が無い）。欠けた部位ぜんぶの鉄 脚 7＋足 4＝11（手元 インゴット 0・生の鉄 0）。足は鉄のブーツでよい（金のブーツはネザーに入る時だけ）・アイ 11/12（割れた分の作り足し: パール 0・粉 1・ロッド 0）');
   });
   it('says nothing in the Nether, or when every number is met', () => {
     expect(endLackLine(readinessOf(frame(world({ dimension: 'the_nether' })))!, ['stronghold'])).toBeNull();

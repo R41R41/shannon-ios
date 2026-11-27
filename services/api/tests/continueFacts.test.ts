@@ -147,7 +147,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     console.info(`continueFacts size ${JSON.stringify({ ...added, factsTokensByVersion: { normal: added.factsTokens, ...others } })}`);
     // 11/24: 700 -> 760 for the pack and gear lines (two facts lines with hostiles listed: about 120).
     // 11/27: 760 -> 820 for the fish line's reach (one note beside a fish in the food candidates: about 40).
-    expect(added.liveAfter - added.liveBefore).toBeLessThan(820);
+    // 11/27: 820 -> 880 for the row that says obsidian cannot be dug with no diamond pickaxe in the pack (about 51: the text measures 848).
+    expect(added.liveAfter - added.liveBefore).toBeLessThan(880);
     expect(added.liveAfter).toBeLessThan(12_000);
   });
 });
