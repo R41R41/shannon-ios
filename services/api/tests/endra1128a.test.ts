@@ -129,17 +129,16 @@ describe('a long phase 1', () => {
     expect(climbNow(dragonView(300))).toBe(false);
   });
 
-  it('with the dragon close (20 m) says to step out to open ground together with the ramming fact; far away it does not hold her back (finding 2)', () => {
-    const near = noBowLine(dragonView(300));
-    expect(near).toContain('竜が近い');
-    expect(near).toContain('約 130 ブロック飛ばされて');
-    expect(near).toContain('柱や高所に登らず');
-    expect(near).toContain('上が開けた地表');
+  it('says only facts of a long phase 1 (what ends it, the ram of 11/9), and no measure or distance verdict, near or far (review of 0adb0ebd)', () => {
     const base = dragonView(300);
     const farView = { ...base, dragon: { ...base.dragon!, distance: 60, position: { x: 50, y: 110, z: 0 } } } as never;
-    const far = noBowLine(farView);
-    expect(far).not.toContain('竜が近い');
-    expect(far).toContain('竜は今 30m より遠い');
+    const noDistance = { ...base, dragon: { ...base.dragon!, distance: null, position: null } } as never;
+    for (const view of [base, farView, noDistance]) {
+      const line = noBowLine(view);
+      expect(line).toContain('約 130 ブロック飛ばされて');
+      expect(line).toContain('火の玉を 1 発撃った時だけ');
+      expect(line).not.toMatch(/30m より遠い|竜が近い|上が開けた地表|開けた地表へ出て|撃たせてよい|横へ外れ|柱や高所に登らず/u);
+    }
   });
 
   it('on a pit bottom (y=49) names the island floor from the waiting cells and says the pit is not it (finding 4)', () => {

@@ -109,7 +109,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
   const hunt = createEnderHunt((saved as { minecraftEnderHunt?: unknown } | null)?.minecraftEnderHunt);
   const wool = createWoolWatch();
   const climb = createClimbWatch();
-  const height = createHeightWatch();
+  const height = createHeightWatch(saved);
   const trail = createDescentTrail((saved as { minecraftDescentTrail?: unknown } | null)?.minecraftDescentTrail);
   /** What she carried of the road's things before a death and the gates of each dimension, for the way back to its drops (`minecraftDeathReturn.ts`). */
   const deaths = createDeathWatch(saved);
@@ -170,7 +170,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
     },
     /** The eyes' ledger, for the hold that keeps the frames' eyes (`minecraftEyeThrowHold.ts`). */
     ledger,
-    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint(), ...deaths.checkpoint(), minecraftPearlSearch: { ...search }, minecraftDropsGivenUp: dropsGivenUp }),
+    checkpoint: () => ({ ...ledger.checkpoint(), ...blaze.checkpoint(), ...hunt.checkpoint(), ...trail.checkpoint(), ...deaths.checkpoint(), ...height.checkpoint(), minecraftPearlSearch: { ...search }, minecraftDropsGivenUp: dropsGivenUp }),
   };
 }
 export type Endgame = ReturnType<typeof createEndgame>;

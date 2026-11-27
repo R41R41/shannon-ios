@@ -192,7 +192,7 @@ function crystalWords(crystal: EndCrystal): string {
  */
 export function crystalsBeforeNodeNote(left: number | null, nodeText: string, unseen: number | null = null): string | null {
   if (left === 0 && unseen !== null && unseen > 0 && !/結晶|crystal|クリスタル/iu.test(nodeText)) {
-    return `。いま見えている結晶は 0 本だが、結晶の残りは確かめていない台座 ${unseen} 個（そこに結晶が立っているかは未確認で、立っていれば竜は毎秒 2 回復する）。この節（ベッド）へ進む前に、結晶の行の台座の座標へ近づいて確かめる（${SPIKE_TELLING_WORDS}）。確かめて残りが 0 になったらこの節へ戻る`;
+    return `。いま見えている結晶は 0 本だが、結晶の残りは確かめていない台座 ${unseen} 個（そこに結晶が立っているかは未確認で、立っていれば竜は毎秒 2 回復する）。この節（ベッド）へ進む前に、結晶の行の台座の座標へ近づいて確かめる。確かめて残りが 0 になったらこの節へ戻る`;
   }
   if (left === null || left < 1 || /結晶|crystal|クリスタル/iu.test(nodeText)) return null;
   return `。今の判断で出す手: 結晶の行の「今登れる」の手（待ちの手は出さない）。この節（ベッド・待ち）に結晶を壊す手は無いが、結晶が ${left} 本残る間はベッドの傷が次の座りまでに戻り（1 本でも竜は毎秒 2 回復する）、座りを待っても竜は倒せない。檻つきも同じ。結晶が 0 本になったらこの節へ戻る`;
@@ -245,10 +245,12 @@ function unseenWords(end: EndView | null): string | null {
  * on the strength of the count alone (not even on arrival, with all ten unread). Said as what to do first. Null: every spike has been read.
  */
 function unseenBedHold(end: EndView | null, what: string): string | null {
-  const unseen = unseenSpikes(end);
-  if (unseen === null || standingCrystals(end) !== 0) return null;
+  const unseen = unseenSpikes(end), standing = standingCrystals(end);
+  if (unseen === null || (standing !== null && standing !== 0)) return null;
   const spots = unseenSpotsWords(end, 2);
-  return `${what}: 今は出さない（確かめていない台座が ${unseen} 個ある。そこに結晶が立っていれば竜は毎秒 2 回復し、削った分が戻る。先に台座${spots ? ` ${spots}` : ''}へ近づいて数えを確かめる。${SPIKE_TELLING_WORDS}。台座が全部確かめられてから）`;
+  const count = standing === null ? '。結晶の残りの数は体が数えていないので、立っている本数は分からない' : '';
+  return `${what}: 今は出さない（確かめていない台座が ${unseen} 個ある${count}。そこに結晶が立っていれば竜は毎秒 2 回復し、削った分が戻る。ベッドの手・連爆・mc_probe kind=bedsite のどれも、台座が全部確かめられるまで出さない・呼ばない。`
+    + `先に台座${spots ? ` ${spots}` : ''}へ近づいて数えを確かめる）`;
 }
 
 /**
@@ -410,11 +412,23 @@ export function dragonWaitUrgentLine(end: EndView | null): string | null {
   return line && line.startsWith('今いる ') ? line : null;
 }
 
+/** The hand to a spike not yet read: go to its column at the ground's height (from the measured drop when she is aloft, else the waiting cells' height). Null: no spike is named. */
+function spikeGoWords(end: EndView | null, limit = 1): string | null {
+  const feet = end?.feet ?? null;
+  const spots = (end?.crystals.unseenSpots ?? []).map(spot => ({ spot, far: feet ? Math.hypot(spot.x - feet.x, spot.z - feet.z) : Infinity }))
+    .sort((a, b) => a.far - b.far).slice(0, limit);
+  if (!spots.length) return null;
+  const drop = aloftBy(end), ground = drop !== null && feet ? Math.round(feet.y - drop) : waitGround(end);
+  return spots.map(({ spot }) => `go ${spot.x},${ground ?? '<地表の高さ>'},${spot.z} range=6`).join(' / ');
+}
+
 /** While any crystal stands (caged ones too) she heals 2 a second between sits, however many stand, so the crystals come before waiting for the next sit (e04c 11/9; 11/27 the heal is not by the count). */
 function crystalsFirst(end: EndView | null): string {
   const standing = standingCrystals(end), unseen = unseenSpikes(end);
   if (standing !== null && standing >= 1) return `結晶が ${standing} 本残る間は待たず、結晶を壊しに行く（1 本でも竜は毎秒 2 回復し、座りの傷が周回中に戻るため。檻つきも壊す）。`;
-  return standing === 0 && unseen !== null ? `見えている結晶は 0 本（残りは確かめていない台座 ${unseen}）: 待つ間に台座へ近づいて確かめる手が先（結晶の行）。` : '';
+  if (standing !== 0 || unseen === null) return '';
+  const go = spikeGoWords(end);
+  return `見えている結晶は 0 本（残りは確かめていない台座 ${unseen}）: 次の座りを待つ前に、台座へ近づいて確かめる${go ? `（行き先は待ち場の候補ではなく台座: ${go}）` : '（結晶の行の台座）'}。`;
 }
 
 /** Waiting on the perch itself while she flies: her landing breath falls there, and the basin has no way out that the floor reflex can walk. */
@@ -528,17 +542,44 @@ export const WAIT_SPAN_ACTS = 8, WAIT_SPAN_SECONDS = 120;
 
 /** Acts of waiting in a row after which the streak line speaks (one run: about 60 waits on a pillar's top). */
 export const WAIT_STREAK = 10;
+interface HeightSaved { ground: number | null; since: number | null; lastHealth: number | null; hits: number; lost: number; waits: number; lastSnap: WaitSnap | null;
+  waitStart: { at: number; snap: WaitSnap | null } | null; sitting: boolean; sitFrom: number | null; sitLast: number | null; sitEnd: { health: number; at: number } | null;
+  lastSit: { from: number; to: number } | null; regained: { to: number; seconds: number; gain: number } | null }
+const numOrNull = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const countOf = (value: unknown): number => { const n = numOrNull(value); return n !== null && n >= 0 ? Math.floor(n) : 0; };
+const snapFrom = (value: unknown): WaitSnap | null => {
+  const raw = rec(value);
+  return raw ? { remaining: numOrNull(raw.remaining), unseen: numOrNull(raw.unseen), distance: numOrNull(raw.distance), phase: numOrNull(raw.phase), phaseFor: numOrNull(raw.phaseFor) } : null;
+};
+/** What a checkpoint held of the height watch, read with care: anything malformed is a fresh watch. */
+function readHeightSaved(saved: unknown): HeightSaved {
+  const raw = rec(rec(saved)?.minecraftHeightWatch), pair = (value: unknown, keys: string[]) => {
+    const item = rec(value);
+    const out = keys.map(key => numOrNull(item?.[key]));
+    return item && out.every(part => part !== null) ? out as number[] : null;
+  };
+  const start = rec(raw?.waitStart), at = numOrNull(start?.at);
+  const end = pair(raw?.sitEnd, ['health', 'at']), sit = pair(raw?.lastSit, ['from', 'to']), back = pair(raw?.regained, ['to', 'seconds', 'gain']);
+  return { ground: numOrNull(raw?.ground), since: numOrNull(raw?.since), lastHealth: numOrNull(raw?.lastHealth), hits: countOf(raw?.hits), lost: Math.max(0, numOrNull(raw?.lost) ?? 0),
+    waits: countOf(raw?.waits), lastSnap: snapFrom(raw?.lastSnap), waitStart: at !== null ? { at, snap: snapFrom(start?.snap) } : null, sitting: raw?.sitting === true,
+    sitFrom: numOrNull(raw?.sitFrom), sitLast: numOrNull(raw?.sitLast), sitEnd: end ? { health: end[0]!, at: end[1]! } : null,
+    lastSit: sit ? { from: sit[0]!, to: sit[1]! } : null, regained: back ? { to: back[0]!, seconds: back[1]!, gain: back[2]! } : null };
+}
+
 /**
  * The head's own count of a stay up high (nothing here is the body's): where the ground is (a footing line measured it, or the last measure, or the waiting cells' height), when she
  * went up, what health she lost there between two inputs, the acts of waiting in a row, and the dragon's health across her sits. 11/27: on a nine-wide obsidian top there is no gap, so
  * no footing line, so no drop: the input said nothing of the 39 m for 13 minutes, and a wait was chosen about 60 times until the breath killed her.
  */
-export function createHeightWatch() {
-  let ground: number | null = null, since: number | null = null, lastHealth: number | null = null, hits = 0, lost = 0, waits = 0;
-  let lastSnap: WaitSnap | null = null, waitStart: { at: number; snap: WaitSnap | null } | null = null;
-  let sitting = false, sitFrom: number | null = null, sitLast: number | null = null, sitEnd: { health: number; at: number } | null = null;
-  let lastSit: { from: number; to: number } | null = null, regained: { to: number; seconds: number; gain: number } | null = null;
+export function createHeightWatch(saved?: unknown) {
+  const was = readHeightSaved(saved);
+  let ground = was.ground, since = was.since, lastHealth = was.lastHealth, hits = was.hits, lost = was.lost, waits = was.waits;
+  let lastSnap: WaitSnap | null = was.lastSnap, waitStart: { at: number; snap: WaitSnap | null } | null = was.waitStart;
+  let sitting = was.sitting, sitFrom = was.sitFrom, sitLast = was.sitLast, sitEnd = was.sitEnd;
+  let lastSit = was.lastSit, regained = was.regained;
   return {
+    /** What the watch counted, for the task's checkpoint: the step is made again at every decision, the count is the task's (11/28 run 17: the streak lines never spoke). */
+    checkpoint: () => ({ minecraftHeightWatch: { ground, since, lastHealth, hits, lost, waits, lastSnap, waitStart, sitting, sitFrom, sitLast, sitEnd, lastSit, regained } }),
     /** An act's result: acts made of waits only, in a row. */
     noteActs(kinds: readonly string[], at: number = Date.now()): void {
       waits = kinds.length > 0 && kinds.every(kind => kind === 'wait' || kind === 'sleep') ? waits + 1 : 0;
@@ -701,25 +742,15 @@ function surfaceWords(end: EndView | null): string {
   return `${base}${low}`;
 }
 
-/** The dragon is close in phase 1: within 30 m, or flying no higher than 20 m over her feet (phase 1 brings it down to its target's height). */
-function strafeNear(end: EndView | null): boolean {
-  const dragon = end?.dragon ?? null;
-  if (!dragon || dragon.phase !== 1) return false;
-  const high = dragon.position && end?.feet ? dragon.position.y - end.feet.y : null;
-  return (dragon.distance !== null && dragon.distance <= 30) || (high !== null && high <= 20);
-}
-
-/** What the input says about a phase 1 that lasts: what ends it, what was seen of her body being hit, and where the open ground is. Facts, with the reason the hand carries. */
-function strafeAdvice(end: EndView | null): string {
-  const long = (end?.dragon?.phaseFor ?? 0) >= STRAFE_LONG_SECONDS;
-  const ram = 'phase 1 の竜は標的の高さ近くまで降りて来て、その体に当たると大きく飛ばされる（11/9 の実走: 約 130 ブロック飛ばされて島の外の奈落へ落ちた。柱の上かどうかは関係なく竜の体に当たったため）';
+/**
+ * What the input says about a phase 1 that lasts: what ends it, what was seen of her body being hit, and what blocks the sight. Facts only (11/28, the bench: 「開けた地表へ出て撃たせてよい」
+ * and 「竜の線から横へ外れて立つ」 were measures nobody had measured, and 「30m より遠い」 was written with no distance in the input; the ram happens as the dragon passes, whatever the distance).
+ */
+function strafeAdvice(end: EndView | null, surface = true): string {
+  const ram = 'phase 1 の竜は標的の高さ近くまで降りて来て、その体に当たると大きく飛ばされる（11/9 の実走: 約 130 ブロック飛ばされて島の外の奈落へ落ちた。柱の上かどうかは関係なく竜の体に当たったため。竜が 49m 先の時に登り始めて、11m まで来た体に当たった）';
   const ends = `phase 1 が終わるのは竜が火の玉を 1 発撃った時だけ（時間切れは無い）。${FIREBALL_FACTS}`;
-  const where = `${surfaceWords(end)}。縦穴・壁の中・天井の下は間にブロックがあり見通しが通らない`;
-  if (strafeNear(end)) {
-    return `${ends}。${ram}。${where}。竜が近い（30m 以内か自分に近い高さ）今は、柱や高所に登らず、上が開けた地表へ出て、竜の飛んで来る線（竜から自分へ）から横へ外れて立つ。`
-      + '撃たれて phase 0 に戻り竜が 30m 以上離れたらすぐ登る';
-  }
-  return `${long ? `${ends}。` : ''}${where}。上が開けた地表に出ると見通しが通る。竜は今 30m より遠いので、開けた地表へ出て撃たせてよい（${ram}）。撃たれて phase 0 に戻り 30m 以上離れたらすぐ登る`;
+  const sight = '縦穴・壁の中・天井の下は間にブロックがあり見通しが通らない';
+  return `${ends}。${ram}。${surface ? `${surfaceWords(end)}。` : ''}${sight}`;
 }
 
 export function noBowLine(end: EndView | null, sit: string | null = null): string {
@@ -750,14 +781,16 @@ export function noBowLine(end: EndView | null, sit: string | null = null): strin
   if (aloft !== null) {
     const atCage = cageAtFeet(end);
     if (atCage) return `${head}。今は檻つき ${atCage.id === null ? '' : `#${atCage.id} `}の柱の上（結晶の ${Math.max(0, Math.round(atCage.position.y - (end?.feet?.y ?? atCage.position.y)))} 段下）: 結晶の座標は下の行にあるので sight や around で調べ直さず、1 つの判断で pillarUp で結晶と同じ高さまで積んで attack target=end_crystal（格子ごしにそのまま。格子は掘らない）→ すぐ降りる（降りる手と費用は「高所:」の行）。blast_unsafe で断られた時だけ dig at=[格子${barsOf(end, atCage.id) || '（行の格子の座標）'}] collect=false → place block=obsidian で覆い直してから attack。降りないで待たない${tail}`;
-    return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
+    const spikeOnly = standingCrystals(end) === 0 && unseenSpikes(end) !== null ? spikeGoWords(end) : null;
+    const toSpike = spikeOnly ? `。いま見えている結晶は 0 本で、登る柱も殴る的も無い。降りた後の行き先は待ち場ではなく確かめていない台座（結晶の行）: ${spikeOnly}（降りる手の後ろに続けて並べる）` : '';
+    return `${head}。${aloftLine(end, aloft, target, name, phase)}${toSpike}${tail}`;
   }
   // Run 17 (11/28): no crystal in view and the count held by unseen spikes only: there is no pillar to climb and nothing to strike; what is left to do is to go and look.
   if (standingCrystals(end) === 0 && unseenSpikes(end) !== null) {
     const spots = unseenSpotsWords(end);
     return `クリスタルの射点: いま見えている結晶は 0 本で、登る柱も殴る的も無い。残りは確かめていない台座だけ${spots ? `: ${spots}` : ''}。`
-      + `${surfaceWords(end)}。その高さの地表を go で台座へ近づき 3 秒居る（${SPIKE_TELLING_WORDS}。結晶が見えれば list に出て、無ければ壊れたと数えて残りが減る）。残りが 0 になれば結晶の節は終わる`
-      + `${phase === 1 ? `。${strafeAdvice(end)}` : ''}`;
+      + `${surfaceWords(end)}。その高さの地表を go で台座へ近づき 3 秒居る（結晶が見えれば list に出て、無ければ壊れたと数えて残りが減る。数え直しの条件は結晶の行）。残りが 0 になれば結晶の節は終わる`
+      + `${phase === 1 ? `。${strafeAdvice(end, false)}` : ''}`;
   }
   if (phase === 1 && dragon?.phaseFor !== null && dragon?.phaseFor !== undefined && dragon.phaseFor >= STRAFE_LONG_SECONDS) {
     return `${head}。今は登らない（柱の上で phase 1 の竜に当たって飛ばされた 11/9 の実走）。phase 1 が ${round(dragon.phaseFor)} 秒続いている。${strafeAdvice(end)}${tail}`;
@@ -826,7 +859,10 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   const bedHand = dragonBedLine(end, bedItem) ?? dragonBurstLine(end, bedItem), basin = dragonBasinLine(end);
   if (bedHand) lines.push(bedHand);
   // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
-  if (basin) lines.push(bedHand || (standingCrystals(end) ?? 0) > 0 ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);
+  // While a crystal stands, or a spike is unread (one may stand there: she heals 2 a second), the sword is held back as the bed is.
+  const swordHeld = (standingCrystals(end) ?? 0) > 0 ? true : unseenBedHold(end, '剣の手') !== null;
+  if (basin) lines.push(bedHand || swordHeld ? basin : `${basin}（ベッドの手が出ない間は剣の手: この行の先頭の足場へ go range=0.5 seconds=12 → 剣を持って attack target=ender_dragon seconds=30 onFail="continue" → 待ち場へ go。この足場から届くのは主に首・胴（傷は 1/4＋1）で、座りの間打ち続けて削る形: 頭の下へは寄らない。途中で竜が飛び立ったら replace で待ち場へ go（窪みに残らない））`);
+  if (basin && !bedHand && (standingCrystals(end) ?? 0) === 0) { const held = unseenBedHold(end, '剣の手'); if (held) lines.push(held); }
   const wait = dragonWaitLine(end);
   if (wait) lines.push(wait);
   return lines;
