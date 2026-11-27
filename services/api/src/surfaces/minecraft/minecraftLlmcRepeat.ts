@@ -18,7 +18,7 @@ const CELL = /\((-?\d+,-?\d+,-?\d+)\)/u;
  * `enderman_not_visible` and for a digging that stopped `support_not_removed`, so 「目が見えない」 and 「道が無い」 read the same). The body's words are its closed ones and
  * stay; the hand's own code, which the result of the act says, is put after them: `(126,62,-320) 無い 4秒前（enderman_not_visible）`.
  */
-export interface StopCode { cell: string; word: string; code: string }
+export interface StopCode { cell: string; word: string; code: string; /** The body's own words after the code (the reason it gave), when the result line had them. */ reply?: string }
 export const STOP_CODES_KEPT = 12;
 const CODE_AT_END = /（([A-Za-z][\w:.-]*)）$/u;
 /** The word a hand's line starts with (`無い: fight 止まった …` → 「無い」), as the body's stop line says it. */
@@ -30,8 +30,19 @@ export function stopCodesOf(resultJson: string | undefined): StopCode[] {
   return result.lines.flatMap(line => {
     const word = wordOf(line.line), spot = line.where ?? result.at;
     if ((line.status !== 'stopped' && line.status !== 'failed') || !line.code || !word || !spot) return [];
-    return [{ cell: `${Math.floor(spot.x)},${Math.floor(spot.y)},${Math.floor(spot.z)}`, word, code: line.code }];
+    const after = line.line.indexOf(`${line.code}: `);
+    const reply = after >= 0 ? line.line.slice(after + line.code.length + 2).trim().slice(0, REPLY_CHARS) : '';
+    return [{ cell: `${Math.floor(spot.x)},${Math.floor(spot.y)},${Math.floor(spot.z)}`, word, code: line.code, ...(reply ? { reply } : {}) }];
   });
+}
+const REPLY_CHARS = 160;
+/** The reply the body gave to the same stop three times or more among the kept codes (the newest one's words, the count of that code), or null. */
+export function repeatedReply(codes: readonly StopCode[]): { text: string; count: number } | null {
+  const last = [...codes].reverse().find(entry => entry.reply);
+  if (!last) return null;
+  const count = codes.filter(entry => entry.code === last.code && entry.word === last.word).length;
+  // The same code at another place is still the same refusal (a hunt has no cell of its own), so the count is by code and word.
+  return count >= 3 ? { text: last.reply!.replace(/（同じ所・同じ理由で\d+回目）/u, ''), count } : null;
 }
 /** The body's stop lines with the code of the hand that stopped there (the newest code of the same cell and word) after each; a line with none, or one the code is already in, is as it was. */
 export function withStopCodes(lines: readonly string[], codes: readonly StopCode[]): string[] {

@@ -5,6 +5,7 @@ import { carriedFood } from './minecraftLlmcLive.js';
 import { requestFlag } from './minecraftLlmcFightFacts.js';
 import { doneFacts, parseDoneWhen, prepUnmetFacts, undergroundInOverworld } from './minecraftPlanDone.js';
 import { dayBedLine, dayNoBedLine, nightChoiceLine } from './minecraftNightArms.js';
+import { animalsLine, enderSeenWords, nightMeanwhileLine, notePearlWatch, pearlDayLine, pearlNowOf } from './minecraftNightPearl.js';
 import { firstPlanWaiting } from './minecraftFirstPlan.js';
 import { frameDigLine } from './minecraftEndFrameDig.js';
 import { noPickObsidianLine, spareDigWords } from './minecraftLlmcFightFacts.js';
@@ -80,6 +81,18 @@ export interface JudgeParts {
 
 /** The facts' context from the plan's promises (the tree), and whether food is what she is short of (the near
  * words' own reading). */
+/**
+ * Whether the pearls are the plan's now: the node's kind is `pearl`, or the pearls are short for the portal room's frames in the End's stage (`pearlNowOf`: the renamed pearl node
+ * of the run of 11/27 kept the kind `stronghold`, and the night's "not asleep" fact never came). A request of one thing has no pearls to hunt.
+ */
+export function pearlNowFor(llmc: Pick<LlmcBodyParts, 'singleRequest' | 'journeyReadiness'>, planFacts: PlanFacts | undefined, observation: BodyObservation | null): boolean {
+  const kinds = nowKinds(planFacts), kindPearl = kinds.includes('pearl');
+  const facts = readinessOf(observation);
+  if (!facts) return kindPearl;
+  return pearlNowOf({ kindPearl, world: facts.world, counts: facts.counts, dimension: facts.dimension, journey: llmc.singleRequest !== true && llmc.journeyReadiness !== false,
+    endStage: preparationStage(facts.dimension, facts.counts, kinds) === 'end' });
+}
+
 /** A surface errand (o06 a hunt, o08 the village's beds): at dusk it is the morning's. Cooking and crafting are done in the hole. */
 const SURFACE_ERRAND = /村|原木|動物|狩|豚|牛|羊|鶏|ニワトリ|羊毛|干し草|畑|箱|ベッド|歩く|探す|見に行く|寄る/u, INDOOR = /焼く|かまど|調理|作る|工作|鉄|石炭|ダイヤ|鉱/u;
 export function factsContext(
@@ -93,7 +106,7 @@ export function factsContext(
     world = (observation?.state.world ?? {}) as Record<string, unknown>;
   const food = carriedFood(world, observation?.facts ?? {}),
     hunger = typeof world.food === 'number' && Number.isFinite(world.food) ? world.food : null;
-  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), nowKinds(planFacts).includes('pearl'));
+  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), pearlNowFor(llmc, planFacts, observation));
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
     ...(judge.burning ? { burning: true } : {}),
@@ -151,7 +164,7 @@ export function readinessParts(
   view: object | null,
   observation: BodyObservation | null,
   taskId?: string,
-): { planNow?: string; shortage?: string; recovery?: string[]; planFacts?: PlanFacts; onceFacts?: OnceFact[] } {
+): { planNow?: string; shortage?: string; recovery?: string[]; planFacts?: PlanFacts; onceFacts?: OnceFact[]; animals?: string } {
   const facts = readinessOf(observation);
   const tree = planTreeOf(llmc),
     nodes = tree?.nodes ?? [],
@@ -159,6 +172,8 @@ export function readinessParts(
   const planFacts = planFactsOf(tree, llmc.singleRequest === true) ?? undefined;
   const out = { ...(planNow ? { planNow } : {}), ...(planFacts ? { planFacts } : {}) };
   if (!facts) return out;
+  notePearlWatch(taskId, facts.world, facts.dimension);
+  const pearlNow = pearlNowFor(llmc, planFacts, observation);
   const display = llmc.plan();
   // Run 43: the fuel for what she carries to smelt is a lack of its own, beside the stage's.
   const shortage =
@@ -204,11 +219,14 @@ export function readinessParts(
   // No bed by day is said too (a night with no bed cost two deaths and the materials in a run), unless a plan node already makes it; and the night's sleep in one line
   // beside the plan's now (a skip on, a booking the body may keep, what a sleep costs), so the sleep is weighed against what the node is for.
   const bedNode = nodes.some(node => node.state !== 'done' && node.state !== 'blocked' && (node.kind === 'bed' || node.kind === 'village' || /ベッド|have:bed|\bbed\b/u.test(`${node.title ?? ''} ${node.doneWhen ?? ''}`)));
-  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, nowKinds(planFacts).includes('pearl'), llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, () => dayBedAdviceTold(taskId))
+  const bedLine = choice ?? (planNow ? dayBedLine(facts.world, facts.counts, facts.dimension, pearlNow, llmc.singleRequest !== true && carried(facts.counts, 'ender_eye') <= 0, () => dayBedAdviceTold(taskId))
     ?? dayNoBedLine(facts.world, facts.counts, facts.dimension, bedNode) : null);
   const nodeNow = nodes.find(node => node.id === (display?.current ?? tree?.current));
   const sleepLine = planNow && taskId ? sleepStateLine(observation, taskId, nodeNow?.title ?? null) : null;
-  const night = [sleepLine, bedLine].filter(Boolean).join('。') || null;
+  // 11/27: while the pearls are short the day's fact (where they mainly come from, what the day has shown of endermen) and, as the dusk comes, what can be moved besides waiting.
+  const pearlLines = planNow ? [pearlDayLine(facts.world, facts.counts, facts.dimension, pearlNow, enderSeenWords(taskId)), nightMeanwhileLine(facts.world, facts.counts, facts.dimension, pearlNow)] : [];
+  const night = [sleepLine, bedLine, ...pearlLines].filter(Boolean).join('。') || null;
+  const animals = animalsLine(taskId, facts.world);
   // Run 6 (2026-11-11): while a furnace works, the hands to take instead of standing (the iron and coal in reach, the plan's next section that does not need the furnace's output),
   // said first like the night's choices (the replay of the night's line moved 3/6 to 6/6); the same choices are in the hold of a long wait (`furnaceStandHold`).
   const meanwhile = planNow ? furnaceMeanwhileLine(facts.world, facts.counts, nodes, display?.current ?? tree?.current ?? null, taskId) : null;
@@ -228,6 +246,7 @@ export function readinessParts(
       : waiting ? planNowWhileFirstPlan(current ? `[${current.id}] ${current.title ?? ''}` : planNow, meanwhile, choice ? night : null, first)
       : planNowOrdered(spare && llmc.journeyReadiness !== false ? `${planNow}。${spare}` : planNow, meanwhile, night, first, !!choice) } : {}),
     ...(shortage ? { shortage } : {}),
+    ...(animals ? { animals } : {}),
     ...recoveryParts(recovery, () => foodLeads(facts.world, facts.dimension, nodes, facts.at ?? null), route),
     ...(planFacts ? { planFacts } : {}),
     ...(onceFacts?.length ? { onceFacts } : {}),

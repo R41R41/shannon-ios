@@ -4,6 +4,8 @@ import { thunderstorm } from './minecraftLlmcStateWords.js';
 import { SLEEP_COST, SLEEP_SKIP } from '../../contracts/minecraftSleepWords.js';
 import { REQUEST_NIGHT_WAY } from './minecraftRequestSteps.js';
 import { oreRouteHands, SEALED_SHAFT_WORD, stonePickHands, STONE_SHAFT } from './minecraftOreRoute.js';
+import { framesOf } from './minecraftSeenMarks.js';
+import { wornItems } from './minecraftItems.js';
 export { thunderstorm } from './minecraftLlmcStateWords.js';
 
 /**
@@ -117,9 +119,36 @@ export const enemyNear = (world: Record<string, unknown>): boolean => (Array.isA
  * eyes are under the 10 that go to the stronghold, the bed's line says that too, as a fact beside it; the choice stays hers.
  */
 const PEARLS_TO_GO = 10;
-const pearlNightWord = (counts: ReadonlyMap<string, number>, pearlNow: boolean): string =>
-  pearlNow && carried(counts, 'ender_pearl') + carried(counts, 'ender_eye') < PEARLS_TO_GO
-    ? '。パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）' : '';
+/**
+ * Pearls and eyes still missing: against the empty frames of the portal room when the body has counted them (`framesOf`: the frames seen less the eyes in them), else
+ * against the 10 that go to the stronghold. 11/27 (run of that night): the plan's pearl node was renamed and kept its kind `stronghold`, so the plan's now never read as a pearl node;
+ * with 10 eyes in the pack and 1 frame still empty the gap is 1 pearl, which the 10 alone did not show.
+ */
+export function pearlGap(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): number {
+  const frames = framesOf(world);
+  const need = frames ? Math.max(0, frames.frames - frames.eyes) : PEARLS_TO_GO;
+  return Math.max(0, need - carried(counts, 'ender_pearl') - carried(counts, 'ender_eye'));
+}
+
+/** The pieces she has on, of the four (`world.worn`), for the night's danger words. */
+const ARMOUR_PIECES = /^(?:leather|chainmail|iron|golden|diamond|netherite|turtle)_(?:helmet|chestplate|leggings|boots)$/u;
+/**
+ * What waiting on the surface in the dark is, as facts beside the pearl hunt: her health, the armour on, the shield, the creatures near, and what spawns. No hand and no
+ * threshold; whether the night is spent on the surface is hers.
+ */
+export function nightDangerWords(world: Record<string, unknown>, counts: ReadonlyMap<string, number>): string {
+  const parts: string[] = [];
+  if (typeof world.health === 'number' && Number.isFinite(world.health)) parts.push(`体力 ${Math.round(world.health * 10) / 10}/20`);
+  if (typeof world.worn === 'string') parts.push(`着ている防具 ${wornItems(world.worn).filter(name => ARMOUR_PIECES.test(name)).length}/4`);
+  parts.push(`盾 ${carried(counts, 'shield') > 0 ? 'あり' : '無し'}`);
+  if (Array.isArray(world.nearbyThreats)) parts.push(`今見えている敵 ${world.nearbyThreats.length} 体`);
+  return `夜に地表で待つ時の事実: ${parts.join('・')}・夜の地上はゾンビ・スケルトン・クリーパー・クモが湧く（明かりの無い所ほど）`;
+}
+
+/** The pearl word of the bed's lines: said while the plan's now is the pearls (`pearlNow`) and some are still missing (`pearlGap`), with the night's danger beside it. */
+const pearlNightWord = (world: Record<string, unknown>, counts: ReadonlyMap<string, number>, pearlNow: boolean): string =>
+  pearlNow && pearlGap(world, counts) > 0
+    ? `。パールを地上のエンダーマンで集めるなら、その夜は寝ない（地上のエンダーマンは夜に出て、寝ると夜が飛ぶ）。${nightDangerWords(world, counts)}` : '';
 
 /**
  * The bed against the night, as the facts of the game (the coordinator's wording of 11/4, after run60 and run61 both ended in a night): within a minute of
@@ -140,8 +169,8 @@ export function nightBedLine(world: Record<string, unknown>, counts: ReadonlyMap
     return tick < BED_FROM ? null
       : `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）が、8m 内に敵がいる間は寝られない（壁の向こうでも断られる）。敵が届かず 8m より離れた所なら寝られる`;
   }
-  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。待たずに sleep の手を 1 つ積めば、夜になり次第（10 秒以内なら体が待って）寝る。${SLEEP_COST}。ただし夜に湧く敵を倒す・夜のうちに急ぐ作業や、人が寝ないと言った時は積まない（積んだ後は ${SLEEP_SKIP} で消せる）${pearlNightWord(counts, pearlNow)}`;
-  return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。${SLEEP_COST}（近くに敵がいる間は寝られない）。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。夜に湧く敵を倒す・夜のうちに急ぐ作業の間と、人が寝ないと言った時は寝ない（${SLEEP_SKIP}）。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(counts, pearlNow)}`;
+  if (tick < BED_FROM) return `夜まで ${minutes(NIGHT_FROM - tick)}: ベッドを持っている（${name}）。寝られるのは夜になってから（あと ${minutes(BED_FROM - tick)}）。待たずに sleep の手を 1 つ積めば、夜になり次第（10 秒以内なら体が待って）寝る。${SLEEP_COST}。ただし夜に湧く敵を倒す・夜のうちに急ぐ作業や、人が寝ないと言った時は積まない（積んだ後は ${SLEEP_SKIP} で消せる）${pearlNightWord(world, counts, pearlNow)}`;
+  return `夜（朝まで ${minutes(NIGHT_TO - tick)}）: ベッドを持っている（${name}）。${SLEEP_COST}（近くに敵がいる間は寝られない）。寝るのは、これから地上で動く夜を飛ばす時か、地上へ出る手の直前が夜の時。夜に湧く敵を倒す・夜のうちに急ぐ作業の間と、人が寝ないと言った時は寝ない（${SLEEP_SKIP}）。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒。地上へ出る見込みの時刻と比べる）${pearlNightWord(world, counts, pearlNow)}`;
 }
 
 /**
@@ -166,7 +195,7 @@ export function dayBedLine(world: Record<string, unknown>, counts: ReadonlyMap<s
   const left = BED_FROM - tick;
   const facts = `昼（寝られるまで ${minutes(left)}）・ベッドを持っている。それまで待てば ${minutes(left)} なにも進まない${netherShare(left, nether)}`;
   if (typeof brief === 'function' ? brief() : brief) return `${facts}。今の節を進める。${NO_SLEEP_FOR_WORK}。夜を使う依頼や人が寝ないと言った時は予約しない`;
-  return `${facts}。${NO_SLEEP_FOR_WORK}。今の節を進める。予約の理由: 夜の地上は敵が増えて危なく、寝れば夜が飛んで朝になる。夜を使う依頼・節（夜に湧く敵を倒す・夜に急ぐ）や、人が寝ないと言った時は入れない（${SLEEP_SKIP} で予約を消せる）。夜を使わない依頼（ケーキ・羊毛・道具づくり）は入れてよい。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒）${pearlNightWord(counts, pearlNow)}`;
+  return `${facts}。${NO_SLEEP_FOR_WORK}。今の節を進める。予約の理由: 夜の地上は敵が増えて危なく、寝れば夜が飛んで朝になる。夜を使う依頼・節（夜に湧く敵を倒す・夜に急ぐ）や、人が寝ないと言った時は入れない（${SLEEP_SKIP} で予約を消せる）。夜を使わない依頼（ケーキ・羊毛・道具づくり）は入れてよい。地下の作業が続く間の夜は飛ばさない（夜は約 520 秒）${pearlNightWord(world, counts, pearlNow)}`;
 }
 
 /**

@@ -11,7 +11,7 @@ import { breathWords, clockStalledSeconds, timeWords } from './minecraftLlmcStat
 import { clean, cleanText, round1 } from './minecraftTransientObservation.js';
 import { furnaceLedgerLines, ledgerContextOf } from './minecraftLlmcFurnaceWait.js';
 import { furnaceFoodOf, fullnessMarginWords } from './minecraftFoodWords.js';
-import { withStopCodes, type StopCode } from './minecraftLlmcRepeat.js';
+import { repeatedReply, withStopCodes, type StopCode } from './minecraftLlmcRepeat.js';
 import { dropGuardWords } from './minecraftLlmcHazardFacts.js';
 
 /**
@@ -308,6 +308,8 @@ export interface LlmcLiveParts {
    */
   planNow?: string | null;
   shortage?: string | null;
+  /** 11/27: where the animals the hunts go for were last seen, said while none is in view (`animalsLine`), after the shortage. */
+  animals?: string | null;
   recovery?: readonly string[];
   /**
    * r7 (runs 29–31): the near hostiles the body's sight found walled off (`urgentFacts`): after the plan's now,
@@ -356,8 +358,11 @@ const LAST_RESULTS_CHARS = 8_000;
  * and stopped six times at the same walls): the same stop twice or more at one place, or a fall or water that
  * took her health or air.
  */
-export function lookHint(world: Record<string, unknown>, healthLost = 0): string | null {
+export function lookHint(world: Record<string, unknown>, healthLost = 0, codes: readonly StopCode[] = []): string | null {
   const repeated = strings(world.recentStops, STOPS).some(line => Number(/×(\d+)/u.exec(line)?.[1] ?? 1) >= 2);
+  // 11/27: a hunt came back `no_target` seven times in a row, and this line said the cause was not visible while the body's own reply (「40m 内に sheep の成体が居ない」) was in the results: said here, as the body wrote it.
+  const reply = repeated ? repeatedReply(codes) : null;
+  if (reply) return `同じ所で同じ止まりが続いている。体の返事（${reply.count} 回同じ）: ${reply.text}。mc_view の slice で縦の断面、layers で周りが見られる`;
   if (repeated) return '同じ所で同じ止まりが続いている（原因は見えていない。mc_view の slice で縦の断面、layers で周りが見られる）';
   const oxygen = finite(world.oxygen);
   if ((oxygen !== null && oxygen < 10) || healthLost >= 6) {
@@ -368,11 +373,12 @@ export function lookHint(world: Record<string, unknown>, healthLost = 0): string
 
 /** r6: the plan's now, the shortage and the recovery, each only when there is one; r7: then the walled-off
  * hostiles; r8: then the footing. */
-function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'queue' | 'shortage' | 'recovery' | 'unreachable' | 'footing'>)
+function readinessFields(parts: Pick<LlmcLiveParts, 'planNow' | 'road' | 'meter' | 'queue' | 'shortage' | 'animals' | 'recovery' | 'unreachable' | 'footing'>)
   : Record<string, unknown> {
   return { ...(parts.planNow ? { planNow: parts.planNow } : {}), ...(parts.road ? { road: parts.road } : {}), ...(parts.meter ? { meter: parts.meter } : {}),
     ...(parts.queue?.length ? { queue: [...parts.queue] } : {}),
     ...(parts.shortage ? { shortage: parts.shortage } : {}),
+    ...(parts.animals ? { animals: parts.animals } : {}),
     ...(parts.recovery?.length ? { recovery: [...parts.recovery] } : {}),
     ...(parts.unreachable?.length ? { unreachable: [...parts.unreachable] } : {}), ...(parts.footing ? { footing: parts.footing } : {}) };
 }
@@ -391,7 +397,7 @@ export function minecraftLlmcLive(parts: LlmcLiveParts, planTokens = 0): Record<
   const lostIn5min = 'fullness' in state ? parts.trend.lostIn5min() : null;
   const margin = typeof state.fullness === 'number' ? fullnessMarginWords(state.fullness, lostIn5min, finite(world.health)) : null;
   // r3: why the step is urgent (first) and the hint to look round (beside the stops): counted in the bound, never cut.
-  const look = lookHint(world, parts.healthLost ?? 0);
+  const look = lookHint(world, parts.healthLost ?? 0, parts.stopCodes ?? []);
   const bodyFields = () => ({
     ...(parts.urgent?.length ? { urgent: parts.urgent.slice(0, 4) } : {}),
     ...bodyAgeField(parts.bodyAge),

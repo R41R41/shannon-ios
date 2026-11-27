@@ -154,7 +154,7 @@ export function dropAdvice(packed: { filler: ReadonlyArray<[string, number]>; ju
 function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: Array<[string, number]> = [], tidy: TidyContext = {}): string | null {
   if (free > FULL_SOON) return null;
   const keepStack = keepStackFor(free), held = tidy.held ?? (() => 0);
-  const say = tidySay(tidy.keepWords);
+  const say = tidySay(tidy.keepWords, tidy.blocks);
   if (free === 0) {
     // Full now: said as what is so and what it costs, not as what will happen (run 46). tidy goes before drop (2026-11-13).
     const spare = dropAdvice({ filler, junk }, held, keepStack);
@@ -172,12 +172,20 @@ function fullSoon(free: number, filler: ReadonlyArray<[string, number]>, junk: A
  * 2026-11-13 (run 9: 20 acts to clear a full pack, the drops mostly missing the pit): at 3 free slots or fewer, the hand that makes the room. `keepWords`: what the
  * plan's current and next nodes need, as `物:数,…` (nothing: no example).
  */
-const tidySay = (keepWords?: string): string => `tidy で空ける（捨てる物と焼く原石を体が選ぶ）。要る物は keep=物:数${keepWords ? `（今の節の材料: keep=${keepWords}）` : ''}`;
+const tidySay = (keepWords?: string, blocks?: TidyContext['blocks']): string => `tidy で空ける（捨てる物と焼く原石を体が選ぶ）。要る物は keep=物:数${keepWords ? `（今の節の材料: keep=${keepWords}）` : ''}${blocksWords(blocks)}`;
+/**
+ * 11/27 (the dirt and cobblestone she had thrown to make room were the scaffold that was short by 63): when the End's check wants blocks to stand on and she carries some, the
+ * tidy words say which of the pack count for that and what throwing them costs. Facts only: the count, the kinds, the number short after a full throw; keeping them is `keep=`.
+ */
+const blocksWords = (blocks?: TidyContext['blocks']): string => blocks && blocks.held.length
+  ? `。足場に数える物（${blocks.held.map(([name, n]) => `${name}×${n}`).join('・')}）は今 ${blocks.have}/${blocks.need}。捨てると足場があと ${blocks.need - Math.max(0, blocks.have - blocks.held.reduce((sum, [, n]) => sum + n, 0))} 個要る（残すなら keep=${blocks.held.map(([name, n]) => `${name}:${n}`).join(',')}）` : '';
 /** What the plan needs and where she stands, for the tidy words (all optional; none given: no extra line is said). */
 export interface TidyContext {
   /** What the open promises and the plan's materials hold back of an item. */
   held?: (item: string) => number;
   keepWords?: string;
+  /** The blocks that count for the End's scaffold (`have` of `need`) and the kinds she carries (largest first), while the End's check is the plan's stage. */
+  blocks?: { have: number; need: number; held: ReadonlyArray<readonly [string, number]> };
   /** A crafting table or a furnace within reach (remembered within 16 m). */
   near?: { table?: boolean; furnace?: boolean };
 }

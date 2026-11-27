@@ -68,7 +68,7 @@ describe('a queue line for a fight that waits', () => {
 describe('the codes beside the body stop lines', () => {
   const json = JSON.stringify(result(26_600));
   it('reads the code, word and cell of a stopped hand', () => {
-    expect(stopCodesOf(json)).toEqual([{ cell: '124,62,-319', word: '無い', code: 'enderman_not_visible' }]);
+    expect(stopCodesOf(json)).toMatchObject([{ cell: '124,62,-319', word: '無い', code: 'enderman_not_visible' }]);
     expect(stopCodesOf('not json')).toEqual([]);
   });
   it('puts the code after the stop line of the same cell and word', () => {
