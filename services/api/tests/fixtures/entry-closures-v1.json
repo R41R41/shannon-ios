@@ -875,6 +875,7 @@
     "surfaces/minecraft/minecraftEnderHunt.ts",
     "surfaces/minecraft/minecraftEndgame.ts",
     "surfaces/minecraft/minecraftEyeLedger.ts",
+    "surfaces/minecraft/minecraftEyeSpare.ts",
     "surfaces/minecraft/minecraftEyeTap.ts",
     "surfaces/minecraft/minecraftEyeThrowHold.ts",
     "surfaces/minecraft/minecraftEyeTriangulation.ts",

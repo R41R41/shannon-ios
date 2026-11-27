@@ -171,13 +171,13 @@ async function treeParts(records: Records, decisions: readonly string[]) {
     const now = String(record(record(body.planFacts)?.now)?.id ?? tree.current ?? '');
     const held = { ...tree, current: tree.nodes.some(node => node.id === now) ? now : tree.current };
     const observation = { schemaVersion: 1, bodyId: 'minecraft:replay', sequence: 1, stateAt: new Date(0).toISOString(), receivedAt: new Date(0).toISOString(), connected: true,
-      state: { world }, facts: { alive: true, dimension: world.dimension } } as never;
+      state: { world }, facts: { alive: true, dimension: (world as { dimension?: unknown }).dimension } } as never;
     const llmc = { journeyReadiness: true, plan: () => undefined, planView: () => null, planTree: () => held } as never;
     const nodeNow = held.nodes.find(node => node.id === held.current);
     const path = nodeNow ? ancestors(held.nodes, nodeNow.id) : [];
     const made = readinessParts(llmc, { path } as never, observation);
     const counts2 = carriedItemCounts(world as never, {} as never);
-    const prep = preparationShortage({ dimension: String(world.dimension), counts: counts2, food: carriedFood(world as never, {} as never).points, nowKinds: null, world: world as never, journeyReadiness: true } as never);
+    const prep = preparationShortage({ dimension: String((world as { dimension?: unknown }).dimension), counts: counts2, food: carriedFood(world as never, {} as never).points, nowKinds: null, world: world as never, journeyReadiness: true } as never);
     acts[id] = { planNow: made.planNow ?? null, shortage: made.shortage ?? null, prep: prep ?? null };
   }
   return { actProtocol: profile.protocol, actTransient: profile.transient, planSystem: ownFirstPlanSystem(), planPrep: planPrep ?? null, acts };
