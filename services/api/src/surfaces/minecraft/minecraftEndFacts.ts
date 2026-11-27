@@ -391,6 +391,26 @@ function cagedLeft(end: EndView | null): number | null {
   return list.length > 0 && list.length >= left && list.every(crystal => crystal.caged === true) ? list.length : null;
 }
 
+/** The drop under the feet (m) from which she is taken to be aloft (on a pillar's top or a bridge in the air): the bow-less line then starts from the ground, not from the feet. */
+export const ALOFT_FROM_METRES = 10;
+const aloftBy = (end: EndView | null): number | null => {
+  const drop = end?.drop;
+  return typeof drop === 'number' && Number.isFinite(drop) && drop >= ALOFT_FROM_METRES ? drop : null;
+};
+
+/**
+ * Aloft (the drop under her feet is 10 m or more): what a fall costs is on the footing line; this says what the line's plan is from here. A crystal's pillar was
+ * crossed on a bridge laid in the air from the top of another until the blocks ran out, and she stood on a one-wide foothold 40 high for four minutes.
+ */
+function aloftLine(end: EndView | null, drop: number, target: EndCrystal | null, name: string | null, phase: number | null): string {
+  const ground = end?.feet ? Math.round(end.feet.y - drop) : null;
+  const rise = target && ground !== null ? Math.round(target.position.y - ground) - 2 : null;
+  const dragon = phase === 1 || phase === 8 ? `竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}: 高所の橋で渡ることも、登ることと同じ（火の玉の線に立つ）。` : '';
+  const then = name && rise !== null && rise > 0 ? `降りた後に ${name} の柱を登るなら、地面から約 ${rise} 段。` : '';
+  return `今は宙・塔の上（地面まで ${drop} m）。${dragon}先に降りて地面で end_stone を掘る（柱は掘りながら降りられる: vertical down shaft）。`
+    + `高さのまま橋で渡ると置く物が尽き宙に残る。次の柱へ短く渡るのは、置ける足場の行の往復分が足りる時だけ。${then}`;
+}
+
 export function noBowLine(end: EndView | null): string {
   const head = 'クリスタルの射点: 弓か矢が無いので射点は使わない（結晶は柱の脇を積んで登って殴る）';
   const dragon = end?.dragon ?? null;
@@ -411,8 +431,10 @@ export function noBowLine(end: EndView | null): string {
   if (caged !== null && caged <= 2) {
     return `${head}。檻なしの結晶はもう無い（残りは檻つき ${caged} 本）: 檻つきは残したまま竜を倒す。竜が座ったらベッドの手の行、飛んでいる間は待ち場の行の所で次の座りを待つ（柱は登らない）`;
   }
+  const aloft = aloftBy(end);
+  if (aloft !== null) return `${head}。${aloftLine(end, aloft, target, name, phase)}${tail}`;
   if (phase === 1 || phase === 8) {
-    return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
+    return `${head}。今は登らない（竜は${phase === 1 ? '火の玉を狙う' : '体当たりの'} phase ${phase}。高所の橋で渡ることも同じ: 火の玉の線に立つ）: ${foot}へ寄って待ち、phase が変わり 30m 以上離れたらすぐ登る${tail}`;
   }
   if (phase !== null && phase >= 3 && phase <= 7) return `${head}。今登れる（竜は止まり木）: ${climb}${tail}`;
   if (far === null || far >= CLIMB_CLEAR_METRES) {
@@ -425,7 +447,7 @@ export function noBowLine(end: EndView | null): string {
 /** Whether the no-bow line says 「今登れる」 now (the same tests as `noBowLine`). */
 export function climbNow(end: EndView | null): boolean {
   const phase = end?.dragon?.phase ?? null, far = end?.dragon?.distance ?? null;
-  if (phase === 9 || phase === 1 || phase === 8) return false;
+  if (phase === 9 || phase === 1 || phase === 8 || aloftBy(end) !== null) return false;
   const caged = cagedLeft(end);
   if (caged !== null && caged <= 2) return false;
   return (phase !== null && phase >= 3 && phase <= 7) || far === null || far >= CLIMB_CLEAR_METRES;

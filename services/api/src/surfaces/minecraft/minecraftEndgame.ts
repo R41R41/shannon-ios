@@ -145,7 +145,7 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       if ((input as { kind?: unknown } | null)?.kind === 'scan' && facts && searchingForPearls(facts.counts, facts.dimension)) search.scans += 1;
     },
     /** The lines of this decision: empty for a task that is not after the dragon. */
-    lines(observation: BodyObservation | null, dragonTask: boolean, pearlNow = false): EndgameLines {
+    lines(observation: BodyObservation | null, dragonTask: boolean, pearlNow = false, footingDrop: number | null = null): EndgameLines {
       const world = worldOf(observation);
       const facts = doneFacts(observation);
       if (!dragonTask || !world || !facts) return NONE;
@@ -153,7 +153,8 @@ export function createEndgame(saved: unknown, now: () => number = Date.now) {
       // The eyes the body kept on this world before this task (its `eyeThrows`): read in once, when the ledger is empty; absent from an older body (nothing happens).
       if (facts.dimension === 'overworld') ledger.seed(world.eyeThrows, now());
       if (facts.seen?.has('end_portal_frame') || facts.dimension === 'the_end') ledger.clear();
-      const end = endViewOf(observation);
+      const viewed = endViewOf(observation);
+      const end = viewed && footingDrop !== null ? { ...viewed, drop: footingDrop } : viewed;
       return compose(world, end, facts, eyeLinesOf(ledger, facts, now(), world), { blaze: blaze.line(world, facts.counts, facts.dimension, now()),
         hunt: hunt.line(world, facts.counts, facts.dimension, now()), trail: trail.line(facts),
         wool: wool.line(world, facts.counts, facts.dimension), climb: shooting => climb.line(end, shooting, now()), pearlNow, search, dropsGivenUp,

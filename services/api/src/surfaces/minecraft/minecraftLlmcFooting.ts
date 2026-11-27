@@ -211,6 +211,29 @@ export function footingLine(footing: Footing | null, facts: (key: string) => Col
   return `足場: ${shapeText(gaps)}（${depth.text}）${depth.falls ? '。押されたら落ちる' : ''}`;
 }
 /**
+ * Where the fall ends, from the depth the line already says (a bare number is measured: 「落差 40」 means a solid floor 40 under the feet; 「以上」, lava and
+ * water say something else and are left alone). The head read 「落差 40」 as a number to weigh, not as a ground 40 down, and did not see that a drop of 40
+ * kills at full health: the ground's height, the damage (a fall hurts by the drop less 3; armour does not take it off) and whether full health survives.
+ */
+export function groundNote(feetY: number, drop: number): string {
+  const hurt = Math.max(0, drop - 3);
+  const kills = hurt >= 20 ? `体力 20 でも即死` : `体力が ${hurt} 以下なら死ぬ`;
+  return `下は地面 y=${feetY - drop}（落差 ${drop}）。落ちると約 ${hurt} の被害・防具は効かない・${kills}（水バケツで着水できる時だけ減る）`;
+}
+/** The drop a footing line measures (a bare 「落差 N」; not 「以上」, lava or water: those say no ground), or null. */
+export function footingDropOf(line: string | null | undefined): number | null {
+  if (!line || /以上|溶岩|下は水/u.test(line)) return null;
+  const drop = Number(/落差 (\d+)/u.exec(line)?.[1]);
+  return Number.isInteger(drop) ? drop : null;
+}
+/** The footing line with the ground said after a measured drop of 4 or more (the line as it was when there is none to say). */
+export function withGround(line: string | null, feetY: number): string | null {
+  if (!line) return line;
+  const drop = footingDropOf(line);
+  if (drop === null || drop < FOOTING_PROBES.hurtsFrom + 1) return line;
+  return `${line.replace(/。$/u, '')}。${groundNote(feetY, drop)}`;
+}
+/**
  * The footing of a decision: from the map, with a `column` probe for each gap the map cannot measure (`run` sends one to the body; none:
  * the guess is said as a guess), waited `budgetMs` at most, the answers kept for the task. The line (or null), how many probes, the ms.
  */
@@ -242,7 +265,8 @@ export async function lookAtFooting(parts: { taskId: string; map: string | undef
     clearTimeout(timer);
   }
   const ms = Math.round(performance.now() - began), gaps = footing.gaps.length;
-  return body ? { line: body, gaps, asked: asking.length, ms, by: 'body' } : { line: footingLine(footing, known), gaps, asked: asking.length, ms, by: 'map' };
+  return body ? { line: withGround(body, footing.feet.y), gaps, asked: asking.length, ms, by: 'body' }
+    : { line: withGround(footingLine(footing, known), footing.feet.y), gaps, asked: asking.length, ms, by: 'map' };
 }
 
 /** The body's `around` for the footing (its 13:50 form): a short radius, the creatures and dangers beside the footing it says. */

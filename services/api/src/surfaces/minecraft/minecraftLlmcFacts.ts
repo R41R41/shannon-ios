@@ -504,6 +504,8 @@ export interface FactsContext {
   detour?: readonly string[];
   /** Typed body failures, including only candidates checked against the frame being shown. */
   failures?: readonly string[];
+  /** The last act was refused before it was sent (`notSentLine`): the first line of the facts. */
+  notSent?: string;
   /** The way to the dragon (`minecraftEndgame.ts`): the lines of the normal version, and the shorter set an urgent or shortened one keeps. */
   endgame?: { lines: readonly string[]; short: readonly string[] };
   /** The plan's kinds now: the current node's kind, then those above it (`nowKinds`). The diamond veins and flint lines read them. */
@@ -532,8 +534,8 @@ export function inputFacts(observation: BodyObservation | null, context: FactsCo
   const stops = [...context.stops ?? []];
   const food = (shown: number) => context.wantsFood ? [foodLine(observation, shown)] : [];
   const endgame = (short: boolean) => (short || urgent ? context.endgame?.short : context.endgame?.lines) ?? [];
-  const make = (short: boolean) => [...head, ...endgame(short), ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
-     context.promises ?? []), ...(short || urgent ? [] : liveFactLines(observation, context.nowKinds)), ...(urgent ? [] : [scaffoldLine(observation)]), ...promises, ...stops,
+  const make = (short: boolean) => [...(context.notSent ? [context.notSent] : []), ...head, ...endgame(short), ...food(short || urgent ? FOOD_KEPT : FOOD_NORMAL_MAX), ...packLines(observation, ahead, short,
+     context.promises ?? []), ...(short || urgent ? [] : liveFactLines(observation, context.nowKinds)), scaffoldLine(observation, { urgent, goal: context.goal ?? null }), ...promises, ...stops,
      ...(context.detour ?? []), ...(context.failures ?? [])]
     .filter((line): line is string => !!line);
   return { lines: make(false), compressed: make(true) };

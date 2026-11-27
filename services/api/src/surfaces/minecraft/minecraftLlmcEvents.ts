@@ -22,6 +22,8 @@ export interface TaskEvents {
   pending: string[];
   /** r3: why the last result makes the next step urgent (a reflex or a hostile cut the act), or null. */
   cut: string | null;
+  /** The last act was refused before it was sent (no hand moved): the refusal's first line, the next input's first line says so. */
+  notSent: string | null;
   /** r3: her health at the last decision, for what a fall or a blast took since. */
   health: number | null;
   /** r7: the last act was stopped by its own stopIf (where it stopped is looked at from the shooters near). */
@@ -54,6 +56,7 @@ export function eventsOf(taskId: string): TaskEvents {
       trend: createFoodTrend(),
       pending: [],
       cut: null,
+      notSent: null,
       health: null,
       stopIf: false,
       lastAt: null,
@@ -197,6 +200,17 @@ export function urgentFacts(
 const HEAVY_MELEE_FOES = new Map([['hoglin', 40], ['zoglin', 40], ['piglin_brute', 50]]);
 const MELEE_FOES = new Set(['magma_cube', 'wither_skeleton', 'piglin_brute', 'hoglin', 'zoglin', 'zombie', 'husk', 'drowned']);
 
+/**
+ * A vertical down was refused for a missing `liquid`; the next decision had the refusal in its history and still stretched a bridge.
+ * An act refused whole (`この act は全体を送っていない`, the body's words) is told at the head of the next input, as a fact with what is wrong, as
+ * 「反射が止めた」 is for an urgent one. Null for any other result.
+ */
+export function notSentLine(text: string): string | null {
+  if (!/この act は全体を送っていない/u.test(text)) return null;
+  const wrong = (text.split(String.fromCharCode(10))[0] ?? '').replace(/\s+/gu, ' ').trim().slice(0, 240);
+  return `前の act は送られていない（どの手も動いていない）: ${wrong}。足りない所だけ直した同じ手を出し直す（別の手に変えると、元の手は動かないまま）`;
+}
+
 export function cutOf(text: string, bodyReflex: boolean): string | null {
   if (/急ぎ: .+ が近づいたので act を止めた/u.test(text)) return '前の act は敵が近づいて止めた';
   if (bodyReflex) return '前の act は体の反射が止めた';
@@ -255,6 +269,7 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
       state.failed = !ok;
       if (name === MC_ACT_TOOL) {
         state.cut = cutOf(text, bodyReflex);
+        state.notSent = ok ? null : notSentLine(text);
         state.stopIf = /（stopIf: /u.test(text);
       }
     },
@@ -320,6 +335,8 @@ export function createLlmcEvents(taskId: string, now: () => number = Date.now) {
     healthLost: () => healthLost,
     /** Why the last result makes the next step urgent, or null. */
     cut: () => state.cut,
+    /** The line for an act that was refused before it was sent, or null (the last act went, or was not refused). */
+    notSent: () => state.notSent,
     trend: state.trend,
   };
 }

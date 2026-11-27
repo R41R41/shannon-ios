@@ -75,6 +75,10 @@ export interface JudgeParts {
   /** The node's go detour line (`detourLines`). */
   detour?: readonly string[];
   failures?: readonly string[];
+  /** The last act was refused before it was sent (`notSentLine`). */
+  notSent?: string | null;
+  /** The drop under her feet that the footing line says (`footingDropOf`), for the End's lines. */
+  footingDrop?: number | null;
   /** A blow of fire within the window (`burnedRecently`), and where the hands go (`queueGoal`, else the plan's place). */
   burning?: boolean;
   goal?: Goal | null;
@@ -107,7 +111,7 @@ export function factsContext(
     world = (observation?.state.world ?? {}) as Record<string, unknown>;
   const food = carriedFood(world, observation?.facts ?? {}),
     hunger = typeof world.food === 'number' && Number.isFinite(world.food) ? world.food : null;
-  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), pearlNowFor(llmc, planFacts, observation));
+  const endgame = llmc.endgame?.lines(observation, isDragonPlan(tree), pearlNowFor(llmc, planFacts, observation), judge.footingDrop ?? null);
   return {
     ...(judge.hits ? { hits: judge.hits } : {}),
     ...(judge.burning ? { burning: true } : {}),
@@ -125,6 +129,7 @@ export function factsContext(
     ...(judge.stops?.length ? { stops: withStopReadings(judge.stops) } : {}),
     ...(judge.detour?.length ? { detour: judge.detour } : {}),
     ...(judge.failures?.length ? { failures: judge.failures } : {}),
+    ...(judge.notSent ? { notSent: judge.notSent } : {}),
     wantsFood: wantsFood({
       fullness: hunger,
       points: food.points,

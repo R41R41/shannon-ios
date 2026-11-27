@@ -135,19 +135,43 @@ const SCAFFOLD = /^(?:cobblestone|cobbled_deepslate|netherrack|blackstone|basalt
 /** The pack's count under which a bridge or a climb is not started (the knowledge: back to land under 16, and 64 before a long road). */
 export const SCAFFOLD_LOW = 16, SCAFFOLD_LONG = 64;
 
+/** What is kept back of the blocks in the End when a bridge is laid: the few to build up or wall with at the far end (the knowledge: leave 3 or more). */
+export const SCAFFOLD_KEPT_AT_END = 3;
+
+/**
+ * The End's way of counting what a bridge may use (the line says the count as a sum, with a bridge's length as an estimate): a bridge of M metres is M blocks
+ * out and M back (the way back is a bridge again when the near end is not ground), and a few are kept for the far end. With M from the go she has queued or
+ * the plan's place (the straight line, so an estimate: a bridge is drawn again where it is blocked), else as a formula. A run with 32 pieces and a bridge to
+ * another pillar stood in the air with none left; the sum said 32 and nothing said what the way back costs.
+ */
+function endBridgeSentence(total: number, observation: BodyObservation | null, goal: { at: ActPos } | null): string {
+  const feet = posOf(world(observation).position);
+  const metres = goal && feet ? Math.round(Math.hypot(goal.at.x - feet.x, goal.at.z - feet.z)) : null;
+  if (metres === null) {
+    return `渡る橋の長さ M（行き先までの直線距離からの概算）の往復 2×M 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個が合計に収まる時だけ橋で渡る。go の maxPlace の上限は 合計 − M − ${SCAFFOLD_KEPT_AT_END}`;
+  }
+  const need = 2 * metres + SCAFFOLD_KEPT_AT_END, room = Math.max(0, total - metres - SCAFFOLD_KEPT_AT_END);
+  return `橋 約 ${metres} m（直線距離からの概算で、引き直しで外れる）: 往復 2×${metres} 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個＝${need} 個が要る。`
+    + (total >= need ? `go の maxPlace の上限は ${room}（合計 − 戻る橋 ${metres} − 降りる用 ${SCAFFOLD_KEPT_AT_END}）` : `合計 ${total} 個では足りない: 橋で渡らず、降りて地面で材料を掘る`);
+}
+
 /**
  * 「置ける足場: netherrack×40・nether_bricks×6（合計 46 個）」: in the Nether and the End, where a bridge or a climb is a go with canPlace, the count of
  * what she may place (bridge, climb, and the roof block of a fight), before the hand is chosen. The body's dimension name is `the_nether`. None elsewhere (the pack's own line counts the stacks).
+ * An urgent input keeps it in the End only (a bridge or a pillar there is where she stands, and its count is what an urgent decision lacks); the Nether's urgent input does not.
  */
-export function scaffoldLine(observation: BodyObservation | null): string | null {
+export function scaffoldLine(observation: BodyObservation | null, options: { urgent?: boolean; goal?: { at: ActPos } | null } = {}): string | null {
   const w = world(observation);
   const dimension = typeof w.dimension === 'string' ? w.dimension.replace(/^minecraft:/u, '') : null;
-  if (dimension !== 'nether' && dimension !== 'the_nether' && dimension !== 'the_end' && dimension !== 'end') return null;
+  const inEnd = dimension === 'the_end' || dimension === 'end';
+  if (dimension !== 'nether' && dimension !== 'the_nether' && !inEnd) return null;
+  if (options.urgent && !inEnd) return null;
   const found = [...carriedItemCounts(w, observation?.facts ?? {})].filter(([name, count]) => SCAFFOLD.test(name) && count > 0)
     .sort((a, b) => b[1] - a[1]);
   const total = found.reduce((sum, [, count]) => sum + count, 0);
   const list = found.length ? found.map(([name, count]) => `${name}×${count}`).join('・') : 'なし';
-  const level = total < SCAFFOLD_LOW ? `${SCAFFOLD_LOW} 個を切っている。橋・登りを始めても途中で尽きて宙に残る`
+  const level = inEnd ? endBridgeSentence(total, observation, options.goal ?? null)
+    : total < SCAFFOLD_LOW ? `${SCAFFOLD_LOW} 個を切っている。橋・登りを始めても途中で尽きて宙に残る`
     : total < SCAFFOLD_LONG ? `長い橋・登りには ${SCAFFOLD_LONG} 個の目安に足りない（go の置く数 maxPlace はこの合計の中で決める）`
       : `go の置く数 maxPlace はこの合計の中で決める`;
   return `置ける足場（go の canPlace・vertical・fight の屋根に使える物）: ${list}（合計 ${total} 個）。${level}`;

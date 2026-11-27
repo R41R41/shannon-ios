@@ -12,7 +12,7 @@ import {
 bodyAgeField,llmcPlanTokens,llmcTokens,minecraftLlmcLive,minecraftLlmcUrgentLive,staleBodyLine
 } from './minecraftLlmcLive.js';
 import { noteBodySeen } from './minecraftBodyAbsent.js';
-import { lookAtFooting } from './minecraftLlmcFooting.js';
+import { footingDropOf, lookAtFooting } from './minecraftLlmcFooting.js';
 import { burnedRecently, inputAgeLine, posIn, queueGoal, type Goal } from './minecraftLlmcHazardFacts.js';
 import { approachingIds,nearMemory,newApproach,noteNear,planNowTitle,sameShooterBack,URGENT_NOTE } from './minecraftLlmcUrgent.js';
 import { createHitWatch,inputFacts,onceFor,queueNowLines,type HitWatch } from './minecraftLlmcFacts.js';
@@ -166,7 +166,7 @@ export function withLlmcBody(body: FcaBodyLifecycle, parts: { llmc: LlmcBodyPart
   };
   const judge = (): JudgeParts => ({ hits: hitWatch.line(), since: events.since(), ahead: parts.queue?.ahead() ?? [], stops: events.stops(),
     ...(burnedRecently(hitWatch.recent(), now()) ? { burning: true } : {}), ...(goalNow() ? { goal: goalNow()! } : {}),
-    detour: detourLines(parts.taskId, currentNodeOf(parts.llmc)?.id, now()), failures: [...events.failureFacts(observation), ...fightRepeatLines(parts.taskId, observation, now())] });
+    detour: detourLines(parts.taskId, currentNodeOf(parts.llmc)?.id, now()), failures: [...events.failureFacts(observation), ...fightRepeatLines(parts.taskId, observation, now())], notSent: events.notSent(), footingDrop: footingDropOf(footing) });
   const queueNow = (frame: BodyObservation | null): string[] => parts.queue ? queueNowLines(parts.queue.lines(frame), parts.queue.ahead()) : [];
   // The stops of the acts that ended (a go's or a vertical's distance left) are told with the next decision, from
 // the receipt's result and not from its words.

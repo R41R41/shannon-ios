@@ -137,6 +137,8 @@ export interface EndCloud {
 export interface EndView {
   /** Current feet, only for ordering shooting places; not a destination. */
   feet: Point | null;
+  /** Metres from her feet down to the solid ground below, when the footing says it (the head sets it from its footing line; the body does not count it). */
+  drop?: number | null;
   dragon: EndDragon | null;
   perch: Point | null;
   crystals: { remaining: number | null; gone: number | null; caged: number | null; unseen: number | null; visible: number | null; list: EndCrystal[];
