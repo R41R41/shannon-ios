@@ -102,7 +102,9 @@ export function measuredSpeed(samples: readonly SpeedSample[], under: boolean): 
 /** The hops, the speed samples and the last goal of each task (newest last); the queue writes them as results settle. */
 export const goSamples = new Map<string, SpeedSample[]>();
 export const lastGoGoal = new Map<string, ActPos>();
-export function forgetGoAltitude(): void { goSamples.clear(); lastGoGoal.clear(); }
+/** The last go goal the model named at the surface (y at or above the surface's): while she is below it the height is read against it, though the go she runs now goes to a nearer place under the ground. */
+export const surfaceGoGoal = new Map<string, ActPos>();
+export function forgetGoAltitude(): void { goSamples.clear(); lastGoGoal.clear(); surfaceGoGoal.clear(); }
 
 // ---- the line
 
@@ -125,8 +127,10 @@ export interface AltitudeInput {
   /** The body's dimension name (「overworld」); anything else says nothing. */
   dimension: string | null;
   feet: ActPos | null;
-  /** Where the hands go (the queue's last go, else the last go that came back). */
+  /** Where the hands go (the queue's last go, else the last go that came back, else the last goal the model named at the surface). */
   goal: ActPos | null;
+  /** The goal is the surface goal the model named before, not the go that runs now (the line says so). */
+  remembered?: boolean;
   /** The y the last go lost (feet y at its start less at its end, positive going down); null when not known. */
   lastDropM: number | null;
   samples: readonly SpeedSample[];
@@ -158,10 +162,11 @@ export function altitudeLine(input: AltitudeInput): string | null {
   const pillar = pillarS ?? PILLAR_S, stairs = stairsS ?? STAIRS_S;
   const climbLow = up * Math.min(pillar, stairs), climbHigh = up * Math.max(pillar, stairs);
   const metres = Math.round(up), away = Math.round(level);
+  const aim = input.remembered ? `行き先（さっき地表へ出した go の行き先 (${goal.x},${goal.y},${goal.z})）` : '行き先';
   const compare = `比べ：地下を掘り進めば ${span(away / digLow, away / digHigh)}／${metres} m 上がってから歩けば 上がり ${span(climbLow, climbHigh)}＋歩き ${span(away / walkLow, away / walkHigh)}`;
   const dropped = input.lastDropM !== null && input.lastDropM >= 5 ? `。直近の go で y が ${Math.round(input.lastDropM)} m 下がった（地下へ入った）` : '';
   const advice = input.underAttack || away < NEAR_ADVICE_M ? ''
     : `。地下にいて行き先が ${NEAR_ADVICE_M} m 以上先なら、石を掘って進むより、先に vertical up で地表へ上がってから go する方が速い目安（理由は上の比べ）`;
-  return `高さ：今 y=${Math.round(feet.y)}、行き先 y=${Math.round(goal.y)} → ${metres} m 下（地下）。行き先まで水平 ${away} m${dropped}。`
+  return `高さ：今 y=${Math.round(feet.y)}、${aim} y=${Math.round(goal.y)} → ${metres} m 下（地下）。行き先まで水平 ${away} m${dropped}。`
     + `この実走で見えた速さ：${walkWords}・${digWords}・${pillarWords}・${stairsWords}（柱・階段は水中・封じながらの値）。${compare}${advice}`;
 }

@@ -233,14 +233,19 @@ export function reissueLine(agoMs: readonly number[]): string | null {
 }
 
 /** What the queue keeps for the line of height and speed (`minecraftLlmcAltitude.ts`): the last go's goal, the y it lost, the speeds its gos measured. */
-export type AltitudeSource = Pick<AltitudeInput, 'lastDropM' | 'samples' | 'tune'> & { lastGoal: ActPos | null };
+export type AltitudeSource = Pick<AltitudeInput, 'lastDropM' | 'samples' | 'tune'> & { lastGoal: ActPos | null; surfaceGoal?: ActPos | null };
 /** The line's input from the frame (feet, dimension), the queue's open items (where its last go goes, else where the last go that came back went) and what the queue kept. */
 function altitudeInput(frame: BodyObservation | null, items: readonly Pick<QueueWordsItem, 'input'>[], kept: AltitudeSource): AltitudeInput {
   const w = world(frame), at = rec(w.position), x = finite(at?.x), y = finite(at?.y), z = finite(at?.z);
   const feet = x !== null && y !== null && z !== null ? { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) } : posIn(typeof w.at === 'string' ? w.at : null);
   const dimension = typeof w.dimension === 'string' ? w.dimension.replace(/^minecraft:/u, '') : null;
-  return { dimension, feet, goal: queueGoal(items.map(item => item.input)) ?? kept.lastGoal, lastDropM: kept.lastDropM, samples: kept.samples, tune: kept.tune,
-    underAttack: underAttack(frame) };
+  // The goal that makes a climb is the one read: the open go's, else the last go that came back, else the last the model named at the surface (a go to a workbench under the ground
+  // is not the way she means to go).
+  const open = queueGoal(items.map(item => item.input));
+  const climbs = (goal: ActPos | null | undefined): goal is ActPos => !!goal && !!feet && goal.y - feet.y >= 20;
+  const remembered = !climbs(open) && !climbs(kept.lastGoal) && climbs(kept.surfaceGoal);
+  const goal = [open, kept.lastGoal, kept.surfaceGoal].find(climbs) ?? open ?? kept.lastGoal;
+  return { dimension, feet, goal, ...(remembered ? { remembered: true } : {}), lastDropM: kept.lastDropM, samples: kept.samples, tune: kept.tune, underAttack: underAttack(frame) };
 }
 
 /** The lines of the live state: each open item, then how many more may be added; an empty queue says only that it

@@ -1,4 +1,5 @@
-import { goDestination,goSamples,hopsOfResult,lastGoGoal,sampleOf,SPEED_KEPT,type SpeedSample } from './minecraftLlmcAltitude.js';
+import { goDestination,goSamples,hopsOfResult,lastGoGoal,sampleOf,SPEED_KEPT,surfaceGoGoal,type SpeedSample } from './minecraftLlmcAltitude.js';
+import { DESCENT_SURFACE_Y } from './minecraftPlanDone.js';
 import { createQueueProgress } from './minecraftLlmcQueueProgress.js';
 import { createQueueAdmission } from './minecraftLlmcQueueAdmission.js';
 import { QUEUE_T,START_MARGIN_MS,START_CAP_MS,DEADLINE_CAP_MS,DEADLINE_MARGIN_MS,TROUBLE_SETTLE_MS,decisionTimes,verticalSpeeds,recentGos,GO_HOPS_KEPT,reissues,queueWakeMs,
@@ -183,7 +184,8 @@ const { sentHands, book, bygone, bygoneContext, lostWithTheBody, onReleased, onH
     for (const [index, hand] of item.input.hands.entries()) {
       const line = result.lines.find(entry => entry.i === index + 1);
       const goal = hand.do === 'go' && line?.status !== 'skipped' ? goDestination(hand) : null;
-      if (goal) keep(lastGoGoal, deps.taskId, goal);
+      if (goal) { keep(lastGoGoal, deps.taskId, goal);
+        if (goal.y >= DESCENT_SURFACE_Y) keep(surfaceGoGoal, deps.taskId, goal); }
     }
     if (!hops.length) return;
     keep(recentGos, deps.taskId, [...(recentGos.get(deps.taskId) ?? []), ...hops].slice(-GO_HOPS_KEPT));
@@ -604,7 +606,7 @@ void restoreReceipts();
       const queue = open();
       const altitudeSource = (): AltitudeSource => {
         const last = (recentGos.get(deps.taskId) ?? []).at(-1);
-        return { lastGoal: lastGoGoal.get(deps.taskId) ?? null, samples: goSamples.get(deps.taskId) ?? [], tune: verticalSpeeds.get(deps.taskId) ?? {},
+        return { lastGoal: lastGoGoal.get(deps.taskId) ?? null, surfaceGoal: surfaceGoGoal.get(deps.taskId) ?? null, samples: goSamples.get(deps.taskId) ?? [], tune: verticalSpeeds.get(deps.taskId) ?? {},
           lastDropM: last && last.fromY !== null && last.toY !== null ? last.fromY - last.toY : null };
       };
       const first = queue[0];

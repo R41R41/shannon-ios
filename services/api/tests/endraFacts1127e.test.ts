@@ -79,6 +79,16 @@ describe('the line of height and speed (altitudeLine)', () => {
     const running = queueLines([item], frame, { progress: null, leftMs: 5000 }, { wakeMs: 6000, leftMs: 5000, altitude: kept });
     expect(running.some(line => line.startsWith('高さ：今 y=-24、行き先 y=63'))).toBe(true);
   });
+  it('reads the height against the last goal the model named at the surface when the go that runs goes to a place under the ground (a workbench), and says so', () => {
+    const frame = { state: { world: { dimension: 'overworld', position: { x: 437.5, y: -28.5, z: 1129.5 } } } } as unknown as BodyObservation;
+    const kept = { lastGoal: { x: 431, y: -34, z: 1073 }, surfaceGoal: { x: 437, y: 64, z: 1311 }, lastDropM: null, samples: [], tune: {} };
+    const item = { item: 'q1', node: null, why: 'x', input: { hands: [{ do: 'go', goals: [{ x: 431, y: -34, z: 1073 }] } as ActHand], why: 'x' }, pre: undefined, done: undefined, startedAt: 1,
+      because: null, reason: () => null };
+    const said = queueLines([item], frame, { progress: null, leftMs: 5000 }, { wakeMs: 6000, leftMs: 5000, altitude: kept }).find(line => line.startsWith('高さ'))!;
+    expect(said).toContain('行き先（さっき地表へ出した go の行き先 (437,64,1311)） y=64 → 93 m 下（地下）。行き先まで水平 182 m');
+    // with no surface goal named, a go to a place under the ground says nothing of height
+    expect(queueLines([item], frame, { progress: null, leftMs: 5000 }, { wakeMs: 6000, leftMs: 5000, altitude: { ...kept, surfaceGoal: null } }).some(line => line.startsWith('高さ'))).toBe(false);
+  });
 });
 
 describe('the line of her recent gos (hopsLine) counts the gos that stopped', () => {
