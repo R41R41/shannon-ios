@@ -181,14 +181,13 @@ const BEYOND: readonly PlanSeed[] = [
     caution: ['丸石か黒曜石を3個以上持って入る（着く足場の火の玉は足元に積んで避ける）', '橋の先端（幅1）に長居せず、玉が来る向きを見て渡る。積める物を残す'] }),
   node('エンドでドラゴン', { kind: 'dragon', note: '討伐は体の記録（boss.verified）で確かめる。節では閉じない',
     caution: ['縁から5マス以上内側で戦う（sneak は押されるのを止めない）', '息の雲・火の玉の線の上で立ち止まらない',
-      '檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）。檻は本命が尽きて竜の体力100超の予備の最後',
+      '結晶は檻つきも全部壊してから竜を倒す（1 本でも毎秒 2 回復し、ベッドの傷が戻る）',
       '竜を打つ前に剣か斧を equip で手に持つ（手が別の物のことがある）'],
-    children: [node('ベッドで倒す（本命）', { kind: 'dragon',
-        note: 'ベッド（戦い用 8 以上）・黒曜石 12 を持って入る。ネザーとエンドでは寝ない（爆発する）。使い方はエンドの知識の通り' }),
-      // Unseen crystal bases count as remaining: full clearance must not be a prerequisite for the perched sword fallback.
-      node('結晶を弓で壊しつつ止まり木の竜を剣で打つ（予備）', { kind: 'dragon',
-        note: '竜の体力50以下なら結晶へ行かず窪みの足場の剣か残りのベッドで届く。',
-        caution: ['本命が尽きて竜の体力100超なら檻なしを地面から弓で壊す余地がある', '剣は結晶全破壊を待たず座りごとに使える（檻は最後）'] })] }),
+    children: [node('結晶を全部壊す（檻つきも）', { kind: 'dragon', doneWhen: 'crystals<=0',
+        note: '1 本でも残ると竜は毎秒 2 回復（本数に比例しない）。檻なしは矢か柱、檻つきは柱を登り格子を dig して殴る',
+        caution: ['登る前に積める物3個以上と降りる手（go maxDrop・vertical down）を確かめる', '竜が火の玉を狙う間（phase 1）や近い時は登らず根で待つ'] }),
+      node('ベッドで倒す（本命）', { kind: 'dragon',
+        note: '結晶 0 本から。ベッド 8 以上・黒曜石 12 を持って入る。ベッドが尽きたら窪みの剣。エンドでは寝ない（爆発）' })] }),
 ];
 /**
  * mb-llmc v2 (run 36, the pass mark: the Nether within 30 minutes): before the gate only what the gate needs.

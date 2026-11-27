@@ -41,23 +41,27 @@ describe('the End fallback alongside the main bed plan', () => {
     expect(departure.note).toContain('事前に水を置くか vertical');
     expect(departure.note).not.toContain('働かない前提');
   });
-  it('keeps bow and perched sword together without a full-crystal-clearance prerequisite', () => {
+  it('puts the crystals, caged ones too, before the bed in the dragon node (11/27), and the sword after them', () => {
     const tree = seedPlan('エンドラ討伐', 'the_end')!;
-    const fallback = tree.nodes.find(node => node.title.includes('（予備）'))!;
-    expect(fallback.title).toContain('結晶を弓で壊しつつ止まり木の竜を剣で打つ');
-    expect(fallback.doneWhen).toBeUndefined();
-    expect(fallback.note).toContain('竜の体力50以下なら結晶へ行かず窪みの足場の剣か残りのベッド');
-    expect(tree.nodes.some(node => node.doneWhen === 'crystals<=0')).toBe(false);
-    expect(tree.nodes.find(node => node.title.includes('（本命）'))).toBeDefined();
+    const crystals = tree.nodes.find(node => node.title.includes('結晶を全部壊す'))!;
+    const bed = tree.nodes.find(node => node.title.includes('（本命）'))!;
+    expect(crystals.title).toContain('檻つきも');
+    expect(crystals.doneWhen).toBe('crystals<=0');
+    expect(crystals.note).toContain('本数に比例しない');
+    expect(crystals.note).toContain('格子を dig');
+    expect(tree.nodes.indexOf(crystals)).toBeLessThan(tree.nodes.indexOf(bed));
+    expect(bed.note).toContain('結晶 0 本から');
+    expect(bed.note).toContain('ベッドが尽きたら窪みの剣');
+    expect(tree.nodes.some(node => node.title.includes('（予備）'))).toBe(false);
   });
 
-  it('gives the first planner and the decision the same low-health and cage facts', () => {
+  it('gives the first planner and the decision the same words: every crystal, caged ones too, goes down before the dragon', () => {
     for (const words of [V2_STAGES.end, STRATEGY_KNOWLEDGE, STRATEGY_KNOWLEDGE_V2]) {
-      expect(words).toContain('体力 50 以下');
-      expect(words).toContain('結晶や檻へ行かず');
-      expect(words).toContain('体力が 100 超');
-      expect(words).toContain('檻は');
-      expect(words).not.toContain('クリスタルを全部壊した後');
+      expect(words).toContain('檻つきも');
+      expect(words).toContain('本数に比例しない');
+      expect(words).not.toContain('結晶や檻へ行かず');
+      expect(words).not.toContain('檻は最後');
+      expect(words).not.toContain('予備の最後');
       expect(words).not.toContain('エンドクリスタルを先に壊し');
     }
     expect(V2_STAGES.end).toContain('onFail="continue"');
@@ -75,12 +79,16 @@ describe('the End fallback alongside the main bed plan', () => {
     }
   });
 
-  it('e01 S11: the first planner aims the bed at the perch, not the caged crystals', () => {
-    // e01 (11/9): the plan asked crystals<=0, so the head spent the dragon's two perches 60 m off on a cage and never placed a bed.
-    expect(CURRENT_PLAN_STRUCTURE).not.toContain('crystals<=0');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('crystals<=2');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('止まり木に降りた時にベッドで倒すのが本命');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('最初の計画に入れない');
+  it('11/27: the first planner puts the crystals, caged ones too, before the dragon, with the reason and the way', () => {
+    // e01 (11/9) had the plan ask crystals<=0 and the head spent the perches on a cage; the owner's rule (11/27) is every crystal, caged ones too, with the bars dug on the climb.
+    expect(CURRENT_PLAN_STRUCTURE).toContain('crystals<=0');
+    expect(CURRENT_PLAN_STRUCTURE).not.toContain('crystals<=2');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('檻つきも含めて全部壊す');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('毎秒 2 回復し（本数に比例しない）');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('鉄格子を dig で取ってから殴り');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('竜の節（止まり木の脇 10〜14m で降りるのを待ち、ベッドで倒す）はその後ろ');
+    expect(CURRENT_PLAN_STRUCTURE).not.toContain('最初の計画に入れない');
+    expect(CURRENT_PLAN_STRUCTURE).not.toContain('最後の手');
   });
 
   it('makes the insomnia threshold, dive and reset available during preparation', () => {

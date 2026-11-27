@@ -284,7 +284,7 @@ describe('the Nether trip and the End\'s first minutes: the labs\' facts (S2, S1
     expect(cautions('ネザー要塞を探す')).toContain('canDig[netherrack,basalt,blackstone] canPlace[cobblestone,netherrack]');
     expect(cautions('ネザー要塞を探す')).toContain('maxDig 200・maxPlace 100');
     expect(cautions('エンドに入る')).toContain('丸石か黒曜石を3個以上持って入る');
-    expect(cautions('エンドでドラゴン')).toContain('檻つきの柱は積める物3個以上を持って登り、長居しない（落下止めは当てにしない）');
+    expect(cautions('エンドでドラゴン')).toContain('結晶は檻つきも全部壊してから竜を倒す（1 本でも毎秒 2 回復し、ベッドの傷が戻る）');
     expect(cautions('エンドに入る')).toContain('橋の先端（幅1）に長居せず、玉が来る向きを見て渡る');
     expect(cautions('エンドでドラゴン')).toContain('縁から5マス以上内側');
     expect(cautions('エンドでドラゴン')).toContain('竜を打つ前に剣か斧を equip で手に持つ');

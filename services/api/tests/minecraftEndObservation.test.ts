@@ -100,7 +100,7 @@ describe('optional End observations as facts', () => {
   it('writes the body bed offer as one act from its stand while perched, and nothing otherwise', () => {
     const raw = world(), bed = [{ stand: at(20, 64), walkMeters: 4.2, foot: at(17, 64), head: at(16, 64), build: [{ ...at(19, 64), role: 'screen' }, { ...at(9, 9), role: 'wall' }],
       selfExpected: 3.14, dragonExpected: 44.9 }, { stand: at(30, 64), foot: null }];
-    const end = view({ ...raw, crystals: { ...raw.crystals, remaining: 2 }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } });
+    const end = view({ ...raw, crystals: { ...raw.crystals, remaining: 0 }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } });
     expect(end?.dragon?.approach?.bed).toHaveLength(1);
     expect(end?.dragon?.approach?.bed?.[0].build).toEqual([{ ...at(19, 64), role: 'screen' }]);
     const line = dragonBedLine(end, 'white_bed')!;
@@ -112,17 +112,20 @@ describe('optional End observations as facts', () => {
     // One bed a sit heals back by the next sit: while she still sits the same line asks for the next bed (not on the bed that ends her).
     expect(line).toContain('use の後もこの行が出ていれば、すぐもう 1 個');
     // The bed that may kill her: a strike first, so the kill is credited (a bed's blast names no one).
-    const low = dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: 2 }, dragon: { ...raw.dragon, health: 40, approach: { ...approach(), bed } } }), 'white_bed')!;
+    const low = dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: 0 }, dragon: { ...raw.dragon, health: 40, approach: { ...approach(), bed } } }), 'white_bed')!;
     expect(low).toContain('place block=white_bed at=[(17,64,12)] → attack target=ender_dragon seconds=2 onFail="continue" → use at=[(17,64,12)]');
     expect(low).toContain('advancement end/kill_dragon');
     expect(low).not.toContain('すぐもう 1 個');
     expect(dragonBedLine(view())).toBeNull();
   });
 
-  it('holds the bed hand and the waiting while three or more crystals stand (e04c: 200→173 healed back in about 13 s)', () => {
+  it('holds the bed hand and the waiting while any crystal stands, caged ones too (e04c: 200→173 healed back in about 13 s; 11/27: one heals as fast as ten)', () => {
     const raw = world(), bed = [{ stand: at(20, 64), walkMeters: 4.2, foot: at(17, 64), head: at(16, 64), build: [], selfExpected: 3.14, dragonExpected: 44.9 }];
     const held = dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, approach: { ...approach(), bed } } }), 'white_bed')!;
-    expect(held).toContain('ベッドの手: 今は使わない（結晶が 3 本残る間');
+    expect(held).toContain('ベッドの手: 今は使わない（結晶が 3 本残る間は、1 本でも竜は毎秒 2 回復し');
+    const one = dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: 1 }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } }), 'white_bed')!;
+    expect(one).toContain('ベッドの手: 今は使わない（結晶が 1 本残る間');
+    expect(one).toContain('檻つきも含めて結晶を 0 本にしてから');
     expect(held).not.toContain('use at=');
     expect(dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: null }, dragon: { ...raw.dragon, approach: { ...approach(), bed } } }), 'white_bed')).toContain('use at=[(17,64,12)]');
   });

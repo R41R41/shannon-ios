@@ -16,7 +16,7 @@ const approach = () => ({ strike: [{ ...at(23), headReach: 3, walkMeters: 6 }],
   basin: [footing(24)] });
 const world = (entry: unknown = approach(), phase: number | null = 6) => ({ dimension: 'the_end', position: at(12), health: 20, food: 20, inventory: [],
   dragon: { id: 90, health: 150, phase, perched: true, position: at(25, 76), approach: entry }, perch: at(26, 76),
-  crystals: { remaining: 2, gone: 8, caged: 0, unseen: [], list: [],
+  crystals: { remaining: 0, gone: 10, caged: 0, unseen: [], list: [],
     openings: [{ id: 11, caged: false, positions: [{ ...at(13), distance: 30 }] }],
     shootSets: [{ at: at(13), crystals: [11, 12], walkMeters: 1 }] },
   dragonBreath: [{ ...at(30), radius: 3, dangerRadius: 7 }], dragonFireballs: 1 });
@@ -116,7 +116,7 @@ describe('the perched dragon basin as observed facts', () => {
     expect(after.filter(line => line.includes('phase 6'))).toHaveLength(1);
   });
 
-  it('puts the sword act beside the footing while no bed hand shows (no bed held), and not beside a bed hand or with three crystals standing', () => {
+  it('puts the sword act beside the footing while no bed hand shows (no bed held), and not beside a bed hand or with a crystal standing', () => {
     const basinOf = (lines: string[]) => lines.find(line => line.startsWith('窪みの足場'))!;
     const sword = 'attack target=ender_dragon seconds=30 onFail="continue"';
     expect(basinOf(endFightLines(view()))).toContain(`go range=0.5 seconds=12 → 剣を持って ${sword}`);
@@ -125,7 +125,7 @@ describe('the perched dragon basin as observed facts', () => {
     expect(withBed.some(line => line.startsWith('ベッドの手（体が測った候補）'))).toBe(true);
     expect(basinOf(withBed)).toBe(dragonBasinLine(view()));
     const three = world();
-    const standing = endViewOf(frame({ ...three, crystals: { ...three.crystals, remaining: 3 } }));
+    const standing = endViewOf(frame({ ...three, crystals: { ...three.crystals, remaining: 1 } }));
     expect(basinOf(endFightLines(standing))).toBe(dragonBasinLine(standing));
   });
 
@@ -199,12 +199,15 @@ describe('the waiting cells beside the perch (phases 3 to 7)', () => {
       crystals: { ...base.crystals, list: [crystal(14, 40, true, 20), crystal(15, 50, false, 38), { ...crystal(16, -20, false, 32), position: at(-20, 80) },
         { ...crystal(17, 85, false, 73), position: at(85, 70) }] } }));
     expect(noBowLine(choose)).toContain('#16 (-20,80,-11) 自分から 32m');
-    // Only the two caged ones left: the bed, not a pillar.
+    // Only the two caged ones left (11/27): a caged pillar is climbed, with the bars in the chain, and the bed waits for crystals 0.
     const cagedOnly = endViewOf(frame({ ...base, position: at(12, 64), dragon: { ...base.dragon, perched: false, distance: 40 },
       crystals: { ...base.crystals, remaining: 2, list: [crystal(14, 40, true, 20), crystal(18, -40, true, 45)] } }));
-    expect(noBowLine(cagedOnly)).toContain('檻なしの結晶はもう無い。檻つき 2 本が残る');
-    expect(noBowLine(cagedOnly)).not.toContain('pillar up');
-    expect(climbNow(cagedOnly)).toBe(false);
+    expect(noBowLine(cagedOnly)).toContain('檻つき 2 本: ');
+    expect(noBowLine(cagedOnly)).toContain('1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）');
+    expect(noBowLine(cagedOnly)).toContain('檻つきで竜から遠く低い');
+    expect(noBowLine(cagedOnly)).toContain('→ dig で鉄格子');
+    expect(noBowLine(cagedOnly)).not.toContain('後回し');
+    expect(climbNow(cagedOnly)).toBe(true);
   });
   it('keeps only the waiting cells of a full approach sent while she flies', () => {
     const end = view({ ...approach(), wait: [cell(41, 2)] }, 8);

@@ -88,14 +88,16 @@ describe('walking the late-game seed with the frames of a run', () => {
     expect(state(tree, 'p11')).toBe('done');
     expect(tree.current).toBe('p12.1');
     tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 20 }), mapLandmarks: [] }, { crystals: { remaining: 4 } });
-    expect(state(tree, 'p12.2')).toBe('continue');
-    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
-    // The section audit of 11/5: the fallback is one node (crystals with the bow while the sword strikes the perched dragon), with no
-    // condition of its own: all crystals gone is no longer a step before the sword.
-    expect(state(tree, 'p12.2')).toBe('continue');
-    expect(state(tree, 'p12')).toBe('continue');
-    // the bed way (the first child, no condition: the kill is the body's record) stays the current node whatever the crystals say
+    expect(state(tree, 'p12.1')).toBe('continue');
+    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 1 } });
+    // 11/27: a crystal left, caged ones too, keeps the crystals node (crystals<=0) open and current; the bed waits behind it
+    expect(state(tree, 'p12.1')).toBe('continue');
     expect(tree.current).toBe('p12.1');
+    tree = at({ dimension: 'the_end', position: { x: 20, y: 64, z: 0 }, inventory: items({ white_bed: 4, bow: 1, arrow: 10 }), mapLandmarks: [] }, { crystals: { remaining: 0 } });
+    expect(state(tree, 'p12.1')).toBe('done');
+    expect(state(tree, 'p12')).toBe('continue');
+    // the bed (the second child, no condition: the kill is the body's record) is the current node once the crystals are gone
+    expect(tree.current).toBe('p12.2');
   });
 
   it('keeps the meter on the later milestones: the next target after the Nether is the fortress, then the rods, and so on', () => {

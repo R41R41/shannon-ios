@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
-import { crystalOpeningLine, createHeightWatch, descentLine, endFightLines, noBowLine, waitStreakLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { climbNow, crystalOpeningLine, createHeightWatch, descentLine, endFightLines, noBowLine, waitStreakLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import type { EndView } from '../src/surfaces/minecraft/minecraftEndView.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { goStop } from '../src/surfaces/minecraft/minecraftLlmcGoGuard.js';
@@ -52,7 +52,7 @@ describe('the height line on a wide obsidian top with no footing line', () => {
     expect(line).not.toContain('最後の手');
     // The line leads the fight lines, and the wait line says the feet are above the waiting cells.
     expect(linesOf(true)[0]).toBe(line);
-    expect(linesOf(true).find(item => item.startsWith('待ち場の候補'))).toContain('今の足は待ち場より 38 m 高い');
+    expect(linesOf(true).find(item => item.startsWith('結晶が') && item.includes('待ち場の候補'))).toContain('今の足は待ち場より 38 m 高い');
   });
 
   it('the same height when a footing line measured it (the measure is kept for later inputs, and says where it came from)', () => {
@@ -80,34 +80,53 @@ describe('the height line on a wide obsidian top with no footing line', () => {
   });
 });
 
-describe('the caged line with two caged crystals left', () => {
+describe('the caged crystals are broken too (11/27: every crystal goes down before the dragon)', () => {
   const crystal = { id: 1016, position: { x: -42, y: 83, z: -1 }, caged: true, distance: 74 };
   const view = (drop: number | undefined, health = 200): EndView => ({ feet: { x: 15, y: drop === undefined ? 64 : 103, z: 41 }, ...(drop === undefined ? {} : { drop }),
     dragon: { id: 1, health, phase: 1, phaseName: null, phaseFor: 3, perched: false, position: null, headPosition: null, distance: 61, headReach: null, strike: null },
     perch: null, crystals: { remaining: 1, gone: 9, caged: 1, unseen: 0, visible: 1, list: [crystal] }, breath: [], fireballs: 0 } as unknown as EndView);
 
-  it('aloft by 40 the aloft words come first, and then that no open crystal is left and the caged ones are judged below', () => {
+  it('aloft by 40 the aloft words come first, then the caged crystal named with the reason, and no word of leaving it be', () => {
     const line = noBowLine(view(40));
     expect(line).toContain('今は宙・塔の上（地面まで 40 m）');
-    expect(line).toContain('檻なしの結晶はもう無い。竜はベッドか剣で倒す。檻つきは下の事実で判断');
+    expect(line).toContain('檻つき 1 本: #1016');
+    expect(line).toContain('1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）');
+    expect(line).not.toContain('竜はベッドか剣で倒す');
+    expect(line).not.toContain('後回し');
     expect(line).not.toContain('檻つきは残したまま竜を倒す');
   });
 
-  it('on the ground it lists the facts: the heal, the sit damage, the climb, and no walking to a cage while she sits', () => {
+  it('on the ground it names the caged crystal, why it goes down, the way (the climb with the bars dug) and what was measured', () => {
     const line = noBowLine(view(undefined), '前の座りで竜 200→140（傷 60）、次の座りの手前では 170（20 秒で +30）');
-    expect(line).toContain('檻つき 1 本が残る: #1016 (-42,83,-1)（地面から約 17 段・材料 20 個');
-    expect(line).toContain('ベッド 1 座りの傷は 61〜121、結晶が残る間は +2 体力/秒で回復しうる');
+    expect(line).toContain('檻つき 1 本: #1016 (-42,83,-1)（地面から約 17 段・材料 20 個）');
+    expect(line).toContain('1 本でも残ると竜は毎秒 2 回復し（本数に比例しない）、ベッドの傷が次の座りまでに戻る');
+    expect(line).toContain('上端の 1〜2 段下で dig（格子の座標）→ attack target=end_crystal → 降りる');
+    expect(line).toContain('2.5〜6.5 分（檻なし）、飛び降りは 16 回目に通った、格子を掘る所は実走でまだ');
     expect(line).toContain('前の座りで竜 200→140（傷 60）、次の座りの手前では 170（20 秒で +30）');
-    expect(line).toContain('体力が 50 より多い間は');
-    expect(line).toContain('その柱の上で降りる手（高所の行）も先に確かめる');
-    expect(line).toContain('竜の座りが近い・座っている間は檻へ歩かない');
-    expect(line).not.toContain('檻つきは残したまま竜を倒す');
-    expect(noBowLine(view(undefined, 40))).toContain('体力 50 以下: 窪みの剣か残りのベッドで届く。檻へは行かない');
+    expect(line).not.toContain('檻へは行かない');
+    expect(line).not.toContain('後回し');
+    // With low health the crystals still go first: the heal goes on while one stands.
+    expect(noBowLine(view(undefined, 40))).not.toContain('檻へは行かない');
+  });
+
+  it('the pillar to climb is the caged one when no uncaged crystal is left, with the bars in the chain', () => {
+    const line = noBowLine({ ...view(undefined), dragon: { ...view(undefined).dragon!, phase: 4, distance: 5 } } as EndView);
+    expect(line).toContain('今登れる（竜は止まり木）: 檻つきで竜から遠く低い #1016');
+    expect(line).toContain('→ dig で鉄格子');
+    expect(line).toContain('→ attack target=end_crystal → すぐ vertical down shaft で降りる');
+    expect(climbNow({ ...view(undefined), dragon: { ...view(undefined).dragon!, phase: 4, distance: 5 } } as EndView)).toBe(true);
+  });
+
+  it('on the pillar of a caged crystal the line says the bars, the strike and the way down', () => {
+    const top = { ...view(40), feet: { x: -42, y: 81, z: -1 } } as EndView;
+    const line = noBowLine(top);
+    expect(line).toContain('今は檻つき #1016 の柱の上（結晶の 2 段下）: dig で鉄格子');
+    expect(line).toContain('降りないで待たない');
   });
 
   it('with a bow and arrows the same facts stand among the fight lines', () => {
     const lines = endFightLines(view(undefined), null, true, 4);
-    expect(lines.some(item => item.includes('檻なしの結晶はもう無い。檻つき 1 本が残る'))).toBe(true);
+    expect(lines.some(item => item.includes('檻つき 1 本: #1016'))).toBe(true);
   });
 });
 
