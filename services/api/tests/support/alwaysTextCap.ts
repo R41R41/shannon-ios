@@ -32,5 +32,7 @@
  * - 11/28 (the 19th end-dragon run: she stood 6 s in the dragon's breath cloud inside a ring of cobblestone the urgent answer had put round her feet, health 18 to 0): the urgent rule says the block goes
  *   against a melee enemy and not against a breath cloud (it passes through walls, and a ring blocks the body's walk-out), and the low-health chain says not to enclose inside a cloud (about 116 llmc, about 58
  *   real). The text measures 11,306, the cap 11,310.
+ * - 11/28 (the body says its footing in plain words, `足元の床: …。敵に押されると落ちる` for `足場: …。押されたら落ちる`, because 足場 also means the blocks she puts down): the always text names that
+ *   sentence in a few places and each is two characters longer (about 3 llmc, about 2 real). The text measures 11,313, the cap 11,320.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 11_310;
+export const ALWAYS_TEXT_CAP_LLMC = 11_320;

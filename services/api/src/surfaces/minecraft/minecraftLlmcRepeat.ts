@@ -1,6 +1,6 @@
 /**
  * mb-llmc v2 `body.repeat` (ADR-0014 D7 「同じ失敗の繰り返しは、全文ではなく『試した手・引数・原因・見えた変化・同じやり直しの禁止』にまとめて渡す」;
- * 再現台の A: 直前に「見られる」で止まったマスを exposeOk でまた掘る、置けなかった橋を onFail continue のまま出し直す、「届かない」の attack を続ける):
+ * 再現台の A: 直前に「見られる」で止まったマスを exposeOk でまた掘る、置けなかった橋を onFail continue のまま出し直す、「対象に届かない」の attack を続ける):
  * the stops that came again, said in one line each, from the live state alone (the body's `stops` with its counts, the last act's stopped lines
  * in `lastResults`, and the head's investigation line 「同じ止まりの N 回目」). Facts only: the line says what stopped and how many times; the
  * hand is the decision's. At most three lines, the most often first; a stop that happened once is not said.
@@ -64,7 +64,7 @@ export function stopsOf(list: readonly string[]): Array<{ cell: string; reason: 
 }
 /**
  * The stopped or failed hands of a result text: `3 dig 止 見られる: (308,66,73)（…`, the hand's kind, the word, a cell or a creature. mb-llmc-cand 3: a walk's
- * stop may carry its cause right after the word (`一歩ではない（元: 水の中・…）: 本文`, up to 260 characters); the cause is left out of the cell it reads.
+ * stop may carry its cause right after the word (`歩いて進めない（元: 水の中・…）: 本文`, up to 260 characters); the cause is left out of the cell it reads.
  */
 function stoppedHands(text: string): Array<{ do: string; reason: string; cell: string | null; target: string | null }> {
   return text.split('\n').flatMap(line => {
@@ -75,7 +75,7 @@ function stoppedHands(text: string): Array<{ do: string; reason: string; cell: s
     return [{ do: m[2]!, reason: m[3]!, cell: CELL.exec(rest)?.[1] ?? null, target: creature ? `${creature[1]} #${creature[2]}` : null }];
   });
 }
-/** The investigation line 「同じ止まりの 4 回目: attack「届かない」」. */
+/** The investigation line 「同じ止まりの 4 回目: attack「対象に届かない」」. */
 function surprises(list: readonly string[]): Array<{ do: string; reason: string; count: number }> {
   return list.flatMap(line => {
     const m = /同じ止まりの (\d+) 回目: (\w+)「([^」]+)」/u.exec(line);

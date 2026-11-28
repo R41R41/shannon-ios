@@ -42,7 +42,7 @@ const world = (x: number) => ({ position: { x: x + 0.5, y: FEET.y, z: FEET.z + 0
   localMap: layersMap({ ...FEET, x }, mix),
   mapLandmarks: ['T 作業台 (250,58,77) 東1・上 0', 'F かまど (240,58,70) 西11・上 0', 'S スポナー (262,64,70) 東11・上 6', 'N 要塞のブロック (255,59,74) 東4',
     '[overworld] p ネザーポータル (31,70,9) 拠点', 'L 溶岩の海 (236,31,80) 西15・下 27', 'W 歪んだ幹 (195,66,60) 西56', 'C チェスト (253,58,78) 東2'],
-  recentStops: ['(251,58,76)→(250,58,76) 掘れない（見られる） ×2 14秒前', '(252,58,76)→(255,58,76) 一歩ではない ×1 40秒前', '(250,58,76)→(247,58,76) 届かない ×1 60秒前'],
+  recentStops: ['(251,58,76)→(250,58,76) 掘れない（見られる） ×2 14秒前', '(252,58,76)→(255,58,76) 歩いて進めない ×1 40秒前', '(250,58,76)→(247,58,76) 対象に届かない ×1 60秒前'],
   inventory: [{ name: 'diamond_pickaxe', count: 1 }, { name: 'iron_sword', count: 1 }, { name: 'shield', count: 1 }, { name: 'netherrack', count: 192 },
     { name: 'cobbled_deepslate', count: 31 }, { name: 'nether_bricks', count: 45 }, { name: 'basalt', count: 45 }, { name: 'gold_nugget', count: 11 },
     { name: 'water_bucket', count: 1 }, { name: 'cooked_mutton', count: 1 }, { name: 'crimson_stem', count: 3 }, { name: 'crimson_planks', count: 12 },

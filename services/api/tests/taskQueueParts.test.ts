@@ -63,7 +63,7 @@ describe('the guards read an item after the ones ahead of it', () => {
   const walk = (x: number): ActInput => ({ hands: [{ do: 'walk', to: { x, y: 10, z: 10 } }] });
   it('a walk into rock is held on its own, and not when the item ahead digs the way (the map is read after its hands)', () => {
     const alone = heldBeforeSendQueued(false, walk(14), rock(), 'q1', []);
-    expect(alone?.result?.text).toContain('手 1 walk 一歩ではない');
+    expect(alone?.result?.text).toContain('手 1 walk 歩いて進めない');
     const ahead: ActInput = { hands: [{ do: 'dig', at: [{ x: 13, y: 10, z: 10 }, { x: 13, y: 11, z: 10 }, { x: 14, y: 10, z: 10 }, { x: 14, y: 11, z: 10 }] }] };
     const after = heldBeforeSendQueued(false, { hands: [{ do: 'walk', to: { x: 13, y: 10, z: 10 } }] }, rock(), 'q2', [ahead]);
     expect(after?.result).toBeUndefined();

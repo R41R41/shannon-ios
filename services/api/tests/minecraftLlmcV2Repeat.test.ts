@@ -10,7 +10,7 @@ import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
  */
 const result = (...lines: string[]) => ['act 2/4 済みで止まった（failure）', ...lines, '今 (309,65,73) 体力20 満腹19'].join('\n');
 const DIG_SEEN = '3 dig 止 見られる: (308,66,73)（自分から西1・上1） を開けると、今は届かない blaze（id 7、(303,67,72) 自分から西6・北1・上2、6.0m） から見える';
-const ATTACK = '1 attack 止 届かない: enderman（id 113） に届かない（10.6m、5秒近づけない）。当てた 2回。そのマスは air';
+const ATTACK = '1 attack 止 対象に届かない: enderman（id 113） に届かない（10.6m、5秒近づけない）。当てた 2回。そのマスは air';
 
 describe('body.repeat: the stops that came again', () => {
   it('says nothing for a stop that happened once', () => {
@@ -18,16 +18,16 @@ describe('body.repeat: the stops that came again', () => {
     expect(repeatedFailures({})).toEqual([]);
   });
   it('joins the body\'s count of a cell to the hand of the last act: the kind of hand, the cell, the word and how many times', () => {
-    const lines = repeatedFailures({ stops: ['(308,66,73) 見られる ×2 1秒前', '(300,60,73)→(299,61,73) 一歩ではない 30秒前'], lastResults: [result(DIG_SEEN)] });
+    const lines = repeatedFailures({ stops: ['(308,66,73) 見られる ×2 1秒前', '(300,60,73)→(299,61,73) 歩いて進めない 30秒前'], lastResults: [result(DIG_SEEN)] });
     expect(lines).toEqual(['同じやり直しはしない: (308,66,73) の dig は「見られる」で 2 回止まった']);
   });
   it('says a stop of the body\'s that the last act did not repeat, with the cell and without a hand', () => {
     expect(repeatedFailures({ stops: ['(181,49,200) 掘れない ×4 3秒前'] })).toEqual(['同じやり直しはしない: (181,49,200) の手は「掘れない」で 4 回止まった']);
   });
   it('takes the count of the head\'s investigation line (「同じ止まりの 4 回目」) and names the creature the hand went for', () => {
-    const lines = repeatedFailures({ stops: ['(190,63,101) 届かない 2秒前'], lastResults: [result(ATTACK)],
-      investigation: ['驚き: 同じ止まりの 4 回目: attack「届かない」'] });
-    expect(lines).toEqual(['同じやり直しはしない: attack（enderman #113）は「届かない」で 4 回止まった']);
+    const lines = repeatedFailures({ stops: ['(190,63,101) 対象に届かない 2秒前'], lastResults: [result(ATTACK)],
+      investigation: ['驚き: 同じ止まりの 4 回目: attack「対象に届かない」'] });
+    expect(lines).toEqual(['同じやり直しはしない: attack（enderman #113）は「対象に届かない」で 4 回止まった']);
   });
   it('is at most three lines, the most often first', () => {
     const stops = [2, 5, 3, 4].map((n, i) => `(${i},60,70) 掘れない ×${n} 1秒前`);

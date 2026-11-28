@@ -311,7 +311,7 @@ describe('the booking line of the bed burst (11/28, run 21: the hand of the head
   it('is given in every phase of a live dragon with a bed held and no crystal left, as one hand with the reason, in plain words', () => {
     for (const phase of [0, 1, 2, 3, 4, 5, 6, 7, 8]) {
       const line = dragonStandbyLine(none(phase), 'white_bed')!;
-      expect(line).toContain('{"do":"bed_standby","on":true}');
+      expect(line).toContain('{"do":"bed_reserve"}');
       expect(line).toContain('"on":false');
       expect(line).toContain('撃った');
       expect(line).toContain('見送った');
@@ -338,7 +338,7 @@ describe('the booking line of the bed burst (11/28, run 21: the hand of the head
     expect(dragonStandbyLine(none(2), null)).toBeNull();
     expect(dragonStandbyLine(endViewOf(frame({ ...w, dragon: { ...w.dragon, id: null }, crystals: { ...w.crystals, remaining: 0, list: [] } })), 'white_bed')).toBeNull();
     expect(dragonStandbyLine(none(9), 'white_bed')).toBeNull();
-    expect(dragonStandbyShortLine(none(2), 'white_bed')).toContain('{"do":"bed_standby","on":true}');
+    expect(dragonStandbyShortLine(none(2), 'white_bed')).toContain('{"do":"bed_reserve"}');
     expect(dragonStandbyShortLine(none(2), null)).toBeNull();
   });
 });

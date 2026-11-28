@@ -133,7 +133,7 @@ describe('C3: an unknown cell is said as unknown, not as rock', () => {
 });
 
 describe('D1: the last results show only what the history line does not have', () => {
-  const act = ['act 3/5 済みで止まった（failure）', '1 walk 済 (1,0,0) に着いた', '2 walk 止 一歩ではない: (2,0,0)',
+  const act = ['act 3/5 済みで止まった（failure）', '1 walk 済 (1,0,0) に着いた', '2 walk 止 歩いて進めない: (2,0,0)',
     '  周り（上の層から、北が上・西が左）x=1..3 z=-1..1 y=1: ###/#.#/### y=0: ###/#@#/### y=-1: ###/###/###', '今 (1,0,0) 体力20 満腹20'].join('\n');
   it('an act: only the surroundings of the stopped hand (the history has the rest)', () => {
     const v2 = llmcStoredResult('mc.act', act);

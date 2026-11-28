@@ -182,7 +182,7 @@ describe('the distance said as numbers (end1109f03 replay: told the 8 m rule, sh
     expect(line).toContain('今 attack target=#5');
     expect(line).not.toContain('target=#7');
     const only = strikeLine({ position: { x: 20, y: 64, z: 0 }, health: 20, nearbyThreats: [seen(7, 6.2, 1)] }, new Set([7]))!;
-    expect(only).toContain('#7 は attack が「届かない」と返した相手');
+    expect(only).toContain('#7 は attack が「対象に届かない」と返した相手');
     expect(only).not.toContain('target=#7');
     expect(strikeLine({ position: { x: 0, y: 64, z: 0 }, nearbyThreats: [seen(3, 6, -6)] })).toContain('#3 は下 6m');
   });

@@ -48,7 +48,7 @@ describe('the urgent limit', () => {
 });
 
 describe('a dig of a cell that stopped for 「見られる」 a moment ago', () => {
-  const stops = ['(308,66,73) 見られる ×2 12秒前', '(300,60,73)→(299,61,73) 一歩ではない 5秒前', '(250,60,73) 見られる 200秒前'];
+  const stops = ['(308,66,73) 見られる ×2 12秒前', '(300,60,73)→(299,61,73) 歩いて進めない 5秒前', '(250,60,73) 見られる 200秒前'];
   const world = { recentStops: stops, nearbyThreats: [{ name: 'blaze', id: 7, distance: 6, canSee: true }, { name: 'zombie', id: 8, distance: 3, canSee: false }] };
   const at = (x: number, y: number, z: number) => ({ do: 'dig', at: [{ x, y, z }] });
   it('reads the stops of the body: the cells of 「見られる」 within 90 seconds', () => {

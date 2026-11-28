@@ -1,4 +1,5 @@
 import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract.js';
+import { BED_RESERVE_DEFAULTS } from './minecraftBedBurstContract.js';
 
 /**
  * The time of each hand, from what it is asked (r2, 2026-10-22; run 27: a walk of 80 m west had a ceiling of
@@ -24,6 +25,8 @@ import type { ActHand, ActInput, ActPos, HandKind } from './minecraftActContract
  * - hunt (2026-11-11): the ceiling is its `seconds` (default 60) and 2 s; the expected time is 8 s a kill (`count`, 3 when not written) and 2 s.
  * - dig, place: by the cells; pillarUp, jump, shoot: by `n`; attack and wait: by `seconds`; craft: by `count`; the rest fixed.
  * - fill: its required `seconds` (5–60, including return), with 2 s for the receipt; the estimate stays within those seconds.
+ * - bed_reserve (11/28): the booking stands for its `seconds` (10–150, 120 when not written) and the act answers at the end, so the expected time is those seconds and the ceiling adds 5 s
+ *   (the body's wait for a reflex and the last report); the cancelling form (`on:false`) is one second.
  * Task queue: an act that repeats its hands (`repeat`) takes that many times as long; the ceiling is still the body's one bound,
  * the expected time is not capped.
  */
@@ -114,8 +117,9 @@ const furnaceMostMs = (hand: ActHand, metres: number) => 5_000 + (hand.op === 't
 export const SHOOT_FLIGHT_MS = 5_000;
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
-  // bed_standby only books or cancels with the body; the burst it starts is reported afterwards, not waited for in this act.
-  bed_standby: () => 1_000,
+  // bed_reserve (the body, 11/28): the act holds the booking for its whole `seconds` (default 120, 10 to 150) and answers once at the end; a reflex that takes the body in between does not
+  // end it (the body waits for the reflex and starts the booking again), so the ceiling is the seconds and a few more for the reflex's wait and the last report. `on:false` only takes the booking back.
+  bed_reserve: hand => hand.on === false ? 1_000 : 1_000 * (hand.seconds ?? BED_RESERVE_DEFAULTS.seconds) + 5_000,
   fill: mostMs,
   walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
   obsidian: obsidianMostMs, fight: mostMs, mine: mostMs, hunt: mostMs, tidy: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs,
@@ -131,7 +135,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20),
-  bed_standby: () => 500,
+  bed_reserve: hand => hand.on === false ? 500 : 1_000 * (hand.seconds ?? BED_RESERVE_DEFAULTS.seconds),
   fill: hand => Math.min(1_000 * (hand.seconds ?? 30), 2_000 + 400 * (hand.groups ?? []).reduce((sum, group) => sum + group.at.length, 0)),
   walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
   obsidian: hand => Math.min(obsidianMostMs(hand), 20_000 + 8_000 * obsidianBlocks(hand)), fight: hand => 500 * (hand.seconds ?? 20),

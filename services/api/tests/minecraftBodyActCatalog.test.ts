@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ACT_INPUT_SCHEMA, HAND_KINDS } from '../src/contracts/minecraftActContract.js';
 import type { MinecraftSkillDefinition } from '../src/contracts/minecraftControlContract.js';
-import { bodyKindsWithHeadAhead } from './support/headAheadOfBody.js';
+import { HAND_FIELDS } from '../src/contracts/minecraftActHandRules.js';
 import { skillSchema, validControlPoll, validSkillInput, validSkills } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 
 /**
@@ -19,7 +19,7 @@ import { skillSchema, validControlPoll, validSkillInput, validSkills } from '../
  */
 const FIXTURES = ['rel55', 'rel56', 'produced'] as const;
 const catalogOf = (release: string): MinecraftSkillDefinition[] => release === 'produced'
-  ? (JSON.parse(readFileSync(new URL('./fixtures/continue/produced/catalog.json', import.meta.url), 'utf8')) as { offered: MinecraftSkillDefinition[] }).offered.filter(skill => skill.name === 'act')
+  ? (JSON.parse(readFileSync(new URL('./fixtures/continue/produced-catalog/catalog.json', import.meta.url), 'utf8')) as { offered: MinecraftSkillDefinition[] }).offered.filter(skill => skill.name === 'act')
   : JSON.parse(readFileSync(new URL(`./fixtures/minecraft-body-act-catalog-${release}.json`, import.meta.url), 'utf8')) as MinecraftSkillDefinition[];
 /** The most properties a hand had in each: 48 was the head's limit for rel55 and rel56; the continue version's hand has 49, shield_rush's six make 55, fill's groups 56, den 57, tidy's keep, room and smelt 60 (11/13), and the limit is 64. */
 const HAND_PROPERTIES: Readonly<Record<(typeof FIXTURES)[number], number>> = { rel55: 48, rel56: 48, produced: 60 };
@@ -86,7 +86,7 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   });
   it('is the head\'s hand, kind for kind and field for field (a drift between the two is the way rel55 was refused)', () => {
     const theirs = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
-    expect(bodyKindsWithHeadAhead(hands.do.enum).sort()).toEqual([...HAND_KINDS].sort());
+    expect([...hands.do.enum].sort()).toEqual([...HAND_KINDS].sort());
     expect(Object.keys(hands).sort()).toEqual(Object.keys(theirs).sort());
     // The body may be looser than the head (the head checks first) but never tighter: what the head sends the body must take.
     for (const field of Object.keys(theirs)) {
@@ -122,10 +122,35 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   it('refuses a field of the wrong type or range', () => {
     expect(takes({ do: 'fight', target: '#12', stance: 'hide' })).toBe(false);
     expect(takes({ do: 'portal', at: [{ x: 1, y: 2, z: 3 }], axis: 'y' })).toBe(false);
-    expect(takes({ do: 'go', to: { x: 1, y: 2, z: 3 }, maxDrop: 11 })).toBe(false);
+    // the body's act (78db26eb) takes maxDrop 0 to 70, as the head does (the older fixture's 10 is gone with the catalog made again)
+    expect(takes({ do: 'go', to: { x: 1, y: 2, z: 3 }, maxDrop: 71 })).toBe(false);
     expect(takes({ do: 'smelt', items: [{ item: 'raw_iron', count: 16 }], furnaces: 5 })).toBe(false);
     expect(takes({ do: 'vertical', dir: 'sideways', shape: 'stairs', toY: 10, canDig: ['stone'], liquid: 'stop' })).toBe(false);
     expect(takes({ do: 'vertical', dir: 'down', shape: 'diagonal', toY: 10, canDig: ['stone'], liquid: 'stop' })).toBe(false);
     expect(takes({ do: 'vertical', dir: 'down', shape: 'stairs', toY: 10, canDig: ['stone'], liquid: 'stop', maxDig: 201 })).toBe(false);
+  });
+});
+
+describe('the body catalog made again for bed_reserve (fixtures/continue/produced-catalog, 11/28)', () => {
+  const dir = new URL('./fixtures/continue/produced-catalog/', import.meta.url);
+  const index = JSON.parse(readFileSync(new URL('PRODUCED.json', dir), 'utf8')) as { madeBy: string; files: Record<string, string> };
+  const text = readFileSync(new URL('catalog.json', dir), 'utf8');
+  it('is the file PRODUCED.json names, made by the body it says (a full revision)', async () => {
+    const { createHash } = await import('node:crypto');
+    expect(index.files['catalog.json']).toBe(createHash('sha256').update(text).digest('hex'));
+    expect(index.madeBy).toMatch(/^[0-9a-f]{40}$/u);
+    expect((JSON.parse(text) as { bodyRevision: string }).bodyRevision).toBe(index.madeBy);
+  });
+  it('offers bed_reserve (count 1 to 10, seconds 10 to 150, on) and no bed_standby', () => {
+    const act = catalogOf('produced').find(skill => skill.name === 'act')!;
+    const hands = (act.inputSchema as any).properties.hands.items.properties;
+    expect(hands.do.enum).toContain('bed_reserve');
+    expect(hands.do.enum).not.toContain('bed_standby');
+    expect(HAND_FIELDS.bed_reserve.may).toEqual(expect.arrayContaining(['count', 'seconds', 'on']));
+    const takes = (hand: Record<string, unknown>) => validSkillInput({ hands: [hand], why: '[p1] x' }, act.inputSchema);
+    expect(takes({ do: 'bed_reserve' })).toBe(true);
+    expect(takes({ do: 'bed_reserve', count: 10, seconds: 150 })).toBe(true);
+    expect(takes({ do: 'bed_reserve', on: false })).toBe(true);
+    expect(takes({ do: 'bed_standby', on: true })).toBe(false);
   });
 });

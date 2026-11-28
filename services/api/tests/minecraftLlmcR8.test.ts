@@ -59,7 +59,7 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
     expect(footingProbes(footing, () => undefined)).toEqual([
       { kind: 'column', x: 251, z: 75, yFrom: 54, yTo: -5 }, { kind: 'column', x: 251, z: 77, yFrom: 54, yTo: -5 }]);
     // Said as a guess until the probe answers.
-    expect(footingLine(footing)).toBe('足場: 幅 1 の橋・両脇（北・南）とも空所（落差 2 以上（深さは調べていない））。押されたら落ちる');
+    expect(footingLine(footing)).toBe('足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 2 以上（深さは調べていない））。敵に押されると落ちる');
   });
 
   it('with the column probe\'s answer: the drop and what is at the bottom (the example of the brief: 28 down, lava)', () => {
@@ -67,7 +67,7 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
     // The diagonals are not asked: the sides' answers measure the line, and the rest stands as they say.
     const lava = { drop: 28, bottom: 'lava' as const, name: 'lava' };
     const facts = new Map([[columnKey(at(251, 55, 75), 55), lava], [columnKey(at(251, 55, 77), 55), lava]]);
-    expect(footingLine(footing, key => facts.get(key))).toBe('足場: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる');
+    expect(footingLine(footing, key => facts.get(key))).toBe('足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。敵に押されると落ちる');
     // One side measured is enough to speak for the diagonals; a measured side that is shallow says there is nothing to fear.
     const shallow = new Map([[columnKey(at(251, 55, 75), 55), { drop: 2, bottom: 'floor' as const, name: 'netherrack' }]]);
     expect(footingLine(footing, key => shallow.get(key))).toBeNull();
@@ -96,7 +96,7 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
 
   it('lava at her feet\'s height beside her is said as lava, not as a drop', () => {
     const edge = layersMap(FEET, (dx, dz, dy) => dx === 1 && dz === 0 && dy === 0 ? 'L' : dy <= -1 ? '#' : '.');
-    expect(footingLine(footingFromMap(edge, WORLD_AT))).toBe('足場: 東が空所（溶岩のマス）。押されたら落ちる');
+    expect(footingLine(footingFromMap(edge, WORLD_AT))).toBe('足元の床: 東が空所（溶岩のマス）。敵に押されると落ちる');
   });
 
   it('a map drawn for another block than the frame\'s feet is old: no footing from it', () => {
@@ -109,9 +109,9 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
     const cliff = surfaceMap(FEET, (dx, dz) => dx === 1 && dz === 0 ? '.v' : dx === 0 && dz === -1 ? '#d' : dx === 0 && dz === 1 ? '#1' : '#0', () => '.');
     const footing = footingFromMap(cliff, WORLD_AT)!;
     expect(footing.gaps.map(gap => `${gap.dx},${gap.dz}:${gap.drop}${gap.deeper ? '+' : ''}`).sort()).toEqual(['0,-1:4', '1,0:12+']);
-    expect(footingLine(footing)).toBe('足場: 北・東が空所（落差 12 以上（深さは調べていない））。押されたら落ちる');
+    expect(footingLine(footing)).toBe('足元の床: 北・東が空所（落差 12 以上（深さは調べていない））。敵に押されると落ちる');
     const facts = new Map([[columnKey(at(252, 55, 76), 55), { drop: 15, bottom: 'floor' as const, name: 'stone' }]]);
-    expect(footingLine(footing, key => facts.get(key))).toBe('足場: 北・東が空所（落差 15、下は stone）。押されたら落ちる');
+    expect(footingLine(footing, key => facts.get(key))).toBe('足元の床: 北・東が空所（落差 15、下は stone）。敵に押されると落ちる');
   });
 
   it('asks the body\'s column probe for the gaps the map cannot measure, keeps the answers, and asks no more of the same cell', async () => {
@@ -132,16 +132,16 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
     expect(second.line).toBe(first.line);
   });
 
-  it('the body\'s own word (its around: 「足場: …」 in the text, else the field footing) is the line; no gap in the map, no question', async () => {
-    const said = '足場: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。押されたら落ちる。近くに生き物は居ない';
+  it('the body\'s own word (its around: 「足元の床: …」 in the text, else the field footing) is the line; no gap in the map, no question', async () => {
+    const said = '足元の床: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。敵に押されると落ちる。近くに生き物は居ない';
     const around = JSON.stringify({ v: 1, kind: 'around', text: said, footing: { voids: 6, deepest: 26, lava: true, bridge: true, pillar: false, text: '幅 1 の橋' } });
     const sent: ProbeInput[] = [];
     const asked = await lookAtFooting({ taskId: 'r8-body', map: bridge, feet: WORLD_AT, index: 20, budgetMs: 200,
       run: async input => { sent.push(input); return input.kind === 'around' ? around : null; } });
-    expect(asked).toMatchObject({ line: '足場: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。押されたら落ちる', by: 'body' });
+    expect(asked).toMatchObject({ line: '足元の床: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。敵に押されると落ちる', by: 'body' });
     expect(sent[0]).toEqual({ kind: 'around', radius: 4 });
     expect(readAroundFooting(JSON.stringify({ v: 1, kind: 'around', text: '近くに敵は居ない', footing: { text: '幅 1 の足場・四方とも空所（落差 33）' } })))
-      .toBe('足場: 幅 1 の足場・四方とも空所（落差 33）');
+      .toBe('足元の床: 幅 1 の足場・四方とも空所（落差 33）');
     expect(readAroundFooting(JSON.stringify({ v: 1, kind: 'around', text: '近くに敵は居ない' }))).toBeNull();
     expect(readAroundFooting(JSON.stringify({ v: 1, kind: 'column', text: said }))).toBeNull();
     expect(readAroundFooting(null)).toBeNull();
@@ -154,7 +154,7 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
   it('a probe that does not answer in time leaves the map\'s guess, said as one; no body probe: the guess too', async () => {
     const slow = await lookAtFooting({ taskId: 'r8-slow', map: bridge, feet: WORLD_AT, index: 20, budgetMs: 20,
       run: () => new Promise<string | null>(resolve => setTimeout(() => resolve(null), 500)) });
-    expect(slow.line).toBe('足場: 幅 1 の橋・両脇（北・南）とも空所（落差 2 以上（深さは調べていない））。押されたら落ちる');
+    expect(slow.line).toBe('足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 2 以上（深さは調べていない））。敵に押されると落ちる');
     const none = await lookAtFooting({ taskId: 'r8-none', map: bridge, feet: WORLD_AT, index: 20, budgetMs: 20, run: null });
     expect(none).toMatchObject({ asked: 0, line: slow.line });
     expect(await lookAtFooting({ taskId: 'r8-none', map: undefined, feet: WORLD_AT, index: 20, budgetMs: 20, run: null })).toMatchObject({ line: null, gaps: 0 });
@@ -165,11 +165,11 @@ describe('the footing round her feet (run 32: the drop under the bridge was not 
   it('is a key of the live state before the map, counted in its bound and never cut', () => {
     const world = { position: WORLD_AT, health: 20, food: 20, localMap: bridge, inventory: [{ name: 'cobblestone', count: 64 }] };
     const live = minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 3, trend: createFoodTrend(), events: [],
-      footing: '足場: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる' });
+      footing: '足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。敵に押されると落ちる' });
     const keys = Object.keys(live);
     expect(keys.indexOf('footing')).toBeGreaterThanOrEqual(0);
     expect(keys.indexOf('footing')).toBeLessThan(keys.indexOf('map'));
-    expect(live.footing).toBe('足場: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる');
+    expect(live.footing).toBe('足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。敵に押されると落ちる');
     expect(minecraftLlmcLive({ observation: frame(world), elapsedMinutes: 3, trend: createFoodTrend(), events: [] })).not.toHaveProperty('footing');
   });
 });
@@ -254,14 +254,14 @@ describe('a hostile she must act on (run 32: 「wither_skeleton #696 は見え�
 
 describe('the short live state of an urgent decision (run 32: 696 tokens of answer in 10.3 s)', () => {
   const world = { position: WORLD_AT, health: 15.5, food: 16, dimension: 'the_nether', localMap: layersMap(FEET, bridgeAt),
-    mapLandmarks: ['T 作業台 (250,55,77) 東1', 'F かまど (240,55,70) 西11', 'S スポナー (260,60,70) 東9'], recentStops: ['(1,2,3)→(4,5,6) 届かない ×2 30秒前'],
+    mapLandmarks: ['T 作業台 (250,55,77) 東1', 'F かまど (240,55,70) 西11', 'S スポナー (260,60,70) 東9'], recentStops: ['(1,2,3)→(4,5,6) 対象に届かない ×2 30秒前'],
     inventory: [{ name: 'cobblestone', count: 64 }, { name: 'netherrack', count: 40 }, { name: 'cooked_mutton', count: 1 }],
     nearbyThreats: [{ id: 696, name: 'wither_skeleton', kind: 'hostile', distance: 6.1, position: at(256.5, 61, 76.5), canReachMe: true, canSee: true }],
     nearbyEntities: [{ id: 5, name: 'zombified_piglin', distance: 20, position: at(270, 55, 76) }] };
 
   it('keeps the urgent lines, the footing, the map, her state, the hostiles and what she holds; the rest waits for the next decision', () => {
     const short = minecraftLlmcUrgentLive({ observation: frame(world), elapsedMinutes: 5.4, events: ['反射が mc.act を止めた'], lastResults: ['act 1/2 済みで止まった'],
-      urgent: ['wither_skeleton #696 6.1m・上 6・見える（射線の中）'], investigation: [], footing: '足場: 幅 1 の橋（落差 28、下は溶岩）。押されたら落ちる',
+      urgent: ['wither_skeleton #696 6.1m・上 6・見える（射線の中）'], investigation: [], footing: '足元の床: 幅 1 の橋（落差 28、下は溶岩）。敵に押されると落ちる',
       planNowTitle: '[p1.2] 橋を西へ', mode: '急ぎの版' });
     expect(Object.keys(short)).toEqual(['urgent', 'planNow', 'footing', 'map', 'state', 'foodPoints', 'threats', 'inventory', 'events', 'lastResults', 'mode']);
     expect(short.threats).toHaveLength(1);
@@ -314,7 +314,7 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     expect(sent.filter(input => input.kind === 'column')).toHaveLength(2);
     body.context();
     const live = body.transient!() as Record<string, unknown>;
-    expect(live.footing).toBe('足場: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる');
+    expect(live.footing).toBe('足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。敵に押されると落ちる');
     expect(Object.keys(live).indexOf('footing')).toBeLessThan(Object.keys(live).indexOf('map'));
     expect(lines.some(line => /^Shannon Minecraft footing task=r8-life gaps=6 asked=3 line=1 by=map ms=\d+$/u.test(line))).toBe(true);
   });
@@ -337,7 +337,7 @@ describe('the lifecycle: the footing in the live state, a hostile that comes whi
     expect(Object.keys(short).slice(0, 3)).toEqual(['urgent', 'planNow', 'footing']);
     expect(short.urgent[0]).toBe('急ぎ: 判断を待つ間に wither_skeleton #696 6.1m・上 6・見える（射線の中）');
     expect(short.planNow).toBe('[p1.2] 橋を西へ');
-    expect(short.footing).toContain('押されたら落ちる');
+    expect(short.footing).toContain('敵に押されると落ちる');
     expect(short.mode).toContain('急ぎの版');
     expect(short).not.toHaveProperty('landmarks');
     body.decided!({ ms: 4_200, aborted: true, thrownMs: 2_600 });
@@ -408,7 +408,7 @@ describe('the knowledge and the first plan (r8)', () => {
     // r9 adds its section after r8's (the same bytes up to it).
     expect(LLMC_SYSTEM_APPENDIX_R8).toBe(`${LLMC_SYSTEM_APPENDIX_R7}\n\n${R8_KNOWLEDGE}`);
     for (const words of ['岩の中のトンネル', '両脇（足の高さ）に壁のブロックを置いた橋', '壁の無い幅 1 の橋は使わない', '落差 4 以上', '敵のいる構造物（要塞・砦の遺跡）',
-      'body.footing', '押されたら落ちる', '近接の敵', 'まず空所から離れる', '敵との間にブロックを置く', '急ぎの判断', '考えは 2〜3 文', 'body.planNow']) {
+      'body.footing', '敵に押されると落ちる', '近接の敵', 'まず空所から離れる', '敵との間にブロックを置く', '急ぎの判断', '考えは 2〜3 文', 'body.planNow']) {
       expect(R8_KNOWLEDGE).toContain(words);
     }
 

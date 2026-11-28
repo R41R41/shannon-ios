@@ -113,7 +113,7 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     expect(sent?.arguments).toMatchObject({ stopIf: { hpBelow: 12 }, why: '[p1.2] 東へ' });
     const text = `${held.seen.join('\n')}\n${held.news.join('\n')}`;
     expect(text).toContain('act 全部済み（2/2');
-    expect(text).toContain('手 3 から先 1 手（全 3 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: 手 3 walk 一歩ではない: 足のマス (224,56,62) が 石の類');
+    expect(text).toContain('手 3 から先 1 手（全 3 手のうち）は体へ送っていない（送る前に止めた。手は 1 つも動いていない）: 手 3 walk 歩いて進めない: 足のマス (224,56,62) が 石の類');
     // The item was put in the queue with the fact of the hands left out; the body's own line comes later, as news.
     expect(text.indexOf('手 3 から先 1 手')).toBeLessThan(text.indexOf('act 全部済み（2/2'));
     expect(text).toContain('列に入れた q');
@@ -128,7 +128,7 @@ describe('the guards of SHANNON_MINECRAFT_LLMC_V2 in the real tools', () => {
     await first.driver.tick();
     await first.driver.drain();
     expect(first.pending()).toBe(0);
-    expect(first.seen.join('\n')).toContain('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 walk 一歩ではない');
+    expect(first.seen.join('\n')).toContain('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 1 walk 歩いて進めない');
   });
 
   it('v2: an act the guards do not fault goes whole, and its result has no tail', async () => {

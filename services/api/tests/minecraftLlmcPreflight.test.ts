@@ -33,14 +33,14 @@ const hold = (hands: unknown[], open: Array<Cell | [Cell, string]> = corridor(3)
   preflightAct({ hands }, { map: mapOf(feet, open), feet }, options);
 
 describe('a walk the body would refuse at its start (primitives/walk.ts unstandable: the target is a place no body stands in)', () => {
-  it('the feet cell is rock: 一歩ではない, with the hand, the cell and the block by the map', () => {
+  it('the feet cell is rock: 歩いて進めない, with the hand, the cell and the block by the map', () => {
     const stop = hold([{ do: 'walk', to: at(1, 0, 0) }, { do: 'walk', to: at(5, 0, 0) }])!;
-    expect(stop).toMatchObject({ hand: 2, kind: 'walk', word: '一歩ではない', code: 'feet_solid', cell: at(5, 0, 0) });
-    expect(preflightText(stop)).toBe('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 2 walk 一歩ではない: 足のマス (5,0,0) が 石の類（地図 #） で埋まっている（地図で確かめた）。'
+    expect(stop).toMatchObject({ hand: 2, kind: 'walk', word: '歩いて進めない', code: 'feet_solid', cell: at(5, 0, 0) });
+    expect(preflightText(stop)).toBe('送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 2 walk 歩いて進めない: 足のマス (5,0,0) が 石の類（地図 #） で埋まっている（地図で確かめた）。'
       + 'walk は掘らず置かない。先に dig か place で足と頭の 2 マスと床を整えるか、別の道・別の着く所へ。');
   });
 
-  it('the head cell is rock while the feet cell is open (run 34: five of the nine 一歩ではない)', () => {
+  it('the head cell is rock while the feet cell is open (run 34: five of the nine 歩いて進めない)', () => {
     const open = [at(1, 0, 0), at(2, 0, 0), at(1, 1, 0)];
     const stop = hold([{ do: 'walk', to: at(2, 0, 0) }], open)!;
     expect(stop).toMatchObject({ code: 'head_solid', cell: at(2, 1, 0) });
@@ -206,8 +206,8 @@ describe('against the body\'s own results (production runs 32–34: what the bod
     expect(counts('same')).toBeGreaterThanOrEqual(29);
   });
 
-  it('catches the body\'s own 一歩ではない / 置けない of the walks and places before it sends them (the share it can see for certain)', () => {
-    const own = recorded.acts.filter(act => act.lines.some(line => (line.status === '止' || line.status === '失') && ((line.do === 'walk' && line.word === '一歩ではない') || (line.do === 'place' && line.word === '置けない'))));
+  it('catches the body\'s own 歩いて進めない / 置けない of the walks and places before it sends them (the share it can see for certain)', () => {
+    const own = recorded.acts.filter(act => act.lines.some(line => (line.status === '止' || line.status === '失') && ((line.do === 'walk' && line.word === '歩いて進めない') || (line.do === 'place' && line.word === '置けない'))));
     const caught = own.filter(act => preflightAct(act.input, { map: act.map, feet: act.feet }));
     expect(own.length).toBeGreaterThanOrEqual(50);
     expect(caught.length).toBeGreaterThanOrEqual(29);
@@ -237,7 +237,7 @@ describe('against the answers of the decision replay (32 scenes; the answers of 
   it('every ○ or △ answer it holds is a place into a filled cell, a floating place, a walk into rock, no floor or no route (the fact is in the text)', () => {
     for (const item of held.filter(entry => entry.stop && entry.answer.verdict !== '×')) {
       expect(['occupied', 'no_support', 'own_cell', 'feet_solid', 'head_solid', 'no_floor', 'no_route']).toContain(item.stop!.code);
-      expect(preflightText(item.stop!)).toMatch(/^送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 \d+ (walk 一歩ではない|place 置けない): /u);
+      expect(preflightText(item.stop!)).toMatch(/^送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: 手 \d+ (walk 歩いて進めない|place 置けない): /u);
     }
   });
 });

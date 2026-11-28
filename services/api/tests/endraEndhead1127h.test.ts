@@ -20,19 +20,19 @@ const FEET = { x: 16, y: 101, z: -31 };
 describe('the footing line says where the fall ends', () => {
   it('a measured drop of 40 gives the ground height, the damage and the death of full health, with no coordinate of its own', () => {
     expect(groundNote(101, 40)).toBe('下は地面 y=61（落差 40）。落ちると約 37 の被害・防具は効かない・体力 20 でも即死（水バケツで着水できる時だけ減る）');
-    expect(withGround('足場: 幅 1・四方とも空所（落差 40）。押されたら落ちる', 101))
-      .toBe('足場: 幅 1・四方とも空所（落差 40）。押されたら落ちる。下は地面 y=61（落差 40）。落ちると約 37 の被害・防具は効かない・体力 20 でも即死（水バケツで着水できる時だけ減る）');
+    expect(withGround('足元の床: 幅 1・四方とも空所（落差 40）。敵に押されると落ちる', 101))
+      .toBe('足元の床: 幅 1・四方とも空所（落差 40）。敵に押されると落ちる。下は地面 y=61（落差 40）。落ちると約 37 の被害・防具は効かない・体力 20 でも即死（水バケツで着水できる時だけ減る）');
     // A smaller drop says what hurts it still takes; lava, water and an unmeasured depth say their own thing and get no ground.
     expect(groundNote(70, 10)).toContain('約 7 の被害・防具は効かない・体力が 7 以下なら死ぬ');
-    for (const line of ['足場: 幅 1 の橋・両脇とも空所（落差 24、下は溶岩）。押されたら落ちる', '足場: 北が空所（落差 30 以上（深さは調べていない））。押されたら落ちる',
-      '足場: 北が空所（落差 2）', null]) expect(withGround(line, 70)).toBe(line);
-    expect(footingDropOf('足場: 四方とも空所（落差 40）。押されたら落ちる')).toBe(40);
-    expect(footingDropOf('足場: 北が空所（落差 30 以上（深さは調べていない））')).toBeNull();
-    expect(footingDropOf('足場: 北が空所（落差 55、下は void_air）')).toBeNull();
+    for (const line of ['足元の床: 幅 1 の橋・両脇とも空所（落差 24、下は溶岩）。敵に押されると落ちる', '足元の床: 北が空所（落差 30 以上（深さは調べていない））。敵に押されると落ちる',
+      '足元の床: 北が空所（落差 2）', null]) expect(withGround(line, 70)).toBe(line);
+    expect(footingDropOf('足元の床: 四方とも空所（落差 40）。敵に押されると落ちる')).toBe(40);
+    expect(footingDropOf('足元の床: 北が空所（落差 30 以上（深さは調べていない））')).toBeNull();
+    expect(footingDropOf('足元の床: 北が空所（落差 55、下は void_air）')).toBeNull();
   });
 
   it('the body\'s own footing word gets the ground line too, and the drop is read back from it', async () => {
-    const said = '足場: 幅 1・四方とも空所（落差 40）。押されたら落ちる';
+    const said = '足元の床: 幅 1・四方とも空所（落差 40）。敵に押されると落ちる';
     const around = JSON.stringify({ v: 1, kind: 'around', text: `${said}。近くに生き物は居ない`, footing: { text: '幅 1' } });
     const map = ['地図 v1 足=(16,101,-31) x=15..17 z=-32..-30 方式=layers', 'y=101', '-32 . . .', '-31 . @ .', '-30 . . .', 'y=100', '-32 . . .', '-31 . # .', '-30 . . .', 'y=99', '-32 . . .', '-31 . . .', '-30 . . .'].join('\n');
     const found = await lookAtFooting({ taskId: 'h-ground', map, feet: FEET, index: 20, budgetMs: 100, run: async input => input.kind === 'around' ? around : null });

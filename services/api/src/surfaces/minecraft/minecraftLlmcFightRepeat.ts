@@ -66,7 +66,7 @@ function targetOf(text: string, hand: Partial<ActHand> | undefined): { key: stri
 }
 
 /**
- * The same target? Two ids are the same only when equal. A line that names no id (the body's 「届かない（元: …」 words do not always carry one) is
+ * The same target? Two ids are the same only when equal. A line that names no id (the body's 「対象に届かない（元: …」 words do not always carry one) is
  * the same hunt as the id of its own kind: the 11/26 run's stops alternated between the two shapes, and a reset per switch kept the count under the line.
  */
 function sameTarget(streak: Streak, target: { key: string; label: string }): boolean {

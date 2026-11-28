@@ -36,7 +36,7 @@ const FULL_WORLD = {
   heldItem: 'iron_pickaxe', worn: '頭: なし、胴: iron_chestplate',
   localMap: layersMap(),
   mapLandmarks: Array.from({ length: 12 }, (_, i) => `F かまど (202,${52 + i},277) 上${7 + i}・東1 自分が置いた raw_iron×3 焼き上がり`),
-  recentStops: Array.from({ length: 5 }, (_, i) => `(201,45,277)→(201,48,277) 一歩ではない ×${7 - i} ${23 + i}秒前`),
+  recentStops: Array.from({ length: 5 }, (_, i) => `(201,45,277)→(201,48,277) 歩いて進めない ×${7 - i} ${23 + i}秒前`),
   inventory: [...Array.from({ length: 34 }, (_, i) => ({ name: `item_${i}`, count: 12 })), { name: 'bread', count: 4 }, { name: 'cooked_beef', count: 2 }],
   nearbyThreats: Array.from({ length: 8 }, (_, i) => ({ name: 'zombie', distance: 9 + i, id: 100 + i, position: { x: 210 + i, y: 45, z: 277 } })),
   nearbyEntities: Array.from({ length: 16 }, (_, i) => ({ name: i % 2 ? 'cow' : 'sheep', distance: 4 + i, id: 200 + i, position: { x: 190 + i, y: 64, z: 270 } })),
@@ -112,11 +112,11 @@ describe('the mode\'s tools', () => {
 
   it('a stopped act fails; a reflex or an urgent cut is no failed step, and an act that did hands is progress', () => {
     const stopped = result({ ok: false, done: 1, stoppedBy: 'failure', lines: [{ i: 1, do: 'walk', status: 'done', line: '済み' },
-      { i: 2, do: 'dig', status: 'stopped', line: '届かない (9,64,9) 距離5.2 そのマスは stone' }, { i: 3, do: 'place', status: 'skipped', line: '未実行' }] });
+      { i: 2, do: 'dig', status: 'stopped', line: '対象に届かない (9,64,9) 距離5.2 そのマスは stone' }, { i: 3, do: 'place', status: 'skipped', line: '未実行' }] });
     const failed = llmcResult(MC_ACT_TOOL, receipt(stopped, 'failed'), null);
     expect(failed).toMatchObject({ ok: false, progressed: true });
     expect(failed.bodyReflex).toBeUndefined();
-    expect(failed.text).toContain('2 dig 止 届かない');
+    expect(failed.text).toContain('2 dig 止 対象に届かない');
     expect(llmcResult(MC_ACT_TOOL, receipt({ ...stopped, stoppedBy: 'reflex', stoppedWhy: '溶岩から上がった' }, 'failed'), null).bodyReflex).toBe(true);
     const urgent = llmcResult(MC_ACT_TOOL, receipt({ ...stopped, done: 0, stoppedBy: 'cancelled' }, 'failed'), 'zombie 4.0m');
     expect(urgent.text.startsWith('急ぎ: zombie 4.0m')).toBe(true);

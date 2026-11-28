@@ -113,11 +113,11 @@ describe('the reach of 5 m (utils/blockReach.ts BLOCK_REACH), from the eye (feet
 });
 
 describe('the new text of a walk that did not get on (body cd28661)', () => {
-  const NEW = '1 walk 止 一歩ではない: 道の5/7番目で: 4秒進めず止まった（今 (251,-24,204)（自分から同じマス）、的まで 1.4m）。probe path の決まりでは歩いて行ける（2 マス）が、'
+  const NEW = '1 walk 止 歩いて進めない: 道の5/7番目で: 4秒進めず止まった（今 (251,-24,204)（自分から同じマス）、的まで 1.4m）。probe path の決まりでは歩いて行ける（2 マス）が、'
     + '体はそこまで進まなかった。足のマス (251,-24,204) は 足 water（流れ 5（0 が源、7 が先））・頭 air・下 deepslate。体: 水の中。経路探索は道を見つけた（2 マス）が体は進まなかった。'
     + '次のマス (250,-24,204)（西1）は 足 water（流れ 3（0 が源、7 が先））・頭 air・下 deepslate';
   it('is the same stop to the count of the same stops: the word and the first cell are where they were', () => {
-    const body = { lastResults: [NEW], stops: ['(251,-24,204) 一歩ではない ×2 5秒前'] };
-    expect(repeatedFailures(body)).toEqual(['同じやり直しはしない: (251,-24,204) の walk は「一歩ではない」で 2 回止まった']);
+    const body = { lastResults: [NEW], stops: ['(251,-24,204) 歩いて進めない ×2 5秒前'] };
+    expect(repeatedFailures(body)).toEqual(['同じやり直しはしない: (251,-24,204) の walk は「歩いて進めない」で 2 回止まった']);
   });
 });

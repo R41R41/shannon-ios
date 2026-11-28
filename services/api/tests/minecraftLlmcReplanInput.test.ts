@@ -18,7 +18,7 @@ afterEach(() => {
 /** A result the body gave for a fight that never began (the third run of 11/26, the head's own words for the stopped hand). */
 const FIGHT_RESULT = [
   'q35 3.5m の #26 が回って来るのを斬る。目が隠れたら手を変える: act 0/2 済みで止まった（failure）',
-  '1 fight 止 届かない: fight 止まった not_visible: enderman #26 エンダーマンの目が見えない（8009ms/8000ms。間に (125,61,-374) netherrack ほか 2。10.5m。対象 #26、微動 0/2、屋根外の注視 0/2）',
+  '1 fight 止 対象に届かない: fight 止まった not_visible: enderman #26 エンダーマンの目が見えない（8009ms/8000ms。間に (125,61,-374) netherrack ほか 2。10.5m。対象 #26、微動 0/2、屋根外の注視 0/2）',
   '  事実: 進んでいない: 進んだ 0打・残りは分からない',
   '  事実: 穴の手が止まった理由 enderman_not_visible: 相手の目が見えない',
   '2 pickup 未 未実行',

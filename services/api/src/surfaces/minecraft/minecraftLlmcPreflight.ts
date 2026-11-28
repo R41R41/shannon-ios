@@ -20,7 +20,7 @@ export type { PreflightCode };
  * - walk, for the target and every point of a path, when its range is under one (the act's default is 0.5): `unstandable` — the feet cell is
  *   a wall or something never entered (lava, fire, cobweb, magma), the head cell likewise, or there is no floor under the feet cell
  *   (air, water or lava there: the walk does not "step down to" a target; a floor that is not under it is not its floor).
- *   The stop is `一歩ではない`. The drop of three of the walk's rules is a rule of the route between cells, not of a target.
+ *   The stop is `歩いて進めない`. The drop of three of the walk's rules is a rule of the route between cells, not of a target.
  * - walk, when no route reaches the target without digging or laying a block even taking every cell the map does not name the way that lets
  *   her through (`minecraftLlmcPreflightRoute.ts`): the route search finds no way either (`no_path`, `段差`, `頭の高さ`, a drop past three).
  * - place, for each cell: the cell holds a block that is not replaced (`置けない`: は埋まっている), or no neighbour is a block to set against
@@ -49,7 +49,7 @@ export interface PreflightStop {
   hand: number;
   kind: 'walk' | 'place' | 'dig';
   /** The body's closed word for the stop it would have made. */
-  word: '一歩ではない' | '置けない' | '溶岩が流れ込む';
+  word: '歩いて進めない' | '置けない' | '溶岩が流れ込む';
   code: PreflightCode;
   cell: ActPos;
   why: string;
@@ -173,7 +173,7 @@ function handStop(hand: ActHand, number: number, origin: Cell | null, base: Cell
   options: PreflightOptions, at: Cell | null = null): PreflightStop | null {
   if (hand.do === 'walk') {
     const found = walkStop(hand, origin, base, view, world, options);
-    return found ? { hand: number, kind: 'walk', word: '一歩ではない', ...found } : null;
+    return found ? { hand: number, kind: 'walk', word: '歩いて進めない', ...found } : null;
   }
   if (hand.do === 'place') {
     const found = placeCellsStop(hand, base, view, at);

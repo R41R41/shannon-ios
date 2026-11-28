@@ -363,7 +363,7 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
 
 /**
  * The booking line (11/28, run 21): the window of the landing (about 5 s left when the read came) was found and the head's hand came 11 s later, and the walk to the standing cell met the
- * dragon's neck. So the head books the burst with the body once (the `bed_standby` hand); the body watches the window and does the walk, the screen, the beds and the leaving. Said in every
+ * dragon's neck. So the head books the burst with the body once (the `bed_reserve` hand); the body watches the window and does the walk, the screen, the beds and the leaving. Said in every
  * phase of a live dragon (the booking is for the next descent too), and held back where the burst line is: a crystal standing, a spike unread, no bed, no dragon id.
  * Plain words on purpose: no fractions or arrows or bare phase numbers carry the meaning (the "6/12" of run 21 was read as "no obsidian").
  */
@@ -373,11 +373,12 @@ export function dragonStandbyLine(end: EndView | null, bedItem: string | null = 
   if (unseenBedHold(end, 'ベッド連爆') !== null) return null;
   const standing = standingOrListed(end);
   if (standing !== null && standing >= 1) return null;
-  return '竜をベッドで倒す（予約）: 竜を倒す段に入り、結晶が 0 本で、ベッドを持っているので、json {"do":"bed_standby","on":true} の 1 手で体へ予約する（座標は書かない。取り消すのは "on":false）。'
+  return '竜をベッドで倒す（予約）: 竜を倒す段に入り、結晶が 0 本で、ベッドを持っているので、json {"do":"bed_reserve"} の 1 手で体へ予約する（座標は書かない。使うベッドの数は count、続ける秒数は seconds で、書かなければ 5 個と 120 秒）。'
     + '予約したあとは、体が竜の降りてくる窓を自分で見張り、窓が開いたら、撃つ時に立つマスへ歩く・遮蔽の黒曜石を置く・ベッドを置いて撃つ・離れる、までを頭の返事を待たずに行う。'
-    + '頭は、体が知らせる「撃った（何回起爆したか）」か「見送った（理由）」を読んで、次を決める。予約が残っていなければ、次に竜が降りてくるまでに出し直す。'
+    + '予約の act は seconds 秒まで続き、結果は最後に 1 回返る。それまで体は予約に使われているので、頭は他の手を足さずに待つ。取り消すのは、その act の命令の取り消しで、反射で体が空いている間なら {"do":"bed_reserve","on":false} でもよい。'
+    + '返った文の「撃った（何回起爆したか）」と「見送った（理由）」を読んで、次を決める。竜がまだ生きていてベッドがあれば、出し直す。反射が続けて 6 回入ると予約は捨てられるので、その時もこの行がまた出る。'
     + '理由: 21 回目は、竜が降りるまで残り約 5 秒の窓を見つけてから、頭が撃つ手を返すまでに 11 秒かかり、立つ場所へ歩く途中で竜の首に打たれて落ちて死んだ。頭の返事は 4〜11 秒かかるので、数秒で閉じる窓の手は体に任せる。'
-    + '体が予約を断った時と、予約が残っていない時だけ、次の行の旧の手（頭が座標を組む bed_burst）で行う。';
+    + '体が予約を断った時だけ、次の行の旧の手（頭が座標を組む bed_burst）で行う。';
 }
 
 /**
@@ -397,13 +398,13 @@ export function dragonBurstLine(end: EndView | null, bedItem: string | null = nu
     + '着陸の途中（phase 3）になってからは bedsite を新しく読めない（返事は current_phase2_required。意味は「読めるのは降りる途中の間だけ」）。この降りで ready を読んでいなければ、待ち場へ戻って次の降りを待つ。';
   return `ベッド連爆の機会（竜 #${dragon.id} が止まり木へ降りてくる途中。phase 2）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、降りるのを待たず、いま先に mc_probe kind=bedsite target=#${dragon.id} を読む（待ち場にいるままでよい。理由: bedsite は phase 2 の間しか読めず、降りてくる途中は 18 回目の標本で 14〜49 秒続き、最短は分かっていない。降りてからでは読めない。packet_history_pending は「竜の動きの記録がまだ足りない」の意味なので、1 秒後にもう一度読む）`
     + `。そのあと次の順に 1 つの act へ並べる。(1) 返った stand（撃つ時に立つマス）へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）、(2) 返った footing（足場）・screen（遮蔽）と、選んだ options の supports（支え）の黒曜石のマスに place、(3) json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない）、(4) 退避の go。ベッドは体が置いて使うので、place するのは黒曜石だけ。`
-    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は 18 回目の標本で 14〜49 秒続いた（最短は分かっていない）。待ち場（止まり木から 10〜14m）は probe を読む場所で、起爆に立つのは返った stand。体は stand で起爆の前に息の雲・火・竜の頭と首・翼の下を確かめ、危なければ断る（断られたら待ち場へ戻る）。`;
+    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。撃ったのに爆発を 1 回も確かめられなかった時は、失敗の行で返る（爆発が見えなかっただけで、ベッドは使われたかもしれない）。後ろに並べた退避の go は、その失敗の行のあとも走る。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は 18 回目の標本で 14〜49 秒続いた（最短は分かっていない）。待ち場（止まり木から 10〜14m）は probe を読む場所で、起爆に立つのは返った stand。体は stand で起爆の前に息の雲・火・竜の頭と首・翼の下を確かめ、危なければ断る（断られたら待ち場へ戻る）。`;
 }
 
 /** The short (urgent) set's booking line: one hand, so a decision of one to three hands has room for it. Null where the full booking line is null. */
 export function dragonStandbyShortLine(end: EndView | null, bedItem: string | null = null): string | null {
   return dragonStandbyLine(end, bedItem) === null ? null
-    : '竜をベッドで倒す（予約・急ぎ）: json {"do":"bed_standby","on":true} の 1 手で体へ予約する。窓の見張り・歩き・黒曜石・撃つ・離れるは体が行い、結果は「撃った」か「見送った」で返る。予約が使えない時だけ、頭が座標を組む旧の手を使う';
+    : '竜をベッドで倒す（予約・急ぎ）: json {"do":"bed_reserve"} の 1 手で体へ予約する。窓の見張り・歩き・黒曜石・撃つ・離れるは体が行い、結果は seconds 秒まで続く act の最後に「撃った」か「見送った」で返る。体が予約を断った時だけ、頭が座標を組む旧の手を使う';
 }
 
 /** The short (urgent) set's bed burst line: the same hand in three moves (go, place, bed_burst), so a decision of two to three hands still has room for it. Null when the full line would be null or held. */

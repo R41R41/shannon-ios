@@ -24,7 +24,7 @@ describe('the fights at the same target, counted by the head', () => {
     expect(line).toContain('変わらない限り何度呼んでも届かない');
   });
   it('counts a target named only by the hand when the body words carry no id, and says no other is near', () => {
-    for (let k = 0; k < 3; k++) noteFights('t', input, stopped('届かない（元: 怒っているが 15 秒近づかない）'), frame(0, 0, []), T(k));
+    for (let k = 0; k < 3; k++) noteFights('t', input, stopped('対象に届かない（元: 怒っているが 15 秒近づかない）'), frame(0, 0, []), T(k));
     const [line] = fightRepeatLines('t', frame(0, 0, []), T(3));
     expect(line).toContain('enderman への fight が 3 回続けて止まった');
     expect(line).toContain('近くに別のエンダーマンは見えていない');
@@ -43,7 +43,7 @@ describe('the fights at the same target, counted by the head', () => {
     expect(fightRepeatLines('t', frame(1, 0, [[58, 9]]), T(30))).toEqual([]);
   });
   it('keeps one count when the stops alternate between words with the id and words without it', () => {
-    const words = ['届かない（元: 屋根の蓋が #58 の目を隠し）', 'fight 止まった moved: enderman #58 屋根中央に留まれない', '届かない（元: 怒っているが 15 秒近づかない）'];
+    const words = ['対象に届かない（元: 屋根の蓋が #58 の目を隠し）', 'fight 止まった moved: enderman #58 屋根中央に留まれない', '対象に届かない（元: 怒っているが 15 秒近づかない）'];
     words.forEach((w, k) => noteFights('t', input, stopped(w), frame(0, 0, [[58, 9]]), T(k)));
     expect(fightRepeatLines('t', frame(0, 0, [[58, 9]]), T(3))[0]).toContain('enderman #58 への fight が 3 回続けて止まった');
   });

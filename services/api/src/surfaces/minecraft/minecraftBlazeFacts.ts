@@ -51,7 +51,7 @@ const SWORD_FACT = 'ブレイズは剣で倒す: 体力 14 以上の時に、見
   + '。ロッドは倒れた所に落ちる: 幅 1 の橋や足場の外で倒すと下へ落ちて失う（ある実走: 13 体で 3 本）。湧き場の部屋の床の上で斬り、落ちた棒は pickup target=blaze_rod'
   + '。pickup が「掘らない道が無い」「そこまで着けない」と返した棒は、同じ pickup を出し直さず、pickup target=blaze_rod に canDig=[nether_bricks,netherrack] maxDig 6 を付けて出す（煉瓦・ネザーラックは既定では掘らない）'
   + '（ある実走: 同じ pickup 3 回・3 分の間に棒が消えた）'
-  + '。上に浮いて、または壁の向こうで attack が「届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁越しで届かない相手が 2 回続いたら、同じ act の中で壁の 1 マスを dig at=[壁のマス] exposeOk=true（collect=false・accept に blaze）してから attack を出す。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
+  + '。上に浮いて、または壁の向こうで attack が「対象に届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁越しで届かない相手が 2 回続いたら、同じ act の中で壁の 1 マスを dig at=[壁のマス] exposeOk=true（collect=false・accept に blaze）してから attack を出す。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
   + '（ある実走: 煉瓦の陰で hold 8 秒を 51 回・10 分、振れたのは 0 回。別の実走の 14 体は全部、見えている届く 1 体を追った attack）'
   + '。attack は体が 2m まで追って斬る: 見えている 8m 内の 1 体は、3m まで来るのを待たずにすぐ attack target=#id（ある実走: 湧き場から 12〜14m で「3m まで来たら斬る」と wait を 10 分続け、撃破 0。ブレイズは上下に動き、多くは剣の高さへ下りてくる）'
   + '。見えている 8m 内の 1 体がいない時は、体力 18 以上なら野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go で入り、そこで見えた 1 体を待たずに斬り続ける（ある実走は湧き場から 1〜3m で 11・14 体を斬った。h13 は同じ所で 10 秒待って死んだ＝危ないのは近さではなく待つこと。別の実走は 5〜7m の床の縁へ出て数体に撃たれ死んだ）。ただし 8m 内に壁の向こうも含めて 3 体以上いる時は入らない（ある実走: 3〜6 体の脇へ入り 20 秒で死亡）: 今の陰から壁の 1 マスだけを開けて 1 体ずつ';
@@ -294,14 +294,14 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
   if (fence && !(finite(world.health) && world.health < BACK_HP)) {
     const target = first ?? missed[0];
     const cell = `${fence.x},${fence.y},${fence.z}`;
-    // end1109f09: the dig hand came back 「届かない（目から5.4m、5m まで）」: dig does not walk, so a cell beyond reach gets a go first.
+    // end1109f09: the dig hand came back 「対象に届かない（目から5.4m、5m まで）」: dig does not walk, so a cell beyond reach gets a go first.
     const eyes = Math.hypot(fence.x + 0.5 - feet!.x, fence.y + 0.5 - (feet!.y + 1.62), fence.z + 0.5 - feet!.z);
     const walk = eyes > 4.5 ? `"go ${cell} range=3", ` : '';
     return `ブレイズとの距離: 剣の届く 1 体がいない。attack が「間に ${fence.name} (${cell})：掘るか回り込めば近づける」と返した: 柵・壁の向こうのブレイズは待っても寄って来ない`
       + `（ある実走: 柵の手前で「8m 内に来たら斬る」と下がり続け、4 分で撃破 0）→ 1 つの act で hands: [${walk}"dig ${cell} exposeOk=true collect=false", "attack target=${target ? tag(target) : '#id（見えた 1 体）'}"]、`
       + `accept に blaze（入れないとブレイズに身をさらすマスを体が掘らない）。この 1 マスは「壁の向こうは attack の相手にしない」の例外: 掘れば届く${walk ? `（このマスは目から ${Math.round(eyes * 10) / 10}m: dig は歩かず 5m までしか届かないので、先の go で寄る）` : ''}`;
   }
-  const skipped = missed.length ? `（${missed.slice(0, 3).map(tag).join('・')} は attack が「届かない」と返した相手: 同じ id を出し直さない）` : '';
+  const skipped = missed.length ? `（${missed.slice(0, 3).map(tag).join('・')} は attack が「対象に届かない」と返した相手: 同じ id を出し直さない）` : '';
   const head = first
     ? `ブレイズとの距離: 一番近い見える ${tag(first)} は ${meters(first)}m、8m 内は 0 体${skipped} → 待っても寄って来ない（ブレイズは見える所から撃つだけ）`
     : `ブレイズとの距離: 届く見える 1 体がいない${skipped}${hidden > 0 ? `（壁の向こうに ${hidden} 体: 壁の陰で待っても見えないし寄って来ない）` : ''}`;

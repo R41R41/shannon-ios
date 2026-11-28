@@ -46,7 +46,7 @@ const DECIDE = [
     + 'If the investigation shows the cause, use it. Once the cause is known, write one line into the current section with plan_update\'s forbid (things not to do) or caution (things to watch out for) op (it appears in plan.rules).',
   '- A wait-only act only when nothing else can be done (waiting stops the plan: one run lost a quarter of its time); the why names what is awaited and the reason. Do not wait for the night: put one sleep hand in a work act (the body lies down at dusk). A furnace take may be sent early; do other work while it burns.',
   '- Do not re-dig with exposeOk a cell where a 「見られる」 stop occurred. Dig a different cell that cannot be seen (the side away from the enemy, rock below). Do not dig or walk in a direction that approaches the enemy\'s side. '
-    + 'Do not chase a target when attack stopped twice with 「届かない」 (wait for it to come with hold, or move away). Do not travel far or chase enemies while lacking food, a shield or golden armour.',
+    + 'Do not chase a target when attack stopped twice with 「対象に届かない」 (wait for it to come with hold, or move away). Do not travel far or chase enemies while lacking food, a shield or golden armour.',
   '- Do not skip a section against a note you wrote yourself (plan.rules). Review the plan when the dimension changes.',
 ].join('\n');
 
@@ -57,7 +57,7 @@ const DECIDE = [
 const URGENT = [
   '## Urgent decisions (「急ぎの時」)',
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
-    + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
+    + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「敵に押されると落ちる」, moving away from the gap comes first. '
     + 'The block goes against a melee enemy, not against a dragon\'s breath cloud (it lies on the floor and passes through walls; a ring did not stop it): the cloud line says the way out. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
   // try1124b (the owner's test 11/24: 15 of 38 acts were replaced by the next decision before they arrived; in a replay the moves were 1 to 6 m in 14 of 15 answers).
@@ -109,7 +109,7 @@ const FALLS = [
   '## Falls, water, lava, gaps (「落ちる・水・溶岩・空所」)',
   '- Never dig straight down with bare hands. Do not dig down while in water or directly above it. Do not dig or walk next to lava (L, l). Descend only a drop of n≤3; for 4 or more use vertical stairs or water at the landing point.',
   '- Cross a gap (a lava sea, a deep hole, a cliff) through a tunnel in rock one level below the edge, or on a bridge with walls placed at the feet and on both sides for every cell. Never use a 1-wide bridge without walls. '
-    + 'While footing shows 「押されたら落ちる」, do not stand still, jump or stack at the edge.',
+    + 'While footing shows 「敵に押されると落ちる」, do not stand still, jump or stack at the edge.',
   '- Digging in water is very slow; the body first steadies its feet and stops a stream. Never repeat the same dig; re-plan from its note.',
 ].join('\n');
 
@@ -346,7 +346,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- go の canPlace は、空所（落差のある所）の上では壁の無い幅 1 の橋と柱を置いて渡る（壁を置くのは溶岩の上だけ）。'
       + 'だから要塞・スポナーの近く（要塞が見えてから、スポナーの足場まで）の go は canPlace を付けず、canDig だけで岩の中を通す。'
       + '岩の中に道が無い（no_path・search_timeout）なら、空所を渡らず、岩のある側へ回る中継点・トンネル（上の 1 段下の岩）・vertical up stairs で高さを合わせる。'
-      + 'go の道に「幅 1 の橋」「押されたら落ちる」が出たら、その go は止めて岩の側へ戻る。',
+      + 'go の道に「幅 1 の橋」「敵に押されると落ちる」が出たら、その go は止めて岩の側へ戻る。',
     '- 中継点を重ねて進む道で、live の「この段の go」の行が「同じ中継点へ N 回戻った」と言う時は、戻りも同じ所での停止も行き先に近づいていない。行き先までの距離が縮んでいるなら続け、縮まないなら、同じ中継点へ go を出し直さず、別の向きの道（迂回・橋・掘り抜き）に変える。敵を斬って進む手は、倒せば道が開く時に選ぶ。',
     // end1109f13 (random world): a go with canPlace from the rim of a lava lake (the lava 4 below) stepped off while laying the first floor; she could not climb
     // the 4-high wall out of the lava and died in 5 s (the lava-escape reflex jumped in place).
@@ -394,8 +394,8 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + 'ネザーの岩を掘り続けると壊れる。予備が荷にあれば go は持ち替えて続ける作りだが、実機では未確認。',
     // end1109f19: go with accept [magma_cube] walked past one on a ledge; two hits (20→15.8) knocked her off the 6-drop edge, fell 25 and died at 40 s.
     '- マグマキューブ（ネザーの跳ねる立方体）も近接敵: 跳びついて 1 打ち 3〜6 と強いノックバック。体力が多くても、崖・橋・縁の近くで殴られると押されて落ちる（落下で死ぬ）。'
-      + 'accept に入れて横を通らない。8m 内に来たら、足場に「押されたら落ちる」が無い開けた所（または壁を背にして）で attack target=#id untilDead（大は割れて小が出る: 小も斬り切る）、'
-      + 'footing に「押されたら落ちる」がある間は、先に空所から 3 マス以上離れてから斬る。遠い（8m より先）なら hostileWithin 8 を付けて別の道。',
+      + 'accept に入れて横を通らない。8m 内に来たら、足場に「敵に押されると落ちる」が無い開けた所（または壁を背にして）で attack target=#id untilDead（大は割れて小が出る: 小も斬り切る）、'
+      + 'footing に「敵に押されると落ちる」がある間は、先に空所から 3 マス以上離れてから斬る。遠い（8m より先）なら hostileWithin 8 を付けて別の道。',
   ].join('\n'),
   blaze: [
     '## ブレイズ',
@@ -426,7 +426,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
     '- attack が「届かない: … 5秒近づけない」と返した相手へ、同じ id の attack を出し直さない（ブレイズは動くので、間の煉瓦を掘っても追いつけない。'
       + '体の行の「同じ所・同じ理由で2回目」は 3 回目も同じになる合図）。次は、live の行で見えていて 8m 内・足から 3m より上でない別の 1 体を斬るか、'
       + '見える 1 体がいなければ湧き場から 3m 以内の、壁があり上が覆われた野営マスへ go で入る。'
-      + '壁越しで「届かない」が 2 回続いた時は、同じ act の中に壁の 1 マスを開ける dig（at=[壁のマス] exposeOk=true・collect=false・accept ["blaze"]。exposeOk が無いと体は threat_exposed で掘らない）を先に入れ、続けて見えた 1 体への attack を出す（別の act に分けると、掘った間に相手が動く）。',
+      + '壁越しで「対象に届かない」が 2 回続いた時は、同じ act の中に壁の 1 マスを開ける dig（at=[壁のマス] exposeOk=true・collect=false・accept ["blaze"]。exposeOk が無いと体は threat_exposed で掘らない）を先に入れ、続けて見えた 1 体への attack を出す（別の act に分けると、掘った間に相手が動く）。',
     // end1108g7 S7 (11/8): she waited 18 m off the spawner, where none came, and one blaze shot dead dropped its rod 18 m off, never picked.
     '- 湧くのはあなたが湧き場から 16m 内にいる間だけ（湧き場の 4 マス内に出る）。退く合図が無い間は湧き場から 16m 内にいる。8m 内に見えている 1 体は待たずにすぐ attack（体が追って斬る。待っても 3m までは来ない）。'
       + '見えている 1 体がいない時・8m より外の時は、湧き場から 3m 以内の壁があり上が覆われた野営マス（mc_probe kind=camp。camp の行に上の覆いが出ていればそのマスを選び、無ければ先に頭上へ place 1 手で屋根を作り、窓は湧き場側の壁に 1 マスだけ開ける）に入る: 新しいのはそのすぐ横に湧くので、見えたらすぐ斬る（S7 を通った回は湧き場から 1〜3m で 11〜17 体。5〜7m の床の縁は数体から撃たれる）。16m より遠くで待つと 1 体も来ない（attack・fight の行の「湧き場まで Nm」で確かめる）。',
@@ -656,7 +656,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '（戻る間は幅 1 の橋の上で竜に押される。降りられるなら降りる側）。live の足場の行の「落差 N」は、真下 N の所に固い地面があるという意味（「下は地面 y=…」がその高さ）。'
       + '虚空とは限らないので、落差の数字を「着地点が無い」と読まない。N が 4 以上なら落ちると傷になり、約 N−3 の被害で、防具は減らさない（20 を超えると体力 20 でも即死。水バケツで着水できた時だけ減る）。'
       + '水バケツを pack に持っていたら、先に equip で hotbar・手へ出す（自動の落下止めは手・hotbar の水だけを使う）。'
-      + '待つ手は、押されたら落ちる足場・火の玉と息の雲が来る天辺では、live の「高所:」の行の受けた被害の実績と比べて選ぶ（実走: 黒曜石の天辺で約 13 分待つ手を重ね、息の雲の中で立ち止まったまま体力 20→0。雲の外へ歩いて出る道は無かった）。',
+      + '待つ手は、敵に押されると落ちる足場・火の玉と息の雲が来る天辺では、live の「高所:」の行の受けた被害の実績と比べて選ぶ（実走: 黒曜石の天辺で約 13 分待つ手を重ね、息の雲の中で立ち止まったまま体力 20→0。雲の外へ歩いて出る道は無かった）。',
     '- 待つ手（wait・probe など動かない手）を走らせたまま、次の手を積まず text だけで返事を終えない。足場が危ない間は、待つ手をやめて降りる手を出すか、待つ手の後ろに降りる手を積む。',
     '- go の to は立つマス（足の高さ。床のブロックの 1 つ上）。島の上の行き先は、live の足場の行の「下は地面 y=…」や地図から読む「足元の地表の高さ」にする（床のブロックの高さを書くと足が床に埋まって dead_end になる）。'
       + 'end_stone を掘って進む道（地中の y）は遅い（1 個約 0.6 秒で、36m に約 3 分かかった）ので、歩ける地表の道を取る。'
@@ -668,12 +668,12 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '（床の逃げ以外）・どのクリスタルを先に壊すか・ベッドを使うか。',
     '- 順番: 先にクリスタルを檻つきも含めて全部壊し（0 本）、その後で止まり木の竜をベッドで倒す。理由: 結晶が 1 本でも残ると、竜は 10 tick に 1 点（毎秒 2 点）回復する。本数に比例しないので、10 本でも 1 本でも同じ速さで、ベッド 1 座りの傷（最大 121）は次の座りまでに戻る（着陸の間隔 23〜48 秒で 46〜96 点）。'
       + '（実走: 結晶 10 本が残る中、ベッド 1 回で 200→173 にした竜が、飛び立って約 13 秒で 200 に戻った。ベッドは 8 個しか無いので、結晶が残る間は使わない）。結晶が減ると竜が早く座るのは補助で、残り数で順番を変えない。',
-    '- 倒し方: 本命はベッドで倒す（結晶が 0 本になってから）。頭は座標を組まず、竜を倒す段に入ったら、json {"do":"bed_standby","on":true} の 1 手で体へ予約して任せる（取り消すのは "on":false、使うベッドの上限は count で 1〜5）。'
+    '- 倒し方: 本命はベッドで倒す（結晶が 0 本になってから）。頭は座標を組まず、竜を倒す段に入ったら、json {"do":"bed_reserve"} の 1 手で体へ予約して任せる（使うベッドの数は count で 1〜10、予約を続ける秒数は seconds で 10〜150。書かなければ 5 個、120 秒。予約している間は同じ act が最大 seconds 秒続き、結果は最後に 1 回返る。反射で体が動いても予約は消えず、反射が終わった後に体が自分で戻る。取り消すのは、その act の命令の取り消し。反射で体が空いている間なら {"do":"bed_reserve","on":false} でもよい）。'
       + '予約のあと、体が竜の降りてくる窓（止まり木へ降りてくる残りの時間）を自分で見張り、窓が開いたら、撃つ時に立つマスへ歩く・遮蔽の黒曜石を置く・ベッドを置いて撃つ・離れる、までを続けて行う。頭の返事は待たない。'
-      + '頭は、体が知らせる「撃った（何回起爆したか）」か「見送った（理由）」を読んで次を決める。予約が残っていなければ、次に竜が降りてくるまでに出し直す。結果を待つ間は、待つ場所（止まり木から 10〜14m）で待つ。'
+      + '結果は予約の act の最後に返る。それまで体は予約に使われているので、頭は他の手を足さずに待つ。返った文の「撃った（何回起爆したか）」と「見送った（理由）」を読んで次を決める。竜がまだ生きていてベッドがあれば、予約を出し直す。'
       + '理由: 21 回目は、竜が降りるまで残り約 5 秒の窓を見つけてから、頭が撃つ手を返すまでに 11 秒かかった。その手が立つ場所へ歩く途中で、体は降りてきた竜の首に打たれて落ち、死んだ。頭の返事は 4〜11 秒かかるので、数秒で閉じる窓の手は体に任せる。'
       + 'bedsite の返事に「新設黒曜石 6/12」のような分数が出ても、黒曜石が足りないという意味ではない。意味は「12 個持っている中の 6 個を新しく置く」で、置く数が持っている数以下なら足りている。footing が空なのは、足場の施工が要らないという意味。'
-      + '体が予約を断った時と、予約が残っていない時だけ、次の旧の手（頭が座標を組む bed_burst）で行う。旧の手: 竜が降りてくる途中（live の竜の行が phase 2）にベッドを持っていれば、live に「ベッド連爆の機会」の行が出る。降りるのを待たず、いま先に mc_probe kind=bedsite target=#竜id を読む（待ち場にいるままでよい。bedsite は降りてくる途中（phase 2）の間しか読めず、降りてくる途中は標本で 14〜49 秒続いた。降りてからでは読めない）。ready なら '
+      + '体が予約を断った時だけ、次の旧の手（頭が座標を組む bed_burst）で行う。旧の手: 竜が降りてくる途中（live の竜の行が phase 2）にベッドを持っていれば、live に「ベッド連爆の機会」の行が出る。降りるのを待たず、いま先に mc_probe kind=bedsite target=#竜id を読む（待ち場にいるままでよい。bedsite は降りてくる途中（phase 2）の間しか読めず、降りてくる途中は標本で 14〜49 秒続いた。降りてからでは読めない）。ready なら '
       + '1 つの act に go（返った stand、つまり撃つ時に立つマスへ range=0.5）→ place（返った footing と screen、つまり足場と遮蔽の黒曜石のマス）→ bed_burst（count=5 seconds=50）→ 退避の go を並べる（go の range が大きいと stand の手前で止まり、体は stand から 1m を超えると landing_layout_unobserved で断る。これは「bedsite を読めていない」でなく「立つ所が遠い」の意味で、読み直さず go をやり直す。降りてくる途中（phase 2）で ready を読んだ降りなら、着陸の途中（phase 3） でも bed_burst は呼べる。bedsite は降りてくる途中（phase 2）の間だけ候補を返す。座ってからは current_phase2_required で、読み直しても無駄）。この 1 回の bed_burst は着地の後も座った竜へ撃ち続け、座りの被害の累積が 50 を超えて竜が飛び立てば自分で終わる（seconds は 50: 呼んだ後の降りる途中（phase 2）の残り＋着地 7〜10 秒＋座りの数秒）。座ってから新しく呼ぶことはできない。立つ場所は 2 つ: 待ち場は止まり木から 10〜14m（8m より近いと着地の前の息の雲で死んだ。probe を読む場所で、読むのに待つ必要は無い）、起爆に立つのは bedsite の stand（18 回目は止まり木から約 1.6m）。stand に着いた体は起爆の前に、息の雲・火の玉・竜の息（頭の先）・竜の頭と首・足元の火・黒曜石か岩盤でない足場・翼の下を毎回確かめ、危なければ起爆せず断る（landing_hazard・landing_fire_or_unloaded_neighbour・landing_footing_not_durable・landing_stand_in_dragon。翼の下は着陸中なら撃たずに待つ）。断られたら待ち場へ戻って次の降りを待つ。'
       + '次に、竜が座っていてベッドを持つ間は、live に「ベッドの手」の行が出る（座りの手動のベッド。place と use を自分で組むのは、この行がある時と連爆に間に合わなかった時だけ。bed_burst が座りへ撃ち続けている間は足さない）: 立つ所・先に置くブロック（黒曜石。無ければ行の言う代わり）・ベッドの足のマスと枕・見込みを体が測った候補なので、'
       + 'その行の go → place → place（ベッド）→ use を 1 つの act に並べて、そのまま行う（マスを自分で選び直さない）。use の後も同じ行が出ていれば、退かずにすぐもう 1 個使う（1 個ずつでは次の座りまでに回復で戻りやすい）。座っているのに行が無い時（ベッドが無い・置けるマスが無い）は、「窪みの足場」の行に剣の手が付いていれば、それで竜を打つ。飛んでいる間は待ち場で次の座りを待つ。'

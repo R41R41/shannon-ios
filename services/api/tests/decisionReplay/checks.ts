@@ -109,7 +109,7 @@ function stoppedHand(decision: Decision): Context['stopped'] {
   if (!m || /server_cancel|命令が止められた|stopIf|反射/u.test(m[0])) return null;
   const hand = (call.input.hands ?? [])[Number(m[1]) - 1] as Hand | undefined;
   // 止まった所のマス（結果の行に座標があれば）: 手が複数のマスを持つ時、止まったのはそのうちの 1 つだけ（他は済んでいる）。
-  const at = ['掘れない', '届かない', '見られる'].includes(m[3]!) ? /\((-?\d+),(-?\d+),(-?\d+)\)/.exec(m[4] ?? '') : null;
+  const at = ['掘れない', '対象に届かない', '見られる'].includes(m[3]!) ? /\((-?\d+),(-?\d+),(-?\d+)\)/.exec(m[4] ?? '') : null;
   return hand ? { do: m[2]!, reason: m[3]!, hand, ...(at ? { cell: { x: +at[1]!, y: +at[2]!, z: +at[3]! } } : {}) } : null;
 }
 
@@ -129,7 +129,7 @@ export function repeatsStop(answer: Answer, context: Context): string | null {
   const targets: Array<{ do: string; cells: Pos[]; hand?: Hand; reason: string; exposeOkFixes: boolean }> = [];
   if (context.stopped) targets.push({ do: context.stopped.do, cells: context.stopped.cell ? [context.stopped.cell] : cellsOf(context.stopped.hand), hand: context.stopped.hand, reason: context.stopped.reason,
     exposeOkFixes: context.stopped.reason === '見られる' });
-  const doesOf: Record<string, string[]> = { 一歩ではない: ['walk'], 置けない: ['place'], 見られる: ['dig'], 掘れない: ['dig'], 届かない: ['dig', 'attack', 'use', 'pickup'] };
+  const doesOf: Record<string, string[]> = { 歩いて進めない: ['walk'], 置けない: ['place'], 見られる: ['dig'], 掘れない: ['dig'], 届かない: ['dig', 'attack', 'use', 'pickup'] };
   for (const stop of context.recentStops) {
     if (stop.secondsAgo > 20) continue;
     // 「掘れない」は Digging aborted のように一時の物が多く、その間の act が先へ進めた後の掘り直し（本番の正しい手も同じ）は、同じ手のくり返しではない。直前の act 自身の止まり（context.stopped）だけで見る。

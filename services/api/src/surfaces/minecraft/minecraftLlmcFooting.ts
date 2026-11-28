@@ -10,7 +10,7 @@ import { readProbeResult, type ProbeInput } from '../../contracts/minecraftProbe
  *   (layers: the feet's layer and the two under it; surface: the top grid's height codes), with the drop where the map shows it.
  * - `footingProbes`: where the map cannot say how deep (air in the lowest layer it draws), the body's `column` probe for that cell (at
  *   most two a decision, `FOOTING_PROBES`); an answer is kept for the cell (`keepColumnFact`).
- * - `footingLine`: 「足場: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。押されたら落ちる」. Null when there is no gap that would hurt
+ * - `footingLine`: 「足元の床: 幅 1 の橋・両脇（北・南）とも空所（落差 28、下は溶岩）。敵に押されると落ちる」. Null when there is no gap that would hurt
  *   (a step of 2 or less with a floor to land on).
  * Facts only: what to do with them (go back, wall the sides, stay away from the edge) is the decision's, with the knowledge's words.
  */
@@ -208,7 +208,7 @@ export function footingLine(footing: Footing | null, facts: (key: string) => Col
   const gaps = resolvedGaps(footing, facts);
   if (!gaps.some(hurts)) return null;
   const depth = depthText(gaps);
-  return `足場: ${shapeText(gaps)}（${depth.text}）${depth.falls ? '。押されたら落ちる' : ''}`;
+  return `足元の床: ${shapeText(gaps)}（${depth.text}）${depth.falls ? '。敵に押されると落ちる' : ''}`;
 }
 /**
  * Where the fall ends, from the depth the line already says (a bare number is measured: 「落差 40」 means a solid floor 40 under the feet; 「以上」, lava and
@@ -243,7 +243,7 @@ export async function lookAtFooting(parts: { taskId: string; map: string | undef
   const began = performance.now(), footing = footingFromMap(parts.map, parts.feet);
   if (!footing) return { line: null, gaps: 0, asked: 0, ms: 0 };
   const known = keptColumnFact(parts.taskId);
-  // r8: the body's own `around` says the footing (the body's 13:50 form, `footing` and the 「足場: …」 of its text); where there are gaps it is
+  // r8: the body's own `around` says the footing (the body's 13:50 form, `footing` and the 「足元の床: …」 of its text); where there are gaps it is
   // asked beside the column probes (an older body does not say it: then the map's and the columns').
   const columns = parts.run ? footingProbes(footing, known) : [];
   const asking = parts.run && footing.gaps.length ? [AROUND_PROBE, ...columns] : [];
@@ -272,16 +272,16 @@ export async function lookAtFooting(parts: { taskId: string; map: string | undef
 /** The body's `around` for the footing (its 13:50 form): a short radius, the creatures and dangers beside the footing it says. */
 const AROUND_PROBE: ProbeInput = { kind: 'around', radius: 4 };
 /**
- * The footing as the body's `around` says it: the first sentences of its text (「足場: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。押されたら
+ * The footing as the body's `around` says it: the first sentences of its text (「足元の床: 幅 1 の橋・左右とも空所（落差 26、下は溶岩）。敵に押されると
  * 落ちる。」), else its field `footing.text`; null where the body says none (no gap that hurts, or an older body).
  */
 export function readAroundFooting(answer: string | null | undefined): string | null {
   const read = readProbeResult(answer ?? undefined) as (Record<string, unknown> & { text: string }) | null;
   if (!read || read.kind !== 'around') return null;
-  const lead = /^(足場: [^。]+(?:。押されたら落ちる)?)。?/u.exec(read.text);
+  const lead = /^(足元の床: [^。]+(?:。敵に押されると落ちる)?)。?/u.exec(read.text);
   if (lead) return lead[1]!.slice(0, 160);
   const field = (read.footing && typeof read.footing === 'object' ? (read.footing as Record<string, unknown>).text : null);
-  return typeof field === 'string' && field.trim() ? `足場: ${field.replace(/^足場: /u, '').trim()}`.slice(0, 160) : null;
+  return typeof field === 'string' && field.trim() ? `足元の床: ${field.replace(/^足元の床: /u, '').trim()}`.slice(0, 160) : null;
 }
 
 /** The kept column facts of a task (the same cell and feet height are not asked again), oldest out past `FOOTING_PROBES.kept`. */

@@ -58,7 +58,7 @@ describe('the repeat line also comes when the stopped fights add up to 90 second
 });
 
 describe('the plan made again is not handed a stop line as a caution, unless the stall is stops in one spot', () => {
-  const FAILED = 'fight: 届かない（元: 自分の屋根の蓋 (150,69,-342) が #38 の目を隠し…';
+  const FAILED = 'fight: 対象に届かない（元: 自分の屋根の蓋 (150,69,-342) が #38 の目を隠し…';
   const planned = planFromSeeds([{ title: 'パールを集める', kind: 'pearl', doneWhen: 'have:ender_pearl>=14' }])!;
   const tree = applyPlanUpdate(planned, { ops: [{ op: 'caution', id: planned.nodes[0]!.id, text: FAILED },
     { op: 'caution', id: planned.nodes[0]!.id, text: '足元より 5 下の穴の中の個体は歩いて届かない' }] }, { at: new Date(0).toISOString() }).tree;
@@ -72,7 +72,7 @@ describe('the plan made again is not handed a stop line as a caution, unless the
     expect(planLines(tree).join('\n')).toContain('自分の屋根の蓋');
   });
   it('also leaves out a copy that has its place first (cautionFact writes 「(x,y,z) の fight: …」)', () => {
-    expect(isFailureCopy('(150,69,-342) の fight: 届かない（元: 蓋が目を隠し…')).toBe(true);
+    expect(isFailureCopy('(150,69,-342) の fight: 対象に届かない（元: 蓋が目を隠し…')).toBe(true);
     expect(isFailureCopy('足元より 5 下の穴の中の個体は歩いて届かない')).toBe(false);
   });
   it('tells the plan maker to write what was found, with the reason', () => {

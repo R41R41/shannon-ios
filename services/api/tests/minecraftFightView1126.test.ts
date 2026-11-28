@@ -27,7 +27,7 @@ describe('a fight line cut by the body', () => {
     expect(CLIPPED.length).toBe(160);
     const text = actResultText(result(1_200));
     expect(text).toContain('この行は体が 160 字で切って送った');
-    expect(actResultText(result(1_200, { lines: [{ ...result(1).lines[1]!, line: '無い: 届かない' }] }))).not.toContain('160 字で切って');
+    expect(actResultText(result(1_200, { lines: [{ ...result(1).lines[1]!, line: '無い: 対象に届かない' }] }))).not.toContain('160 字で切って');
   });
   it('does not touch the history of a result: the stored text is the shown text', () => {
     const text = actResultText(result(1_200));

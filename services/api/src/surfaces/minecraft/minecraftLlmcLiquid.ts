@@ -6,7 +6,7 @@ import { isHard, keyOf, nameOf, ptText, type P } from './minecraftLlmcWalkRules.
 
 /**
  * mb-llmc v2 (実走36: 黒曜石づくり p7.2 で約 470 秒。置いた水が自分の通路に流れ込み、水中の dig は 1 マス 6〜7 秒、汲み戻しの use が 7 回
- * 「目との間が deepslate」「5m の届き外」で通らず、体の「溶岩が流れ込む」と「届かない」が交互に出た): 水・溶岩・黒曜石の事実を地図から書く
+ * 「目との間が deepslate」「5m の届き外」で通らず、体の「溶岩が流れ込む」と「対象に届かない」が交互に出た): 水・溶岩・黒曜石の事実を地図から書く
  * (`liquidLines`、live の `body.liquid`) と、届かない・見通せない源への bucket の use を送る前に止める (`useReachStop`)。
  * 地図の記号 (w 水源 / - 流れる水 / L 溶岩源 / l 流れる溶岩 / O 黒曜石) と足の位置だけから作る。事実だけで、手は決めない。
  */
@@ -157,7 +157,7 @@ function afterWalk(hand: Rec): P | null {
 
 /**
  * A bucket's use (water, lava or empty) at a cell out of her reach, or with a hard block between the eye and the cell: the first such hand, held
- * before it is sent (the body says 「目との間が deepslate」/「届かない」 after trying). Judged from where the hands before it leave her (the frame's
+ * before it is sent (the body says 「目との間が deepslate」/「対象に届かない」 after trying). Judged from where the hands before it leave her (the frame's
  * position, then each exact walk's cell), for a use that nothing before it digs, places or moves loosely; on a map drawn for her feet. Facts only:
  * how to get a clear line is the decision's.
  */

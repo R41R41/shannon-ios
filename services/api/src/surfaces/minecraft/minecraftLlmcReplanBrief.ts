@@ -86,7 +86,7 @@ const topOf = (tree: PlanTree): string | null => {
 };
 
 /**
- * A caution that is a stopped hand's own line copied onto the node (`cautionFact`'s last form: 「fight: 届かない（元: …」, with the place first at times).
+ * A caution that is a stopped hand's own line copied onto the node (`cautionFact`'s last form: 「fight: 対象に届かない（元: …」, with the place first at times).
  * It says what one stop was, not what is known; the plan made again read it as the cause of a different stop (11/26: a roof-lid line stood as the reason
  * for a walled one 5 below).
  */

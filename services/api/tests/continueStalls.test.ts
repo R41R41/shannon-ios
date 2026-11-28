@@ -282,10 +282,10 @@ describe('decide_error: the decision again, Opus\'s act, and the checks before s
   });
 
   it('Opus\'s act refused by the checks (after its mend, when the code mends)', () => {
-    const stall = noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', repairs: 1, refusedBy: '手が無い', repairRefusedBy: '届かない' })!;
+    const stall = noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', repairs: 1, refusedBy: '手が無い', repairRefusedBy: '対象に届かない' })!;
     expect(stall).toMatchObject({ kind: 'decide_error', key: 'redecide_refused' });
     expect(stall.why).toContain('書き直しも断られた');
-    expect(stall.why).toContain('届かない');
+    expect(stall.why).toContain('対象に届かない');
     forgetStalls();
     expect(noteRedecide(TASK, { asked: true, outcome: 'kept_first', why: 'refused', refusedBy: '手が無い' })).toMatchObject({ key: 'redecide_refused' });
   });

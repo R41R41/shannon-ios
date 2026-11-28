@@ -129,8 +129,8 @@ describe('an urgent step (run 27: a creeper stopped her act at 3.9 m; the next d
 
 describe('look round when stuck (run 27: mc.view was never used, through a 20-block fall and six stops at the same walls)', () => {
   it('the same stop twice, a fall, or water: a hint in the live state', () => {
-    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 一歩ではない ×2 3秒前'] })).toMatch(/mc_view/u);
-    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 一歩ではない ×1 3秒前'] })).toBeNull();
+    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 歩いて進めない ×2 3秒前'] })).toMatch(/mc_view/u);
+    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 歩いて進めない ×1 3秒前'] })).toBeNull();
     expect(lookHint({ oxygen: 4 })).toMatch(/溺れかけた/u);
     expect(lookHint({}, 19)).toMatch(/落ちた/u);
     const live = minecraftLlmcLive({ observation: frame({ localMap: 'm', oxygen: 4 }), elapsedMinutes: 1, trend: createFoodTrend(), events: [] });

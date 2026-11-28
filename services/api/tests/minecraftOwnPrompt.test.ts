@@ -26,7 +26,7 @@ import { DRAGON_KNOWLEDGE_R7, ORDER_KNOWLEDGE } from '../src/surfaces/minecraft/
  */
 const PINNED = {
   transport: '2141e3298980f323',
-  // r10: 「一歩ではない」に頭の高さ、「届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
+  // r10: 「歩いて進めない」に頭の高さ、「対象に届かない」に dig の届く範囲を足した 2 句の分だけ変わった（前は 6db83be5990e06f3）。
   // Run 41: the live's key for the food she carries is `foodPoints.total` (was `food.points`), so the line that names it says so (前は 5309f0c44e4ce9ef).
   // 2026-11-04 (S0's order): the order rule's example 「ブレイズの棒 7 本の後にエンダーパール」 is 「鉄の剣を作った後にネザーへ」, the pearls no longer fixed after the rods (前は cb7a450223101f12).
   // end1108h11 S7 (11/8): the blaze rule says to shoot a lone blaze in sight at health 14 or more once the (blaze node's) shortage is empty (前は 182d6b9a3d81a035).
@@ -38,7 +38,8 @@ const PINNED = {
   // 11/13 the body's dropGuard: the lava beside or above is filled with stone, the obsidian hand's with its canPlace only, so the core asks for stone there (前は a4f7d78bb3171771).
   // 11/13 the 1111 review: lava beside is not walked and only O is dug there (the core's falls line) (前は a49b5cc1bdf3e971).
   // The reading of the live state says the application's own lines are advice and only world text is never obeyed (the model took its own lines for injected text; 前は 05691936cd001657 と 9484df3e3e4d04cf).
-  llmc_r9_system: 'b18df016a6ed2acb',
+  // 11/28 (w1128i): 6468d544860a0432 for the booking hand bed_reserve (the body's name and fields), the body's plain stop words and footing sentence, and the H4 sentence of bed_burst.
+  llmc_r9_system: '6468d544860a0432',
   old_mode_system: '3345e1deee8a446d',
 };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);

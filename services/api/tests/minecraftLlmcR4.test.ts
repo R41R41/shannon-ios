@@ -73,12 +73,12 @@ describe('the surprises of a step, from the facts alone (shared note 2; arch-che
   it('the same stop twice (by the hand and its closed reason): history there and the path to where the walk went', () => {
     const watch = createSurpriseWatch('s-repeat');
     const walk = { hands: [{ do: 'walk', to: at(-153, 62, 230) }] };
-    const stopped = 'act 0/1 済みで止まった（failure）\n1 walk 止 一歩ではない: (−153,62,193) の先は段差 2\n今 (-153,62,193) 体力20 満腹20';
+    const stopped = 'act 0/1 済みで止まった（failure）\n1 walk 止 歩いて進めない: (−153,62,193) の先は段差 2\n今 (-153,62,193) 体力20 満腹20';
     watch.noteResult(MC_ACT_TOOL, false, stopped, walk);
     expect(watch.detect(ctx(here(20)), null)).toEqual([]);
     watch.noteResult(MC_ACT_TOOL, false, stopped, walk);
     const [found] = watch.detect(ctx(here(20)), null);
-    expect(found).toMatchObject({ code: 'repeat', line: '同じ止まりの 2 回目: walk「一歩ではない」' });
+    expect(found).toMatchObject({ code: 'repeat', line: '同じ止まりの 2 回目: walk「歩いて進めない」' });
     expect(found!.probes).toEqual([{ kind: 'history', at: at(10, 64, -4), radius: 4 }, { kind: 'path', to: at(-153, 62, 230) }]);
     // Probed once: the same stop again right after is not probed again at once.
     watch.noteResult(MC_ACT_TOOL, false, stopped, walk);
@@ -228,10 +228,10 @@ describe('the lifecycle investigates before the decision and says it first in th
   });
 
   it('the results of the step feed the watch (the same stop twice from the acts as they came back)', async () => {
-    const { lifecycle } = body(() => here(20), () => async () => answer('history', '前の手: walk 一歩ではない ×2'), 'r4-repeat');
+    const { lifecycle } = body(() => here(20), () => async () => answer('history', '前の手: walk 歩いて進めない ×2'), 'r4-repeat');
     await lifecycle.investigate!(new AbortController().signal);
     const call = { id: 'a', name: MC_ACT_TOOL, input: { hands: [{ do: 'walk', to: at(30, 64, 0) }] } };
-    const result = { ok: false, retryable: true, text: 'act 0/1 済みで止まった（failure）\n1 walk 止 一歩ではない: 段差 2' } as const;
+    const result = { ok: false, retryable: true, text: 'act 0/1 済みで止まった（failure）\n1 walk 止 歩いて進めない: 段差 2' } as const;
     lifecycle.noteResult!(call, result);
     expect(await lifecycle.investigate!(new AbortController().signal)).toBeNull();
     lifecycle.noteResult!(call, result);

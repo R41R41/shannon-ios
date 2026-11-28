@@ -96,7 +96,7 @@ describe('the stops: what limit_dig and inventory_full are, with the number the 
     expect(said[2]).toContain('limit_dig＝掘る数の上限 maxDig に着いた（水のせいではない）');
     expect(said[2]).toContain('maxDig は n+5 以上');
     expect(said[2]).toContain('inventory_full＝持ち物が満杯');
-    expect(withStopReadings(['(251,25,-44) 届かない 6秒前（unreachable）'])).toEqual(['(251,25,-44) 届かない 6秒前（unreachable）']);
+    expect(withStopReadings(['(251,25,-44) 対象に届かない 6秒前（unreachable）'])).toEqual(['(251,25,-44) 対象に届かない 6秒前（unreachable）']);
   });
 });
 

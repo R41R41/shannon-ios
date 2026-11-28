@@ -7,7 +7,7 @@ import { sightLineText } from './minecraftLlmcSightLine.js';
 import { nearThreats } from '../../../src/surfaces/minecraft/minecraftLlmcThreat.js';
 
 /**
- * mb-llmc r10 (H3; run 34, 2026-10-22: of 50 acts 24 stopped — 一歩ではない 9, 見られる 8, 届かない 5 (+1 attack), 置けない 2 — each one asking for
+ * mb-llmc r10 (H3; run 34, 2026-10-22: of 50 acts 24 stopped — 歩いて進めない 9, 見られる 8, 届かない 5 (+1 attack), 置けない 2 — each one asking for
  * the next decision, 48% of the calls at 6.2 a minute). A stopped hand's line is cut at 160 characters by the body and says the closed word and
  * the block the hand stopped at, but leaves out what the next decision needed. Each fact below is said from the result's own fields (`where`,
  * `at`, the hand it asked, the map after the act, the frame's hostiles) and was checked against the 29 stopped acts of the run
@@ -15,9 +15,9 @@ import { nearThreats } from '../../../src/surfaces/minecraft/minecraftLlmcThreat
  *
  * - 届かない (dig, 5 stops, all at 5.0–5.1 m; the cells dug before at 4.1 m or less): a dig does not walk, it reaches about 4.5 m from where she
  *   stands. The cell to walk to is the foot of the last column dug whole, and the cells that are left.
- * - 一歩ではない, 頭の高さが固い (walk, 5 stops, three of them the same cell): which of the step's two cells (foot, head) the map says is solid —
+ * - 歩いて進めない, 頭の高さが固い (walk, 5 stops, three of them the same cell): which of the step's two cells (foot, head) the map says is solid —
  *   the foot was open in four of five, the head cell alone was the wall — and that a walk never digs.
- * - 一歩ではない, 段差 (1): both cells of the rise are walls, not the lower one alone; 立てない (3): the filled cell to dig, or the floor to place.
+ * - 歩いて進めない, 段差 (1): both cells of the rise are walls, not the lower one alone; 立てない (3): the filled cell to dig, or the floor to place.
  * - 見られる (dig, 8 stops): who would see the opening, from the frame's hostiles, and how far; the body's line holds the first only.
  * - 置けない (place, 2 stops in 6 tries at a bridge): a cell the body says is already filled needs no block (rock stands there); a cell with no
  *   face to put against needs a placed block beside it first; with `onFail: 'continue'` the cells after it were tried, which the cut line cannot say.
@@ -71,7 +71,7 @@ function levelAhead(top: ActPos, foot: ActPos, at: ActPos, map: Drawn | null): A
   return ahead;
 }
 
-/** 一歩ではない, 頭の高さが固い: which cell of the step the map says is solid (a walk never digs), and the cells ahead when the way is level. */
+/** 歩いて進めない, 頭の高さが固い: which cell of the step the map says is solid (a walk never digs), and the cells ahead when the way is level. */
 function headFact(line: ActHandLine, hand: ActHand, at: ActPos, map: Drawn | null): string | null {
   const head = /頭の高さ \((-?\d+),(-?\d+),(-?\d+)\) が (\S+?) で通れない/u.exec(line.line);
   if (hand.do !== 'walk' || !head) return null;
@@ -85,7 +85,7 @@ function headFact(line: ActHandLine, hand: ActHand, at: ActPos, map: Drawn | nul
     + `${target ? `。目的地 ${posText(target)} までの途中も岩なら、1 歩ごとに 足と頭の 2 マスを dig して 1 歩 walk を交互に並べる` : ''}`;
 }
 
-/** 一歩ではない, 段差: both cells of the rise are walls (a block at her foot's height and one above it), and what makes a way of them. */
+/** 歩いて進めない, 段差: both cells of the rise are walls (a block at her foot's height and one above it), and what makes a way of them. */
 function stepFact(line: ActHandLine): string | null {
   const wall = /壁: 段差 (\d+)（\((-?\d+),(-?\d+),(-?\d+)\) ([^\s。]+) と \((-?\d+),(-?\d+),(-?\d+)\) ([^\s。]+)/u.exec(line.line);
   if (!wall) return null;
@@ -94,11 +94,11 @@ function stepFact(line: ActHandLine): string | null {
     + 'または手前の足元に place で段を積んで上がる。walk のやり直しでは通れない';
 }
 
-/** 一歩ではない, 立てない: what fills the target or lacks under it, and the cell to dig or to floor. */
+/** 歩いて進めない, 立てない: what fills the target or lacks under it, and the cell to dig or to floor. */
 function standFact(line: ActHandLine, hand: ActHand): string | null {
   const filled = /そのものには立てない（足のマスが (\S+?) で埋まっている/u.exec(line.line);
   const void_ = /そのものには立てない（下 (\d+)( 以上)? マスが空気/u.exec(line.line);
-  const target = line.line.match(/^一歩ではない(?:（元:.*?）(?=[:：]))?: \((-?\d+),(-?\d+),(-?\d+)\)/u);
+  const target = line.line.match(/^歩いて進めない(?:（元:.*?）(?=[:：]))?: \((-?\d+),(-?\d+),(-?\d+)\)/u);
   const cell = target ? { x: Number(target[1]), y: Number(target[2]), z: Number(target[3]) } : hand.to ?? null;
   if (hand.do !== 'walk' || !cell || (!filled && !void_)) return null;
   if (filled) return `目的地 ${posText(cell)} は ${filled[1]} で埋まっている: dig at [${posText(cell)}] で空けてから立つか、「立てる隣」へ walk する`;

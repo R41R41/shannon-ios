@@ -240,10 +240,10 @@ describe('a miss is counted as every other surprise (run 29: two misses, the sec
     expect(noted).toEqual([]);
   });
 
-  it('a hold with no target, stopped by the body\'s r6 「届かない」: the nearest it names is looked at (r4-contract.md 10:05)', () => {
+  it('a hold with no target, stopped by the body\'s r6 「対象に届かない」: the nearest it names is looked at (r4-contract.md 10:05)', () => {
     const watch = createSurpriseWatch('r6-miss-hold');
     watch.detect(ctx(), null);
-    const line = 'act 0/1 済みで止まった（failure）\n1 attack 止 届かない: 8秒、打てる所（目から3m・見える）にblazeがいない。0回打った・0回当たった・倒した 0・受けた傷 6.5。'
+    const line = 'act 0/1 済みで止まった（failure）\n1 attack 止 対象に届かない: 8秒、打てる所（目から3m・見える）にblazeがいない。0回打った・0回当たった・倒した 0・受けた傷 6.5。'
       + '最寄り blaze #9 (308,69,73) 西2・上6・目から4.8m・見えない：間に (310,66,73) cobbled_deepslate ほか 3';
     watch.noteResult(MC_ACT_TOOL, false, line, { hands: [{ do: 'attack', hold: true, seconds: 30 }], accept: ['blaze'] });
     const [miss] = watch.detect(ctx(), null);

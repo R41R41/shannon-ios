@@ -49,7 +49,7 @@ describe('the live dictionary leaves out the fields whose live line says what it
   });
   it('footing, away, repeat and shortage: the producers keep the words (the earlier tests drive them with scenes)', () => {
     const footing = source('minecraftLlmcFooting.ts');
-    expect(footing).toContain('`足場: ${shapeText(gaps)}（${depth.text}）${depth.falls ? \'。押されたら落ちる\' : \'\'}`');
+    expect(footing).toContain('`足元の床: ${shapeText(gaps)}（${depth.text}）${depth.falls ? \'。敵に押されると落ちる\' : \'\'}`');
     const away = source('minecraftLlmcAround.ts');
     expect(away).toContain('から離れる、掘らずに歩ける隣');
     expect(away).toContain('は無い（周りの 8 方向の 1 歩は、どれも近づくか、掘る・置くが要る）');
@@ -107,7 +107,7 @@ describe('the instructions are English (11/11, owner) and keep the Japanese word
     expect(source('minecraftLlmcV2Knowledge.ts')).toContain('system の「準備の決まり」');
   });
   it('keeps every Japanese anchor as it is (the words of the live state, the receipts and the stops; the examples of a Japanese why)', () => {
-    for (const anchor of ['「列に入れた qNN」', '「（列の知らせ）」', '「急ぎの版」', '「[急ぎ] …」', '「押されたら落ちる」', '「今いる所は … から見える」', '「見られる」', '「届かない」',
+    for (const anchor of ['「列に入れた qNN」', '「（列の知らせ）」', '「急ぎの版」', '「[急ぎ] …」', '「敵に押されると落ちる」', '「今いる所は … から見える」', '「見られる」', '「対象に届かない」',
       '「ほか N 件は略」', '「ほか N 体」', '見える（射線の中）', '見えない・道はある', '壁の向こうで届かない', '飛び道具', '「あと」', '「遅れ」', '（止）', '（未・飛ばした）',
       '「掘る (x,y,z) 石の類（溶岩の隣: …）」', '「[p6.4] 題（済む条件: …／今: 未: 足りない物 数/要る数）＠座標（道: 親›子）」', '縦 (x,z) 上:/下:', '「上: y=46〜51 .×6 / y=52 #」',
       '「[p1.2] 丸石でハーフブロック」', '「これから」', '「止める・守る」', '「（食料 41.2/40・作業台 有・板 6）」', '足=(x,y,z)']) {

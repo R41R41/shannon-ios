@@ -3,7 +3,7 @@ import { ACT_CONTRACT_VERSION,ACT_MAX_HANDS,HAND_KINDS,VERTICAL_DIRS,VERTICAL_SH
 import type { ActHand,ActKeep,ActInput,ActResult,ViewResult } from './minecraftActTypes.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
-import { BED_BURST_DESCRIPTION, BED_STANDBY_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstContract.js';
+import { BED_BURST_DESCRIPTION, BED_RESERVE_DESCRIPTION, bedBurstActProblem } from './minecraftBedBurstContract.js';
 import { SELF_DEFENCE_SHORT } from './minecraftSelfDefenceWords.js';
 import { SLEEP_MODES } from './minecraftSleepWords.js';
 export { MC_ACT_SKILL, MC_VIEW_SKILL, MC_ACT_TOOL, MC_VIEW_TOOL, ACT_CONTRACT_VERSION, ACT_MAX_HANDS, HAND_KINDS, VERTICAL_DIRS,
@@ -89,7 +89,7 @@ export const MAP_LEGEND = [
 
 /** The definition text of `mc.act` the model reads (fixed: part of the cached prefix). */
 export const ACT_DESCRIPTION = [
-  BED_STANDBY_DESCRIPTION,
+  BED_RESERVE_DESCRIPTION,
   BED_BURST_DESCRIPTION,
   FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION,

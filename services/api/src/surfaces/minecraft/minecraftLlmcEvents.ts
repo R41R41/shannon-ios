@@ -228,7 +228,7 @@ export function cutOf(text: string, bodyReflex: boolean): string | null {
         + `1 体だけで 8 打撃以内なら attack target=#${foe[2]} untilDead を先頭の手に（開けた所で）`;
     if (foe && MELEE_FOES.has(foe[1]))
       return `前の act は stopIf（${foe[1]} #${foe[2]} ${foe[3]}m）で止まった。近接敵なので accept に入れて横を通らない（歩く・掘る手が続いて殴られる）: `
-        + `attack target=#${foe[2]} untilDead を先頭の手に（「押されたら落ちる」の無い開けた所で）、縁なら先に空所から離れる。`
+        + `attack target=#${foe[2]} untilDead を先頭の手に（「敵に押されると落ちる」の無い開けた所で）、縁なら先に空所から離れる。`
         + '体も、4m 内の自分を狙う敵が 2 体まで・8m 内が 4 体までなら accept が無くても自分で倒す';
     return '前の act は stopIf（敵が近い）で止まった';
   }

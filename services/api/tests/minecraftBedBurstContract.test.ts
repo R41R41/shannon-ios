@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { actMilliseconds, actProblem, ACT_DESCRIPTION, ACT_INPUT_SCHEMA, HAND_KINDS, type ActHand, type ActInput } from '../src/contracts/minecraftActContract.js';
+import { ACT_MAX_MS } from '../src/contracts/minecraftActTime.js';
 import { expandShortAct, handToLine, shortHandProblem } from '../src/contracts/minecraftActShortContract.js';
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
-import { BED_BURST_DESCRIPTION, BED_STANDBY_DESCRIPTION } from '../src/contracts/minecraftBedBurstContract.js';
+import { BED_BURST_DESCRIPTION, BED_RESERVE_DESCRIPTION } from '../src/contracts/minecraftBedBurstContract.js';
 import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { llmcInputProblem } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { PROBE_INPUT_SCHEMA } from '../src/contracts/minecraftProbeContract.js';
@@ -101,39 +102,53 @@ describe('the head can request a bounded burst and its own immediate retreat', (
   });
 });
 
-describe('bed_standby: the booking hand (11/28, run 21)', () => {
-  const standby = (fields: Record<string, unknown> = { on: true }) => ({ do: 'bed_standby', ...fields }) as unknown as ActHand;
+describe('bed_reserve: the booking hand (body name and fields, 11/28)', () => {
+  const reserve = (fields: Record<string, unknown> = {}) => ({ do: 'bed_reserve', ...fields }) as unknown as ActHand;
   const act = (hand: ActHand): ActInput => ({ hands: [hand], accept: ['ender_dragon'] });
-  it('is a kind of hand that takes on, and count only when it books', () => {
-    expect(HAND_KINDS).toContain('bed_standby');
-    expect(actProblem(act(standby({ on: true })))).toBeNull();
-    expect(actProblem(act(standby({ on: true, count: 3 })))).toBeNull();
-    expect(actProblem(act(standby({ on: false })))).toBeNull();
-    expect(validSkillInput(act(standby({ on: true, count: 5 })), ACT_INPUT_SCHEMA)).toBe(true);
+  it('is a kind of hand that books with no field at all, or with count (1 to 10) and seconds (10 to 150); on:false takes it back', () => {
+    expect(HAND_KINDS).toContain('bed_reserve');
+    expect(HAND_KINDS).not.toContain('bed_standby');
+    expect(actProblem(act(reserve()))).toBeNull();
+    expect(actProblem(act(reserve({ count: 10, seconds: 150 })))).toBeNull();
+    expect(actProblem(act(reserve({ count: 1, seconds: 10 })))).toBeNull();
+    expect(actProblem(act(reserve({ on: false })))).toBeNull();
+    expect(validSkillInput(act(reserve({ count: 5, seconds: 120 })), ACT_INPUT_SCHEMA)).toBe(true);
   });
-  it('refuses what it cannot take, saying which word is wrong', () => {
-    expect(actProblem(act(standby({})))).toContain('on が要る');
-    expect(actProblem(act(standby({ on: 'yes' })))).toContain('on');
-    expect(actProblem(act(standby({ on: true, count: 6 })))).toContain('count は 1〜5');
-    expect(actProblem(act(standby({ on: false, count: 2 })))).toContain('取り消し');
-    expect(actProblem(act(standby({ on: true, at: [{ x: 0, y: 0, z: 0 }] })))).toContain('使えない');
-    expect(actProblem(act(standby({ on: true, rel: true })))).toContain('rel');
-    expect(actProblem({ hands: [standby({ on: true }), standby({ on: false })], repeat: 2 } as ActInput)).toContain('repeat');
+  it('refuses what the body refuses, saying which word is wrong (on:true is not sent)', () => {
+    expect(actProblem(act(reserve({ on: true })))).toContain('on は false');
+    expect(actProblem(act(reserve({ on: 'yes' })))).toContain('on は false');
+    expect(actProblem(act(reserve({ count: 11 })))).toContain('count は 1〜10');
+    expect(actProblem(act(reserve({ count: 0 })))).toContain('count は 1〜10');
+    expect(actProblem(act(reserve({ seconds: 9 })))).toContain('seconds は 10〜150');
+    expect(actProblem(act(reserve({ seconds: 151 })))).toContain('seconds は 10〜150');
+    expect(actProblem(act(reserve({ on: false, count: 2 })))).toContain('取り消し');
+    expect(actProblem(act(reserve({ on: false, seconds: 30 })))).toContain('取り消し');
+    expect(actProblem(act(reserve({ at: [{ x: 0, y: 0, z: 0 }] })))).toContain('使えない');
+    expect(actProblem(act(reserve({ rel: true })))).toContain('rel');
+    expect(actProblem({ hands: [reserve(), reserve({ on: false })], repeat: 2 } as ActInput)).toContain('repeat');
   });
   it('is written as a json line and reaches the body as the same hand (a plain hand of the short grammar is not offered)', () => {
-    const expanded = expandShortAct({ hands: ['json {"do":"bed_standby","on":true,"count":4}', 'wait 1'], accept: ['ender_dragon'] });
+    const expanded = expandShortAct({ hands: ['json {"do":"bed_reserve","count":4,"seconds":90}'], accept: ['ender_dragon'] });
     expect(expanded.errors).toEqual([]);
-    expect((expanded.input as ActInput).hands[0]).toEqual({ do: 'bed_standby', on: true, count: 4 });
+    expect((expanded.input as ActInput).hands[0]).toEqual({ do: 'bed_reserve', count: 4, seconds: 90 });
     expect(llmcInputProblem('mc.act', expanded.input)).toBeNull();
-    expect(handToLine(standby({ on: true }))).toMatch(/^json /u);
+    expect(handToLine(reserve())).toMatch(/^json /u);
   });
-  it('is explained before the old hand in the definition of act, with the reason and without the old jargon alone carrying it', () => {
-    expect(ACT_DESCRIPTION.indexOf(BED_STANDBY_DESCRIPTION)).toBeLessThan(ACT_DESCRIPTION.indexOf(BED_BURST_DESCRIPTION));
-    expect(BED_STANDBY_DESCRIPTION).toContain('11 秒かかった');
-    expect(BED_STANDBY_DESCRIPTION).toContain('撃った');
-    expect(BED_STANDBY_DESCRIPTION).toContain('見送った');
+  it('is explained before the old hand in the definition of act, with the reason, the fields, the long run and the way to cancel', () => {
+    expect(ACT_DESCRIPTION.indexOf(BED_RESERVE_DESCRIPTION)).toBeLessThan(ACT_DESCRIPTION.indexOf(BED_BURST_DESCRIPTION));
+    expect(BED_RESERVE_DESCRIPTION).toContain('11 秒かかった');
+    expect(BED_RESERVE_DESCRIPTION).toContain('撃った回数');
+    expect(BED_RESERVE_DESCRIPTION).toContain('見送った理由');
+    expect(BED_RESERVE_DESCRIPTION).toContain('結果は最後に 1 回だけ返る');
+    expect(BED_RESERVE_DESCRIPTION).toContain('命令を取り消す');
+    expect(BED_RESERVE_DESCRIPTION).toContain('{"do":"bed_reserve","on":false}');
     expect(BED_BURST_DESCRIPTION).toContain('予約が使えない時の旧の手');
-    expect(SHORT_ACT_DESCRIPTION).toContain('{"do":"bed_standby","on":true}');
-    expect(actMilliseconds(act(standby({ on: true })))).toBeLessThanOrEqual(5_000);
+    expect(SHORT_ACT_DESCRIPTION).toContain('{"do":"bed_reserve"}');
+  });
+  it('takes as long as its seconds (the act answers at the end), a second when it cancels', () => {
+    expect(actMilliseconds(act(reserve()))).toBeGreaterThanOrEqual(120_000);
+    expect(actMilliseconds(act(reserve({ seconds: 150 })))).toBeGreaterThanOrEqual(150_000);
+    expect(actMilliseconds(act(reserve({ seconds: 150 })))).toBeLessThanOrEqual(ACT_MAX_MS);
+    expect(actMilliseconds(act(reserve({ on: false })))).toBeLessThanOrEqual(5_000);
   });
 });

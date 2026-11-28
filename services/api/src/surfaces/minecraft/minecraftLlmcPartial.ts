@@ -25,13 +25,13 @@ import { rangeStop } from './minecraftLlmcRangeGuard.js';
  */
 const HEAD = '送る前に止めた（体には何も送っていない。手は 1 つも動いていない）: ';
 
-/** 止めた手: 守りの種類にかかわらず、手の番号と、体の結果の行と同じ言い方の 1 文（「手 k walk 一歩ではない: …」）。 */
+/** 止めた手: 守りの種類にかかわらず、手の番号と、体の結果の行と同じ言い方の 1 文（「手 k walk 歩いて進めない: …」）。 */
 export interface Held {
   /** 1 始まり。 */
   hand: number;
   code: string;
   kind: string;
-  /** 「手 2 walk 一歩ではない: …（地図で確かめた）。…。」 */
+  /** 「手 2 walk 歩いて進めない: …（地図で確かめた）。…。」 */
   line: string;
 }
 

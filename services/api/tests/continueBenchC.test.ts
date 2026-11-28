@@ -74,7 +74,7 @@ async function boundary1(scene: string, implicit: boolean, folder = scene) {
     await bench.settle(30);
     // The body: q2 fails, q3 (independent, pre true) starts, q4 (relies on q2 without saying) is dropped. All three in one breath.
     bench.body.paused = true;
-    bench.body.finish(q2, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 2, line: 'dig 届かない' }], failureType: 'unreachable',
+    bench.body.finish(q2, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 2, line: 'dig 対象に届かない' }], failureType: 'unreachable',
       unit: { goal: 'failed', end: 'finished' } });
     bench.body.drop(q4, 'depends_failed', { item: mark(name, 'q2') });
     bench.body.begin(q3);
@@ -103,7 +103,7 @@ async function boundary1(scene: string, implicit: boolean, folder = scene) {
     const [q5, q6, q7] = ['q5', 'q6', 'q7'].map(item => bench.body.idOf(item));
     bench.body.begin(q5);
     bench.body.paused = true;
-    bench.body.finish(q5, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 1, line: 'dig 届かない' }], failureType: 'unreachable', unit: { goal: 'failed', end: 'finished' } });
+    bench.body.finish(q5, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 1, line: 'dig 対象に届かない' }], failureType: 'unreachable', unit: { goal: 'failed', end: 'finished' } });
     bench.body.notStarted(q6, 'precondition', mark(name, 'q5'));
     bench.body.drop(q7, 'depends_failed', { item: mark(name, 'q5') });
     bench.body.paused = false;
@@ -118,7 +118,7 @@ async function boundary1(scene: string, implicit: boolean, folder = scene) {
     const [q8, q9] = ['q8', 'q9'].map(item => bench.body.idOf(item));
     bench.body.begin(q8);
     bench.body.paused = true;
-    bench.body.finish(q8, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 1, line: 'dig 届かない' }], failureType: 'unreachable', unit: { goal: 'failed', end: 'finished' } });
+    bench.body.finish(q8, { outcome: 'failed', hands: [{ do: 'dig', status: 'stopped', goal: 'failed', end: 'finished', code: 'unreachable', motorOps: 1, line: 'dig 対象に届かない' }], failureType: 'unreachable', unit: { goal: 'failed', end: 'finished' } });
     bench.body.notStarted(q9, 'precondition_unknown', mark(name, 'q8'));
     bench.body.paused = false;
     await bench.settle(150);

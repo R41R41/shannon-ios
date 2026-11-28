@@ -26,9 +26,9 @@ export const SHORT_OUTPUT_RULE = [
 ].join('\n');
 
 /** r10 の「止まったら」の行（minecraftKnowledgeCore.ts）と、その前の行。v1・v2 の要求は前の行のまま（前の結果を使うので）、v4 から r10 の行。 */
-export const KNOWLEDGE_R10 = '「一歩ではない」は頭の高さが固い（walk は掘らない: 先に dig）か段差 2 以上（pillarUp か dig で段を作る）、'
-  + '「届かない」は dig が足から 4.5m まで（歩かない: dig→walk 1 歩を交互に）、「掘れない」は道具か X、';
-export const KNOWLEDGE_R9 = '「一歩ではない」は段差 2 以上か着いていない（pillarUp か dig で段を作る）、「届かない」は 4.5m 内へ寄る、「掘れない」は道具か X、';
+export const KNOWLEDGE_R10 = '「歩いて進めない」は頭の高さが固い（walk は掘らない: 先に dig）か段差 2 以上（pillarUp か dig で段を作る）、'
+  + '「対象に届かない」は dig が足から 4.5m まで（歩かない: dig→walk 1 歩を交互に）、「掘れない」は道具か X、';
+export const KNOWLEDGE_R9 = '「歩いて進めない」は段差 2 以上か着いていない（pillarUp か dig で段を作る）、「対象に届かない」は 4.5m 内へ寄る、「掘れない」は道具か X、';
 
 export interface Variant {
   id: string; label: string; model: string;

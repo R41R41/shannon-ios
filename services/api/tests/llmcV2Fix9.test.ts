@@ -130,7 +130,7 @@ describe('B2: no text of the mode names a tool it does not offer', () => {
     const known = stageKnowledge({ body: { state: { dimension: 'overworld' }, planNow: '[p1] 木・鉄・ネザー' }, plan: {} });
     expect(foreignToolNames(known ?? '')).toEqual([]);
     expect(foreignToolNames(JSON.stringify(seedPlan('エンドラを倒して')))).toEqual([]);
-    expect(foreignToolNames(lookHint({ recentStops: ['一歩ではない ×2'] }) ?? '')).toEqual([]);
+    expect(foreignToolNames(lookHint({ recentStops: ['歩いて進めない ×2'] }) ?? '')).toEqual([]);
     expect(foreignToolNames(lookHint({ oxygen: 4 }) ?? '')).toEqual([]);
     expect(foreignToolNames(MINECRAFT_REQUEST_CONTEXT)).toEqual([]);
   });

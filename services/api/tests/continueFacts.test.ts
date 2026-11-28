@@ -135,7 +135,8 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     // 11/27 (merge): the tools fix added about 29 for the pickaxe clause and the stronghold line dropped its protective exception, which cancelled it; the text measures 9,300.
     // 11/27 (armour made before the walk, from near material): the stronghold line carries that exception again; the text measures 9,318.
     // 11/28 (the 19th end-dragon run, a ring of blocks round her feet inside a breath cloud): 9,320 -> 9,440 for the urgent rule and the low-health chain saying a block is no answer to a cloud (about 116; the text measures 9,436).
-    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(9_440);
+    // 11/28 (the footing sentence in plain words, 「敵に押されると落ちる」 for 「押されたら落ちる」, two characters longer in a few places): 9,440 -> 9,450 (the text measures 9,442).
+    expect(llmcTokens(V2_ALWAYS)).toBeLessThanOrEqual(9_450);
     const got = await extractRequestBytes({ ...options, variant: 'normal', taskId: 'size' });
     // What this chapter added to the live state, taken off again: the `facts` lines and the queue's 「予定」 and 「（見込み）」.
     const { facts, queue, ...rest } = got.live.body as Record<string, any>;

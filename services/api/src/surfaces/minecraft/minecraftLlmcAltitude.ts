@@ -36,7 +36,7 @@ export interface GoHop {
 export const hopSize = (hop: GoHop): number => hop.target ?? hop.done;
 
 const STOP_WORDS: Readonly<Record<string, string>> = {
-  limit_time: '秒数の上限', limit_dig: '掘る数の上限', dead_end: '道が行き止まり', stuck: '体が進めず止まった', unreachable: '届かない', stopIf: 'stopIf で止まった',
+  limit_time: '秒数の上限', limit_dig: '掘る数の上限', dead_end: '道が行き止まり', stuck: '体が進めず止まった', unreachable: '対象に届かない', stopIf: 'stopIf で止まった',
   stop_if_hostile: '敵で止まった', reflex: '反射で止まった', deadline: '時間切れ', noProgress: '進みが無く止まった', damage: '傷を受けて止まった', inventoryFull: '持ち物が満杯',
   cancelled: '取り消し', lost: '行き先を見失った', danger: '危険で止まった',
 };

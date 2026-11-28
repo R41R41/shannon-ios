@@ -27,7 +27,7 @@ interface Line { i: number; do: string; status: string; text: string }
 function resultLines(text: string): Line[] {
   return text.split('\n').flatMap(line => { const m = /^(\d+) (\w+) (済|止|失|未) (.*)$/u.exec(line); return m ? [{ i: +m[1]!, do: m[2]!, status: m[3]!, text: m[4]! }] : []; });
 }
-const ownStop = (line: Line | undefined) => !!line && ((line.do === 'walk' && /^一歩ではない/u.test(line.text)) || (line.do === 'place' && /^置けない/u.test(line.text)));
+const ownStop = (line: Line | undefined) => !!line && ((line.do === 'walk' && /^歩いて進めない/u.test(line.text)) || (line.do === 'place' && /^置けない/u.test(line.text)));
 
 for (const [label, group] of groups) for (const mode of ['live', 'fresh'] as const) {
   console.log(`## 1. 本番の記録（${label} の mc.act）: 地図 = ${mode === 'live' ? '判断の live の地図' : '直前の act の終わりの地図（無ければ live）'}\n`);
@@ -70,7 +70,7 @@ for (const [label, group] of groups) for (const mode of ['live', 'fresh'] as con
   console.log(`- mc.act の答え ${tally.acts}（地図と足の場所がある ${tally.withMap}、前の act の終わりの地図を使えた ${tally.fresh}）`);
   console.log(`- 守りが止めた ${tally.flagged}: 体も同じ手で止まった ${tally.sameStop}、体は別の理由で止まった ${tally.otherStop}、その手の前で別の手が止まり未実行 ${tally.earlierStop}、**体は済にした（誤って止めた）${tally.falseStop}**、結果の行なし ${tally.none}`);
   console.log(`- 理由別: ${[...byCode].map(([code, n]) => `${code} ${n}`).join('、') || '-'}`);
-  console.log(`- 体が自分で出した 一歩ではない（walk）${walkStops} のうち守りが先に止めた ${walkStopsCaught}、置けない（place）${placeStops} のうち ${placeStopsCaught}`);
+  console.log(`- 体が自分で出した 歩いて進めない（walk）${walkStops} のうち守りが先に止めた ${walkStopsCaught}、置けない（place）${placeStops} のうち ${placeStopsCaught}`);
   console.log(`- 止めた手の前にあった手の数（止めたせいで動かない手）: ${before.length ? `平均 ${(before.reduce((a, b) => a + b, 0) / before.length).toFixed(1)}、0 個 ${before.filter(n => n === 0).length}、1 個以上 ${before.filter(n => n > 0).length}` : '-'}`);
   if (detail) { console.log('\n止めた物:'); flaggedList.forEach(line => console.log(`  ${line}`)); }
   if (falseList.length) { console.log('\n誤って止めた:'); falseList.forEach(line => console.log(`  ${line}`)); }

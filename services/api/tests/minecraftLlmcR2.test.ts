@@ -74,7 +74,7 @@ describe('the act as the model writes it (scene replay: Haiku wrote why in a han
 
   it('the result says what the head put into shape, and a stopped hand\'s 3×3×3', () => {
     const act: ActResult = { v: 1, ok: false, done: 0, of: 1, stoppedBy: 'failure', at: { x: 201, y: 45, z: 277 }, hp: 20, food: 18, ms: 900,
-      lines: [{ i: 1, do: 'walk', status: 'stopped', line: '一歩ではない: (201,48,277) …', where: { x: 201, y: 48, z: 277 },
+      lines: [{ i: 1, do: 'walk', status: 'stopped', line: '歩いて進めない: (201,48,277) …', where: { x: 201, y: 48, z: 277 },
         around: 'x=200..202 z=276..278 y=49: #.#/#.#/### y=48: #.#/#.#/### y=47: #.#/#.#/###' }] };
     expect(actResultText(act)).toContain('  周り（上の層から、北が上・西が左）x=200..202 z=276..278 y=49: #.#/#.#/###');
     const receipt = { id: 'r', connectionId: 'c', outcome: 'failed' as const, inputsReleased: true, observedAt: '2026-10-22T00:00:00Z', result: JSON.stringify(act) };

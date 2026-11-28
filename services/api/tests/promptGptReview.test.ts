@@ -155,7 +155,7 @@ describe('the live state and the results say facts', () => {
     expect(line).not.toMatch(/実走|食べる前に|戦う前に|死ぬ/u);
   });
   it('says the look as a fact, with the tools by name', () => {
-    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 一歩ではない ×2 3秒前'] })).toBe('同じ所で同じ止まりが続いている（原因は見えていない。mc_view の slice で縦の断面、layers で周りが見られる）');
+    expect(lookHint({ recentStops: ['(1,64,2)→(1,66,2) 歩いて進めない ×2 3秒前'] })).toBe('同じ所で同じ止まりが続いている（原因は見えていない。mc_view の slice で縦の断面、layers で周りが見られる）');
     expect(lookHint({}, 19)).not.toMatch(/動く前に|決める/u);
   });
   it('says the meter\'s preparation by its numbers, with no cost sentence and no order to write a skip', () => {

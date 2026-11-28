@@ -57,8 +57,8 @@ export const HAND_KINDS = [
   'vertical',
   'fill',
   'bed_burst',
-  // 2026-11-28 (run 21): book the bed burst with the body, or cancel the booking. No cells: the body watches the window and does the walk, the screen, the beds and the leaving.
-  'bed_standby',
+  // 2026-11-28 (run 21): book the bed burst with the body (the body's name, bed_reserve), or cancel the booking. No cells: the body watches the window and does the walk, the screen, the beds and the leaving.
+  'bed_reserve',
   // S4's body of 11/5 (0f0a2a2): place a bed, sleep, take it up in the morning, as one hand.
   'sleep',
   // 2026-11-11: the food animals around her, until none is left in range or count have fallen, with their drops (body claude/hunt-body-1111).
@@ -403,7 +403,7 @@ export interface ActHandLine {
   /**
    * Japanese, at most 160 characters. done: what changed (`(201,45,277)→(205,45,277) 1.2秒`, `丸石×3 を得た`); stopped:
    * the place and the
-   * reason in closed words first (`届かない`, `一歩ではない`, `掘れない`, `置けない`, `無い`, `満杯`, `見られる`, `守られた物`, `溶岩が流れ込む`,
+   * reason in closed words first (`届かない`, `歩いて進めない`, `掘れない`, `置けない`, `無い`, `満杯`, `見られる`, `守られた物`, `溶岩が流れ込む`,
    * the sleep hand's `敵が近い`, `夜ではない`, `爆発する`, `夜が明けない`, `寝られない` (codes enemy_near, not_night, no_bed, no_bed_spot, bed_explodes,
    * night_went_on, not_slept),
    * `足場が無い`, `上から落ちる`, `時間切れ`, `反射`, `stopIf`), then what is there now (`そのマスは stone`); skipped: `未実行`.

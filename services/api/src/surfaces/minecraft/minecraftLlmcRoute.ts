@@ -142,7 +142,7 @@ function candidateLine(view: MapView, reach: Map<string, Reach>, top: Reach, goa
 /**
  * Where to walk to: the goal's own cell when she can stand there (or the map does not show it), else a standing
  * place beside it. A trunk, a rock or
- * a wall as the node's place cannot be stood in (the body stops 「一歩ではない」: 11 times in run 35). The reached place
+ * a wall as the node's place cannot be stood in (the body stops 「歩いて進めない」: 11 times in run 35). The reached place
  * with the fewest digs
  * first, else the nearest to her feet; none beside it: the goal as it was and a line that says so.
  */
