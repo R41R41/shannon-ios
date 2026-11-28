@@ -271,7 +271,11 @@ export function urgentWatch(input: unknown, observe: () => BodyObservation | nul
   const cancel = () => controller.abort(parent.reason);
   parent.addEventListener('abort', cancel, { once: true });
   if (parent.aborted) cancel();
-  const timer = watched >= LLMC_URGENT_METERS ? null : setInterval(() => {
+  // 11/28 (run 24): the head's watch cut a bed booking 17 s in (enderman 5.5 m) and the body threw the booking away. The booking is the body's to keep: its own
+  // reflexes (melee, shield, retreat) meet the enderman and then resume it, so a booking alone is never cut by this watch (the same test the body uses).
+  const hands = (input as ActInput | null)?.hands ?? [];
+  const bookingOnly = hands.length === 1 && hands[0]!.do === 'bed_reserve' && (hands[0] as { on?: unknown }).on !== false;
+  const timer = watched >= LLMC_URGENT_METERS || bookingOnly ? null : setInterval(() => {
     const come = hostiles(observe()).find(item => item.distance <= urgentRange(item, LLMC_URGENT_METERS) && !known(item) && !mine(item)
       && !(isShooter(item.name) && item.canSee === false));
     if (!come || controller.signal.aborted) return;

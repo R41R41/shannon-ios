@@ -94,7 +94,7 @@ describe('facts of the way to the dragon', () => {
   it('says the dragon, its phase and reach, the crystals, the breath, the fireballs and the perch', () => {
     const view = endViewOf(frame({ dimension: 'the_end' }, end));
     expect(dragonLine(view)).toBe('竜: 体力 142.4/200・止まり木で見回している（phase 6・この phase 2.4 秒目。矢は効かない）・頭 (3,67,6) 自分から 10m・頭の箱まで 4.2m（剣が届く）・#77');
-    expect(crystalLine(view)).toContain('エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 4 か所（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
+    expect(crystalLine(view)).toContain('エンドクリスタル: 結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 4 か所（壊れた 6・檻つき 1・まだ見ていない台座 1）。近い順: '
       + '#12 (40,90,5) 21m 竜を回復中・壊すと爆発（今の立ち位置で体力 −14 の見込み）・#15 (-30,100,2) 34m 檻つき');
     expect(breathLine(view)).toBe('竜の息の雲: (4,8) 避ける半径 9（雲の今の半径 7）（中で立ち止まらない）');
     expect(fireballLine(view)).toBe('火の玉: 2 個が飛んでいる（体の反射が避ける）');
@@ -114,13 +114,13 @@ describe('facts of the way to the dragon', () => {
       position: { x: 30.4, y: 90, z: -12.2 }, yaw: 0, distance: 41.6, headReach: null, strike: false }, crystals: { remaining: 10, gone: 0, caged: 0, unseen: [], list: [] },
     dragonBreath: [], dragonFireballs: 0 }));
     expect(dragonLine(flying)).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (30,90,-13) 自分から 42m・#77');
-    expect(crystalLine(flying)).toBe('エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 10 か所');
+    expect(crystalLine(flying)).toBe('エンドクリスタル: 結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 10 か所');
     expect(breathLine(flying)).toBeNull();
     expect(fireballLine(flying)).toBeNull();
     expect(perchLine(flying)).toBeNull();
     const unseen = endViewOf(frame({ dimension: 'the_end' }, { crystals: end.crystals, perch: end.perch }));
     expect(dragonLine(unseen)).toBeNull();
-    expect(crystalLine(unseen)).toContain('台座 10 か所のうち、壊れたと確かめていない所が 4 か所');
+    expect(crystalLine(unseen)).toContain('結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 4 か所');
     expect(perchLine(unseen)).toBe('止まり木: (0,68,0)');
   });
 
@@ -212,7 +212,7 @@ describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
 
   it('says the arrival, the dragon in flight and the dragon on the perch out of reach and in reach', () => {
     expect(dragonLine(view('arrival'))).toBeNull();
-    expect(crystalLine(view('arrival'))).toContain('エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 10 か所（まだ見ていない台座 10）。いま見えている結晶は 0 本。');
+    expect(crystalLine(view('arrival'))).toContain('エンドクリスタル: 結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 10 か所（まだ見ていない台座 10）。いま見えている結晶は 0 本。');
     expect(perchLine(view('arrival'))).toBeNull();
     expect(dragonLine(view('dragon_flying'))).toBe('竜: 体力 200/200・島の上を周回（phase 0）・位置 (-39,93,39) 自分から 53m・#53');
     expect(dragonLine(view('dragon_perched_out_of_reach'))).toBe(
@@ -223,7 +223,7 @@ describe('the End fight as the isolated lab made it (S1, 8 situations)', () => {
   });
 
   it('says the caged and the open crystal with the blast, the breath cloud as it is first seen and as it grows, and the fireball', () => {
-    expect(crystalLine(view('crystals_near_caged_and_open'))).toContain('台座 10 か所のうち、壊れたと確かめていない所が 10 か所（檻つき 3）。近い順: #213 (-7,65,6) 8m 檻つき・壊すと爆発（今の立ち位置で体力 −9 の見込み）');
+    expect(crystalLine(view('crystals_near_caged_and_open'))).toContain('結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 10 か所（檻つき 3）。近い順: #213 (-7,65,6) 8m 檻つき・壊すと爆発（今の立ち位置で体力 −9 の見込み）');
     expect(breathLine(view('breath_cloud_just_seen'))).toBe('竜の息の雲: (-6,11) 避ける半径 7（雲の今の半径 7）（中で立ち止まらない）');
     expect(breathLine(view('breath_cloud_growing'))).toBe('竜の息の雲: (-6,11) 避ける半径 7（雲の今の半径 3）（中で立ち止まらない）');
     expect(breathLine(view('fireball_in_flight'))).toBeNull();

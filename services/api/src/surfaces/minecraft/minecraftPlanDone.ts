@@ -176,7 +176,7 @@ export function predicateHolds(predicate: DonePredicate, facts: DoneFacts): bool
 function unseenCrystalWords(facts: DoneFacts): string {
   const unseen = facts.crystalsUnseen ?? null, standing = facts.crystalsStanding ?? null;
   return unseen !== null && unseen > 0 && standing !== null
-    ? `。うち確かめていない台座 ${unseen}（結晶が立っているとは限らない。見えている結晶は ${standing} 本。台座へ近づくと体が数え直す）` : '';
+    ? `。壊れた事をまだ確かめていない台座が ${unseen} か所（結晶が立っているとは限らない。見えている結晶は ${standing} 本。台座へ近づくと体が数え直す。遠い台座へは止まり木から 20m より外に長く居ない）` : '';
 }
 function clauseWords(clause: DoneClause, facts: DoneFacts): string {
   switch (clause.kind) {

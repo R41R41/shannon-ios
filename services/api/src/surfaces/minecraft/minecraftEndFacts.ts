@@ -215,7 +215,9 @@ export function crystalLine(end: EndView | null, short = false): string | null {
     .flatMap(([label, value]) => value !== null && value > 0 ? [`${label} ${value}`] : []);
   const list = crystals.list.slice(0, 3).map(crystalWords);
   const unseen = unseenWords(end);
-  return `エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が ${crystals.remaining} か所${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
+  // 11/28 (run 24): the head read the count as "crystals left" and walked 50 m to spikes. When every spike is known gone, say it in one sentence and say that no walk is needed.
+  if (crystals.remaining === 0 && !unseen) return 'エンドクリスタル: 10 か所すべて、結晶が壊れた事を確かめ済み。結晶の節は終わり（台座へ歩いて確かめる必要は無い）';
+  return `エンドクリスタル: 結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が ${crystals.remaining} か所${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
     + `${unseen ? `。${unseen}` : ''}${searchWords ? `。${searchWords}` : ''}`;
 }
 
@@ -231,14 +233,23 @@ function unseenSpotsWords(end: EndView | null, limit = 4): string {
     .sort((a, b) => (a.far ?? Infinity) - (b.far ?? Infinity)).slice(0, limit)
     .map(({ spot, far }) => `(${spot.x},${spot.z})${far === null ? '' : ` 自分から ${round(far)}m`}`).join('・');
 }
+/**
+ * Walking out to read a far spike takes her beyond 20 m of the perch (the dragon charges a person who stays out there 5 s while she sits, run 19/20), and the walk is a danger of its own while she flies (run 24: fireball clouds).
+ * Said beside every "go and read the spike" so the reason to go and the risk are in one place; the head decides.
+ */
+export function spikeWalkCaution(end: EndView | null): string {
+  const flying = end?.dragon && end.dragon.perched !== true && !(end.dragon.phase !== null && end.dragon.phase >= 5 && end.dragon.phase <= 7);
+  return '台座は止まり木から 40m 以上離れている。止まり木から 20m より外に 5 秒いると、座っている竜が体当たりしてくる。歩き出すのは竜が止まり木に座っている間（着地から約 27 秒）だけにして、飛び立つ前に止まり木から 20m 以内へ戻る'
+    + (flying ? '。いま竜は飛んでいる（座っていない）ので、遠くの台座へは歩かない（火の玉と息の雲が当たる）' : '');
+}
 function unseenWords(end: EndView | null): string | null {
   const unseen = unseenSpikes(end);
   if (unseen === null) return null;
   const spots = unseenSpotsWords(end);
   const near = `${SPIKE_TELLING_WORDS}。結晶があれば list に出る`;
   return standingCrystals(end) === 0
-    ? `いま見えている結晶は 0 本。残りの ${end?.crystals.remaining ?? unseen} は確かめていない台座の数で、結晶が立っているか壊れているかは未確認（立っているとは限らないし、壊れていても近づくまで数えは減らない）${spots ? `。台座: ${spots}` : ''}。${near}`
-    : `ほかに確かめていない台座 ${unseen}${spots ? `: ${spots}` : ''}（立っているとは限らない。${near}）`;
+    ? `いま見えている結晶は 0 本。壊れた事を確かめていない台座が ${end?.crystals.remaining ?? unseen} か所あるが、そこに結晶が立っているか壊れているかは不明（立っているとは限らないし、壊れていても近づくまで数えは減らない）${spots ? `。台座: ${spots}` : ''}。${near}。${spikeWalkCaution(end)}`
+    : `ほかに、まだ確かめていない台座が ${unseen} か所${spots ? `: ${spots}` : ''}（立っているとは限らない。${near}。${spikeWalkCaution(end)}）`;
 }
 /**
  * The bed hands wait for the crystals to be known gone: while any spike is unread (`unseen` > 0) a crystal may stand there and heal her 2 a second (e04c, 11/9), so the bed is not offered
@@ -250,7 +261,7 @@ function unseenBedHold(end: EndView | null, what: string): string | null {
   const spots = unseenSpotsWords(end, 2);
   const count = standing === null ? '。結晶の残りの数は体が数えていないので、立っている本数は分からない' : '';
   return `${what}: 今は出さない（確かめていない台座が ${unseen} 個ある${count}。そこに結晶が立っていれば竜は毎秒 2 回復し、削った分が戻る。ベッドの手・連爆・mc_probe kind=bedsite のどれも、台座が全部確かめられるまで出さない・呼ばない。`
-    + `先に台座${spots ? ` ${spots}` : ''}へ近づいて数えを確かめる）`;
+    + `先に台座${spots ? ` ${spots}` : ''}へ近づいて数えを確かめる。${spikeWalkCaution(end)}）`;
 }
 
 /**

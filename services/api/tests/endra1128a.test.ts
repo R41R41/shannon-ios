@@ -29,7 +29,7 @@ describe('crystals the body has not been near enough to read', () => {
 
   it('says the crystal line as spikes to check, with where and how far, and the body reach as a range (finding 6)', () => {
     const line = crystalLine(endViewOf(observation(unseenWorld()))!)!;
-    expect(line).toContain('台座 10 か所のうち、壊れたと確かめていない所が 2 か所');
+    expect(line).toContain('結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が 2 か所');
     expect(line).toContain('いま見えている結晶は 0 本');
     expect(line).toContain('立っているとは限らない');
     expect(line).toContain('(13,-39) 自分から');

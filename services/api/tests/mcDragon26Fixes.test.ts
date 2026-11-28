@@ -202,6 +202,21 @@ describe('fix 5: a hostile behind rock does not make an act urgent', () => {
     expect(await cut({ name: 'zombie', id: 3, distance: 5.7, canReachMe: true, canSee: true, reach: 'in_sight', position: { x: 3, y: 35, z: 3 } })).toBe('zombie 5.7m');
     expect(await cut({ name: 'zombie', id: 3, distance: 5.7 })).toBe('zombie 5.7m');
   });
+  it('never cuts a bed booking alone (the body resumes it after its reflex), and still cuts it when another hand is with it or the booking is being cancelled', async () => {
+    const enderman = { name: 'enderman', id: 9, distance: 5.5, canReachMe: true, canSee: true, reach: 'in_sight', angry: true, position: { x: 3, y: 35, z: 3 } };
+    const cutFor = async (input: unknown) => {
+      let observed = threats();
+      const watch = urgentWatch(input, () => observed, new AbortController().signal, 10);
+      observed = threats(enderman);
+      await new Promise(resolve => setTimeout(resolve, 60));
+      const reason = watch.reason();
+      watch.stop();
+      return reason;
+    };
+    expect(await cutFor({ hands: [{ do: 'bed_reserve', count: 5, seconds: 120 }] })).toBeNull();
+    expect(await cutFor({ hands: [{ do: 'go', x: 1, y: 2, z: 3 }, { do: 'bed_reserve' }] })).toBe('enderman 5.5m');
+    expect(await cutFor({ hands: [{ do: 'bed_reserve', on: false }] })).toBe('enderman 5.5m');
+  });
   it('makes no urgent step of them at a decision either, and does for a creeper that sees her', () => {
     expect(urgentFacts(threats(walled), null).reasons).toEqual([]);
     expect(urgentFacts(threats(detour), null).reasons).toEqual([]);
