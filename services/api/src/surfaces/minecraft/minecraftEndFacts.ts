@@ -216,7 +216,7 @@ export function crystalLine(end: EndView | null, short = false): string | null {
   const list = crystals.list.slice(0, 3).map(crystalWords);
   const unseen = unseenWords(end);
   // 11/28 (run 24): the head read the count as "crystals left" and walked 50 m to spikes. When every spike is known gone, say it in one sentence and say that no walk is needed.
-  if (crystals.remaining === 0 && !unseen) return 'エンドクリスタル: 10 か所すべて、結晶が壊れた事を確かめ済み。結晶の節は終わり（台座へ歩いて確かめる必要は無い）';
+  if (crystals.remaining === 0 && !unseen) return 'エンドクリスタル: 10 か所すべて、結晶が壊れた事を確かめ済み。結晶の節は終わり（台座へ歩いて確かめる必要は無い）' + (searchWords ? `。${searchWords}` : '');
   return `エンドクリスタル: 結晶の台座は全部で 10 か所。壊れた事を確かめていない台座が ${crystals.remaining} か所${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
     + `${unseen ? `。${unseen}` : ''}${searchWords ? `。${searchWords}` : ''}`;
 }
