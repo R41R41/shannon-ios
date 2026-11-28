@@ -17,6 +17,7 @@ import { itemResult, unitOfReceipt, type QueueWordsItem } from '../src/surfaces/
 import { actFacts, handFacts, placementCorrections, VERTICAL_STOP_WORDS } from '../src/surfaces/minecraft/minecraftLlmcResultWords.js';
 import { readingOf } from '../src/surfaces/minecraft/store/minecraftOperationState.js';
 import { MinecraftControlStore } from '../src/surfaces/minecraft/store/minecraftControlStore.js';
+import { bodyKindsWithHeadAhead } from './support/headAheadOfBody.js';
 
 /**
  * Contract chapter 9: the body's REAL outputs (`produced/`, written by the body's `continue-produce.ts` and copied by `scripts/sync-body-produced.sh`) go through the head's
@@ -618,7 +619,7 @@ describe.skipIf(!existsSync(PRODUCED))('the produced files in the head (copied f
     expect(Object.keys(hand)).toHaveLength(whole.actHandFieldCount);
     expect(Object.keys(hand).length).toBeLessThanOrEqual(64);
     expect(hand.do.enum).toContain('vertical');
-    expect([...hand.do.enum].sort()).toEqual([...HAND_KINDS].sort());
+    expect(bodyKindsWithHeadAhead(hand.do.enum).sort()).toEqual([...HAND_KINDS].sort());
     expect(Object.keys(hand).sort()).toEqual(Object.keys(ACT_INPUT_SCHEMA.properties.hands.items.properties).sort());
     expect(validBodyVersion({ revision: whole.bodyRevision, catalogHash: whole.catalogHash })).toBe(true);
     expect(whole.internal).toEqual(['events']);

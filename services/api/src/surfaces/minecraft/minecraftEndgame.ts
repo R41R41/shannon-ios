@@ -6,7 +6,7 @@ import { createBlazeWatch, footingLine } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createDeathWatch, deathReturnLine, givenUpBy, type DeathKnown } from './minecraftDeathReturn.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
-import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitSpanLine, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, dragonBurstShortLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
+import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitSpanLine, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, dragonBurstShortLine, dragonStandbyShortLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
@@ -67,7 +67,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...some(deathLossLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
   const urgent = [...descent, ...streak, ...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true)),
-    ...some(dragonWaitUrgentLine(end)), ...some(dragonBurstShortLine(end, bedItem))];
+    ...some(dragonWaitUrgentLine(end)), ...some(dragonStandbyShortLine(end, bedItem)), ...some(dragonBurstShortLine(end, bedItem))];
   return { lines: [...night, ...some(watched.wool ?? null), ...enclosed, ...fight, ...footing, ...stall, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
     short: [...night, ...enclosed, ...urgent, ...footing, ...stall, ...some(blaze), ...frames, ...death] };
 }

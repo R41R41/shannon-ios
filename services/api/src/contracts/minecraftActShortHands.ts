@@ -131,6 +131,7 @@ function tidyWords(hand: ActHand): Words {
 }
 const WRITERS: Partial<Record<ActHand['do'], (hand: ActHand) => Words>> = {
   bed_burst: () => null,
+  bed_standby: () => null, // Written as a json line: {"do":"bed_standby","on":true}.
   fill: () => null, // Keep every group and required permission in the existing JSON fallback.
   chest: chestWords, furnace: furnaceWords,
   go: goWords, obsidian: obsidianWords, mine: mineWords, portal: portalWords, fight: fightWords, smelt: smeltWords, vertical: verticalWords, hunt: huntWords,

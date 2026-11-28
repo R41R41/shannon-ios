@@ -3,15 +3,38 @@ import type { ActHand } from './minecraftActTypes.js';
 /** The head chooses the bed, dragon, inventory limit and the retreat; the body synchronizes only this approach's short burst. */
 export const BED_BURST_MAX_SECONDS = 60;
 
-export const BED_BURST_DESCRIPTION = 'bed_burst はエンドで指定したベッド配置を1進入だけ起爆する手（着地前から、同じ呼び出しのまま座った竜へも撃ち続ける）。'
-  + '使う時: 竜が止まり木へ降りてくる途中（phase 2）が見えたら、座るのを待たずにすぐ probe kind=bedsite,target=#id を読む。bedsite は phase 2 の間だけ候補を返し、座ってからは current_phase2_required で読めない。'
-  + '手順は1つの act に go（返った stand を to に、range は 0.5）→ place（返った footing と screen の黒曜石のマスを全部。supports が空でも screen は置く）→ bed_burst → 退避go（分けて出すと phase 2 の間に間に合わない）。go の range は 0.5: 体は立っている所が bedsite の stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る（range 3 だと 3m 手前で止まって断られた。11/28 の 18 回目）。landing_layout_unobserved は「bedsite を読めていない」ではなく、stand から 1m を超えている（または別の配置）の意味なので、読み直さず go をやり直す。ベッドを置いて使うのは体で、頭が place するのは黒曜石の足場と壁だけ（ベッドは count 個持っていればよい）。'
-  + '待つ場所（止まり木から10〜14m）と起爆に立つ場所（stand）は別で、体は stand に着いてから起爆の前に息の雲・火・竜の頭と首・翼の下・足場を確かめ、危なければ起爆せず断る（断られたら待ち場へ戻る）。先に probe kind=bedsite,target=#id で現在の候補を読み、その配置を頭が選んで施工する。未観測の配置では起爆しない。'
-  + 'at:[足側,枕側] は同じ高さで水平に隣接する絶対整数座標2つ、target は竜の #id、count はベッド使用上限1〜5、seconds は上限1〜60秒（50を書く。要るのは呼び出し後の phase 2 の残り＋着地7〜10秒＋座ってからの数秒〜最大27秒。phase 2 は18回目の標本で14〜49秒続き、最短は分かっていない。竜が飛び立てば自分で終わるので、長く書いても余計に待たない）を全部書く。'
-  + '呼べるのは現在のphase 2か3のときだけ（座ってから新しく呼ぶのは断られる）。phase 3（着陸中）でも、同じ進入の phase 2 で bedsite が ready を返していれば呼べる。呼んだ1回は着地後も、座った竜（phase 5〜7）へ撃ち続け、座りの被害の累積が50を超えて竜が飛び立つ所で終わる。次の着地は待たない。配置選び・足場と支持の施工・材料集めはしない。'
-  + '安全な機会なし・竜の飛び立ち・上限で短く終了し、確認済み爆発数を返す。所有権取消・死亡・世界切替は中断する。'
-  + '準備拒否でも頭が選んだ退避goへ進める時はbed_burstにonFail:continueを付け、同じactの後続へ退避goを置く。'
-  + '外部abort・生命/世界切替・安全反射はonFailで迂回しない。rel:trueとactのrepeatは使えない。';
+/**
+ * The hand that books the bed burst with the body (2026-11-28, run 21: the window to the landing was found at about 5 s left, the head's hand came 11 s later, and the walk to the
+ * standing cell met the dragon's neck). The body watches the window and does the walk, the screen, the beds and the leaving by itself; the head only books and cancels, and reads
+ * what came back. The word is kept in one place so that the body's own name can be matched by changing it here and in HAND_KINDS (`minecraftActTypes.ts`).
+ */
+export const BED_STANDBY_KIND = 'bed_standby' as const;
+
+export const BED_STANDBY_DESCRIPTION = 'bed_standby は、エンドで竜をベッドで倒すことを体へ予約する手（on:true）か、予約を取り消す手（on:false）。座標は書かない。count は使うベッドの上限（1〜5、既定 5）。'
+  + '予約すると、体が竜の降りてくる窓（竜が止まり木へ降りてくる残りの時間）を自分で見張り、窓が開いたら、撃つ時に立つマスへ歩く・遮蔽の黒曜石を置く・ベッドを置いて撃つ・離れる、までを続けて行う。頭の返事を待たない。'
+  + '理由: 21 回目は、竜が降りるまで残り約 5 秒の窓を見つけてから、頭が撃つ手を返すまでに 11 秒かかった。その手が立つ場所へ歩く途中で、体は降りてきた竜の首に打たれて落ち、死んだ。頭の返事は 4〜11 秒かかるので、数秒で閉じる窓の手は体に任せる。'
+  + '使う時: 竜を倒す段に入り、結晶が 0 本で、ベッドを持っている間。予約は 1 回出せばよい。体は「撃った（何回起爆したか）」か「見送った（理由つき）」を知らせるので、頭はそれを読んで次を決める。'
+  + '体が予約を受け取れない時と、予約が残っていない時だけ、下の bed_burst（頭が座標を組む旧の手）を使う。';
+
+export const BED_BURST_DESCRIPTION = 'bed_burst は、エンドで頭が指定したベッドの置き場所を、竜の 1 回の降下だけ撃つ手（着地の前から、同じ呼び出しのまま座った竜へも撃ち続ける）。通常は先に bed_standby（予約）を使い、これは予約が使えない時の旧の手。'
+  + '使う時: 竜が止まり木へ降りてくる途中（live の竜の行では phase 2）が見えたら、座るのを待たずにすぐ probe kind=bedsite,target=#id を読む。bedsite は降りてくる途中（phase 2）の間だけ候補を返し、座ってからは current_phase2_required で読めない。'
+  + '手順は 1 つの act に、go（bedsite が返した stand、つまり撃つ時に立つマスを to に書く。range は 0.5）→ place（返った footing と screen、つまり足場と遮蔽の黒曜石のマスを全部。supports が空でも screen は置く）→ bed_burst → 退避の go を並べる（分けて出すと、降りてくる途中のうちに間に合わない）。'
+  + 'go の range は 0.5 にする。体は、立っている所が stand から 1m 以内でないと撃ち始めず landing_layout_unobserved で断る（range 3 だと 3m 手前で止まって断られた。11/28 の 18 回目）。landing_layout_unobserved は「bedsite を読めていない」ではなく、「stand から 1m より遠い（または別の置き場所）」の意味なので、読み直さず go をやり直す。'
+  + 'ベッドを置いて使うのは体で、頭が place するのは黒曜石の足場と壁だけ（ベッドは count 個持っていればよい）。'
+  + '待つ場所（止まり木から10〜14m）と起爆に立つ場所（stand）は別（stand は撃つ時に立つマス）。体は stand に着いてから、撃つ前に息の雲・火・竜の頭と首・翼の下・足場を確かめ、危なければ撃たずに断る（断られたら待つ場所へ戻る）。先に probe kind=bedsite,target=#id で今の候補を読み、その置き場所を頭が選んで施工する。読んでいない置き場所では撃たない。'
+  + 'at:[足側,枕側] は同じ高さで水平に隣り合う絶対整数座標 2 つ。target は竜の #id。count はベッドを使う上限（1〜5）。seconds は 1〜60 秒の上限（50 を書く。必要なのは、呼んだ後に降りてくる途中の残り、着地後の 7〜10 秒、座ってからの数秒〜最大 27 秒の合計。降りてくる途中は 18 回目の標本で 14〜49秒続き、最短は分かっていない。竜が飛び立てば自分で終わるので、長く書いても余計には待たない）。全部書く。'
+  + '呼べるのは、竜が降りてくる途中（phase 2）か着陸中（phase 3）の時だけ（座ってから新しく呼ぶのは断られる）。着陸中でも、同じ降下の phase 2 で bedsite が ready を返していれば呼べる。呼んだ 1 回は着地後も、座った竜（phase 5〜7）へ撃ち続け、座りの被害の合計が 50 を超えて竜が飛び立つ所で終わる。次の着地は待たない。置き場所選び・足場の施工・材料集めはしない。'
+  + '撃てる機会が無い・竜が飛び立つ・上限に届く、のどれかで短く終わり、確認できた爆発の数を返す。ベッドの持ち主が変わる・死ぬ・ワールドが切り替わると中断する。'
+  + '準備を断られても、頭が選んだ退避の go へ進める時は、bed_burst に onFail:continue を付け、同じ act の後ろに退避の go を置く。'
+  + '外からの中断・命やワールドの切り替わり・安全の反射は、onFail では迂回できない。rel:true と act の repeat は使えない。';
+
+export function bedStandbyProblem(hand: ActHand): string | null {
+  if (hand.rel === true) return 'bed_standby に rel は使えない（座標を持たない手）';
+  if (typeof hand.on !== 'boolean') return 'on は true（予約する）か false（取り消す）';
+  if (hand.on === false && hand.count !== undefined) return 'on:false（取り消し）には count を付けない';
+  if (hand.count !== undefined && (!Number.isInteger(hand.count) || hand.count < 1 || hand.count > 5)) return 'count は 1〜5 の整数（使うベッドの上限）';
+  return null;
+}
 
 export function bedBurstProblem(hand: ActHand): string | null {
   if (hand.rel === true) return 'bed_burst の at は絶対座標（rel:true は使えない）';
@@ -41,6 +64,6 @@ export function bedBurstActProblem(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
   const act = input as { hands?: unknown; repeat?: unknown };
   if (!Array.isArray(act.hands)) return null;
-  return act.repeat !== undefined && act.hands.some(hand => hand && typeof hand === 'object' && hand.do === 'bed_burst')
-    ? 'bed_burst を含む act は repeat を使えない（現在の1進入だけ）' : null;
+  return act.repeat !== undefined && act.hands.some(hand => hand && typeof hand === 'object' && (hand.do === 'bed_burst' || hand.do === BED_STANDBY_KIND))
+    ? 'bed_burst と bed_standby を含む act は repeat を使えない（1 回の降下か 1 回の予約だけ）' : null;
 }

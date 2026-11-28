@@ -2,7 +2,7 @@ import { handDependsProblem } from './continueContract.js';
 import { shieldRushProblem } from './minecraftShieldRushContract.js';
 import { denActProblem, denProblem } from './minecraftEnderDenContract.js';
 import { fillProblem } from './minecraftFillContract.js';
-import { bedBurstActProblem, bedBurstProblem } from './minecraftBedBurstContract.js';
+import { bedBurstActProblem, bedBurstProblem, bedStandbyProblem } from './minecraftBedBurstContract.js';
 import { ATTACK_SECONDS_MAX, ENDERMAN_FIGHT_SECONDS_MAX, FIGHT_RANGE_MAX, FIGHT_SECONDS_MAX, FIGHT_SECONDS_MIN, GO_RANGE, GO_SECONDS, HUNT_RANGE, HUNT_SECONDS, MINE_SECONDS,
   OBSIDIAN_SECONDS, PORTAL_SECONDS, SLEEP_SECONDS, SMELT_SECONDS, TIDY_SECONDS, WAIT_SECONDS } from './minecraftActLimits.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -20,6 +20,7 @@ export const HAND_FIELDS: Readonly<Record<HandKind, { needs: readonly (readonly 
   dig: { needs: [['at']], may: ['tool', 'collect', 'exposeOk', 'takeOk'] },
   place: { needs: [['at'], ['block']], may: ['face'] },
   bed_burst: { needs: [['at'], ['target'], ['count'], ['seconds']], may: [] },
+  bed_standby: { needs: [['on']], may: ['count'] },
   fill: { needs: [['groups'], ['block'], ['retreatHp'], ['retreatTo'], ['seconds']], may: [] },
   pillarUp: { needs: [['n']], may: ['block'] },
   use: { needs: [['item']], may: ['at', 'face', 'target', 'count'] },
@@ -100,6 +101,7 @@ const KIND_CHECKS: Partial<Record<HandKind, (hand: ActHand) => string | null>> =
   dig: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
   place: hand => hand.at!.length > 16 ? 'at は 16 マスまで' : null,
   bed_burst: bedBurstProblem,
+  bed_standby: bedStandbyProblem,
   use: useProblem,
   furnace: hand => !['put', 'take'].includes(hand.op!) ? 'op は put か take' : hand.op === 'put' && !hand.item && !hand.fuel ? 'put には item か fuel' : approachProblem(hand),
   chest: hand => hand.op === 'put' && !hand.items?.length ? 'put には items' : approachProblem(hand),

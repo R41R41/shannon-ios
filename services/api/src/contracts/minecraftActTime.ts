@@ -114,6 +114,8 @@ const furnaceMostMs = (hand: ActHand, metres: number) => 5_000 + (hand.op === 't
 export const SHOOT_FLIGHT_MS = 5_000;
 const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20) + 2_000,
+  // bed_standby only books or cancels with the body; the burst it starts is reported afterwards, not waited for in this act.
+  bed_standby: () => 1_000,
   fill: mostMs,
   walk: (hand, metres) => 3_000 + 2 * walkMs(hand, metres), go: hand => goMostMs(hand) + 2_000,
   obsidian: obsidianMostMs, fight: mostMs, mine: mostMs, hunt: mostMs, tidy: mostMs, portal: mostMs, smelt: mostMs, vertical: verticalMostMs,
@@ -129,6 +131,7 @@ const CEILING_MS: Partial<Record<HandKind, HandTime>> = {
 };
 const TYPICAL_MS: Partial<Record<HandKind, HandTime>> = {
   bed_burst: hand => 1_000 * (hand.seconds ?? 20),
+  bed_standby: () => 500,
   fill: hand => Math.min(1_000 * (hand.seconds ?? 30), 2_000 + 400 * (hand.groups ?? []).reduce((sum, group) => sum + group.at.length, 0)),
   walk: (hand, metres) => 500 + walkMs(hand, metres), go: goTypicalMs,
   obsidian: hand => Math.min(obsidianMostMs(hand), 20_000 + 8_000 * obsidianBlocks(hand)), fight: hand => 500 * (hand.seconds ?? 20),

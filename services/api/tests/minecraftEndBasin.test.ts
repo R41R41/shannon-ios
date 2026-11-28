@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { climbNow, dragonBasinLine, dragonBurstLine, dragonBurstShortLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { climbNow, dragonBasinLine, dragonBurstLine, dragonBurstShortLine, dragonStandbyLine, dragonStandbyShortLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -303,5 +303,42 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
     const sit = lines.find(line => line.startsWith('ベッドの手（体が測った候補）'))!;
     expect(sit).toContain('竜の頭が枕から 3m 以内の時だけ');
     expect(burstOf(lines)).toBeUndefined();
+  });
+});
+
+describe('the booking line of the bed burst (11/28, run 21: the hand of the head came 11 s after the window was found; the body does the burst once booked)', () => {
+  const none = (phase: number) => { const w = world(approach(), phase); return endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 0, list: [] } })); };
+  it('is given in every phase of a live dragon with a bed held and no crystal left, as one hand with the reason, in plain words', () => {
+    for (const phase of [0, 1, 2, 3, 4, 5, 6, 7, 8]) {
+      const line = dragonStandbyLine(none(phase), 'white_bed')!;
+      expect(line).toContain('{"do":"bed_standby","on":true}');
+      expect(line).toContain('"on":false');
+      expect(line).toContain('撃った');
+      expect(line).toContain('見送った');
+      expect(line).toContain('11 秒かかり');
+      // No fraction, arrow or bare phase number carries the meaning (the "6/12" of run 21 was read as "no obsidian").
+      expect(line).not.toMatch(/[0-9]\/[0-9]/u);
+      expect(line).not.toContain('→');
+      expect(line).not.toContain('phase');
+      expect(line.startsWith('ベッド連爆')).toBe(false);
+    }
+  });
+  it('comes before the old hand in the fight lines, and the old hand says it is for when the booking is not there', () => {
+    const lines = endFightLines(none(2), 'white_bed');
+    const book = lines.findIndex(line => line.startsWith('竜をベッドで倒す（予約）'));
+    const old = lines.findIndex(line => line.startsWith('ベッド連爆の機会'));
+    expect(book).toBeGreaterThan(-1);
+    expect(old).toBeGreaterThan(book);
+    expect(lines[old]).toContain('予約が体に残っていれば体が自分で撃つ');
+    expect(lines[old]).toContain('mc_probe kind=bedsite');
+  });
+  it('is held back where the burst is: a crystal standing, no bed, no dragon id, a dragon that is gone; the short set has the one-hand form', () => {
+    const w = world(approach(), 2);
+    expect(dragonStandbyLine(endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 3 } })), 'white_bed')).toBeNull();
+    expect(dragonStandbyLine(none(2), null)).toBeNull();
+    expect(dragonStandbyLine(endViewOf(frame({ ...w, dragon: { ...w.dragon, id: null }, crystals: { ...w.crystals, remaining: 0, list: [] } })), 'white_bed')).toBeNull();
+    expect(dragonStandbyLine(none(9), 'white_bed')).toBeNull();
+    expect(dragonStandbyShortLine(none(2), 'white_bed')).toContain('{"do":"bed_standby","on":true}');
+    expect(dragonStandbyShortLine(none(2), null)).toBeNull();
   });
 });

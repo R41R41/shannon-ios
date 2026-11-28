@@ -362,6 +362,25 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
 }
 
 /**
+ * The booking line (11/28, run 21): the window of the landing (about 5 s left when the read came) was found and the head's hand came 11 s later, and the walk to the standing cell met the
+ * dragon's neck. So the head books the burst with the body once (the `bed_standby` hand); the body watches the window and does the walk, the screen, the beds and the leaving. Said in every
+ * phase of a live dragon (the booking is for the next descent too), and held back where the burst line is: a crystal standing, a spike unread, no bed, no dragon id.
+ * Plain words on purpose: no fractions or arrows or bare phase numbers carry the meaning (the "6/12" of run 21 was read as "no obsidian").
+ */
+export function dragonStandbyLine(end: EndView | null, bedItem: string | null = null): string | null {
+  const dragon = end?.dragon, phase = dragon?.phase ?? null;
+  if (!dragon || dragon.id === null || !bedItem || phase === null || phase === 9 || phase < 0 || phase > 10) return null;
+  if (unseenBedHold(end, 'ベッド連爆') !== null) return null;
+  const standing = standingOrListed(end);
+  if (standing !== null && standing >= 1) return null;
+  return '竜をベッドで倒す（予約）: 竜を倒す段に入り、結晶が 0 本で、ベッドを持っているので、json {"do":"bed_standby","on":true} の 1 手で体へ予約する（座標は書かない。取り消すのは "on":false）。'
+    + '予約したあとは、体が竜の降りてくる窓を自分で見張り、窓が開いたら、撃つ時に立つマスへ歩く・遮蔽の黒曜石を置く・ベッドを置いて撃つ・離れる、までを頭の返事を待たずに行う。'
+    + '頭は、体が知らせる「撃った（何回起爆したか）」か「見送った（理由）」を読んで、次を決める。予約が残っていなければ、次に竜が降りてくるまでに出し直す。'
+    + '理由: 21 回目は、竜が降りるまで残り約 5 秒の窓を見つけてから、頭が撃つ手を返すまでに 11 秒かかり、立つ場所へ歩く途中で竜の首に打たれて落ちて死んだ。頭の返事は 4〜11 秒かかるので、数秒で閉じる窓の手は体に任せる。'
+    + '体が予約を断った時と、予約が残っていない時だけ、次の行の旧の手（頭が座標を組む bed_burst）で行う。';
+}
+
+/**
  * The bed burst's moment (11/27, run 16): while she comes down to the perch (phase 2) with a bed held, the body can fire a short row of beds at the landing (bedsite reads
  * only in phase 2). The head built place+use by hand at the sit instead, and 3 of 4 blasts went off 25-45 m from her head. The standing-crystal rule is the sitting line's (any crystal left, caged ones too, holds it back; merged 11/28 from 1127o's 3-or-more).
  */
@@ -373,12 +392,18 @@ export function dragonBurstLine(end: EndView | null, bedItem: string | null = nu
   if (held) return held;
   if (standing !== null && standing >= 1) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。ベッドは檻つきも含めて結晶を 0 本にしてから。先に結晶を壊す）`;
   // 11/28 (run 18): the line went out in phase 2 only, so a ready read just before the landing (a history summary took 12-21 s) was never followed; the body takes phase 2 or 3.
-  if (dragon.phase === 3) return `ベッド連爆（竜 #${dragon.id} が着陸中 = phase 3）: この進入の phase 2 で bedsite が ready を返していれば、bed_burst は今も呼べる（体は phase 2 か 3 を受ける）。`
+  if (dragon.phase === 3) return `ベッド連爆（竜 #${dragon.id} が着陸中 = phase 3）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、この降下の phase 2（降りてくる途中）で bedsite が ready を返していれば、bed_burst は今も呼べる（体は phase 2 か 3 を受ける）。`
     + `返った stand へ go range=0.5 → footing・screen の黒曜石を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50} を 1 つの act に並べる（書くのは返った配置のまま）。`
     + 'phase 3 になってからは bedsite を新しく読めない（current_phase2_required）。ready を読んでいない進入なら、待ち場へ戻って次の降りを待つ。';
-  return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中 = phase 2）: 降りるのを待たず、いま先に mc_probe kind=bedsite target=#${dragon.id} を読む（待ち場にいるままでよい。理由: bedsite は phase 2 の間しか読めず、phase 2 は 18 回目の標本で 14〜49 秒、最短は分かっていない。降りてからでは読めない。packet_history_pending なら 1 秒後にもう一度）`
+  return `ベッド連爆の機会（竜 #${dragon.id} が止まり木へ降りてくる途中 = phase 2）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、降りるのを待たず、いま先に mc_probe kind=bedsite target=#${dragon.id} を読む（待ち場にいるままでよい。理由: bedsite は phase 2 の間しか読めず、降りてくる途中は 18 回目の標本で 14〜49 秒続き、最短は分かっていない。降りてからでは読めない。packet_history_pending なら 1 秒後にもう一度）`
     + ` → 返った stand へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）→ footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
     + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は 18 回目の標本で 14〜49 秒続いた（最短は分かっていない）。待ち場（止まり木から 10〜14m）は probe を読む場所で、起爆に立つのは返った stand。体は stand で起爆の前に息の雲・火・竜の頭と首・翼の下を確かめ、危なければ断る（断られたら待ち場へ戻る）。`;
+}
+
+/** The short (urgent) set's booking line: one hand, so a decision of one to three hands has room for it. Null where the full booking line is null. */
+export function dragonStandbyShortLine(end: EndView | null, bedItem: string | null = null): string | null {
+  return dragonStandbyLine(end, bedItem) === null ? null
+    : '竜をベッドで倒す（予約・急ぎ）: json {"do":"bed_standby","on":true} の 1 手で体へ予約する。窓の見張り・歩き・黒曜石・撃つ・離れるは体が行い、結果は「撃った」か「見送った」で返る。予約が使えない時だけ、頭が座標を組む旧の手を使う';
 }
 
 /** The short (urgent) set's bed burst line: the same hand in three moves (go, place, bed_burst), so a decision of two to three hands still has room for it. Null when the full line would be null or held. */
@@ -938,6 +963,8 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   else lines.push(...hazards);
   if (positions) lines.push(positions);
   const bedHand = dragonBedLine(end, bedItem) ?? dragonBurstLine(end, bedItem), basin = dragonBasinLine(end);
+  const standby = dragonStandbyLine(end, bedItem);
+  if (standby) lines.push(standby);
   if (bedHand) lines.push(bedHand);
   // With no bed hand (no bed held, or no cell to set one) the sword from the basin is the hand left: the act stands beside the footing, as section T's ②③.
   // While a crystal stands, or a spike is unread (one may stand there: she heals 2 a second), the sword is held back as the bed is.

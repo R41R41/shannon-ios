@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { actMilliseconds, actProblem, ACT_INPUT_SCHEMA, type ActHand, type ActInput } from '../src/contracts/minecraftActContract.js';
+import { actMilliseconds, actProblem, ACT_DESCRIPTION, ACT_INPUT_SCHEMA, HAND_KINDS, type ActHand, type ActInput } from '../src/contracts/minecraftActContract.js';
 import { expandShortAct, handToLine, shortHandProblem } from '../src/contracts/minecraftActShortContract.js';
 import { validSkillInput } from '../src/surfaces/minecraft/minecraftControlValidation.js';
-import { BED_BURST_DESCRIPTION } from '../src/contracts/minecraftBedBurstContract.js';
+import { BED_BURST_DESCRIPTION, BED_STANDBY_DESCRIPTION } from '../src/contracts/minecraftBedBurstContract.js';
 import { SHORT_ACT_DESCRIPTION } from '../src/contracts/minecraftActShortContract.js';
 import { llmcInputProblem } from '../src/surfaces/minecraft/minecraftLlmc.js';
 import { PROBE_INPUT_SCHEMA } from '../src/contracts/minecraftProbeContract.js';
@@ -20,10 +20,10 @@ describe('the head is told when and how to use it (run 16: the text sat behind s
     const expanded = expandShortAct({ hands: ['go 3,65,3 range=0.5 seconds=8', 'place obsidian at=3,65,2 4,65,2',
       'json {"do":"bed_burst","at":[{"x":4,"y":66,"z":0},{"x":4,"y":66,"z":1}],"target":"#13","count":5,"seconds":50,"onFail":"continue"}', 'go -6,66,10 seconds=10'], accept: ['ender_dragon'] });
     expect(expanded.errors).toEqual([]);
-    expect(llmcInputProblem('mc.act', expanded.input)).toBeNull();
+    expect(llmcInputProblem('mc.act', expanded.input as ActInput)).toBeNull();
   });
   it('puts the moment (phase 2, before the sit), the order of the hands and one example in the act body, not only behind the page', () => {
-    expect(BED_BURST_DESCRIPTION.indexOf('phase 2')).toBeLessThan(BED_BURST_DESCRIPTION.indexOf('未観測の配置'));
+    expect(BED_BURST_DESCRIPTION.indexOf('phase 2')).toBeLessThan(BED_BURST_DESCRIPTION.indexOf('読んでいない置き場所'));
     expect(SHORT_ACT_DESCRIPTION).toContain('座るのを待たずにすぐ mc_probe kind=bedsite');
     expect(SHORT_ACT_DESCRIPTION).toContain('"do":"bed_burst"');
     expect(SHORT_ACT_DESCRIPTION).toContain('go（stand に range=0.5。体は stand から 1m 以内でないと始めない）→ place（黒曜石）→ bed_burst → 退避 go');
@@ -32,12 +32,12 @@ describe('the head is told when and how to use it (run 16: the text sat behind s
     expect(BED_BURST_DESCRIPTION).toContain('range は 0.5');
     expect(BED_BURST_DESCRIPTION).toContain('1m 以内');
     expect(BED_BURST_DESCRIPTION).toContain('「bedsite を読めていない」ではなく');
-    expect(BED_BURST_DESCRIPTION).toContain('screen の黒曜石のマスを全部');
-    expect(BED_BURST_DESCRIPTION).toContain('phase 3（着陸中）でも');
+    expect(BED_BURST_DESCRIPTION).toContain('足場と遮蔽の黒曜石のマスを全部');
+    expect(BED_BURST_DESCRIPTION).toContain('着陸中でも');
   });
   it('tells that the one call keeps firing at the seated dragon (not "unusable on a seated dragon") and recommends 50 s', () => {
     expect(BED_BURST_DESCRIPTION).toContain('座った竜（phase 5〜7）へ撃ち続け');
-    expect(BED_BURST_DESCRIPTION).toContain('1〜60秒（50を書く');
+    expect(BED_BURST_DESCRIPTION).toContain('1〜60 秒の上限（50 を書く');
     expect(SHORT_ACT_DESCRIPTION).toContain('着地後も座った竜へ撃ち続ける');
     expect(SHORT_ACT_DESCRIPTION).toContain('"seconds":50}');
   });
@@ -98,5 +98,42 @@ describe('the head can request a bounded burst and its own immediate retreat', (
     for (const target of [undefined, 'ender_dragon', '#-1', '#99999999999999999999', { x: 0, y: 64, z: 0 }]) {
       expect(prepareProbeInput({ kind: 'bedsite', target }, { feet: null, creatures: [] }).input).toBeNull();
     }
+  });
+});
+
+describe('bed_standby: the booking hand (11/28, run 21)', () => {
+  const standby = (fields: Record<string, unknown> = { on: true }) => ({ do: 'bed_standby', ...fields }) as unknown as ActHand;
+  const act = (hand: ActHand): ActInput => ({ hands: [hand], accept: ['ender_dragon'] });
+  it('is a kind of hand that takes on, and count only when it books', () => {
+    expect(HAND_KINDS).toContain('bed_standby');
+    expect(actProblem(act(standby({ on: true })))).toBeNull();
+    expect(actProblem(act(standby({ on: true, count: 3 })))).toBeNull();
+    expect(actProblem(act(standby({ on: false })))).toBeNull();
+    expect(validSkillInput(act(standby({ on: true, count: 5 })), ACT_INPUT_SCHEMA)).toBe(true);
+  });
+  it('refuses what it cannot take, saying which word is wrong', () => {
+    expect(actProblem(act(standby({})))).toContain('on が要る');
+    expect(actProblem(act(standby({ on: 'yes' })))).toContain('on');
+    expect(actProblem(act(standby({ on: true, count: 6 })))).toContain('count は 1〜5');
+    expect(actProblem(act(standby({ on: false, count: 2 })))).toContain('取り消し');
+    expect(actProblem(act(standby({ on: true, at: [{ x: 0, y: 0, z: 0 }] })))).toContain('使えない');
+    expect(actProblem(act(standby({ on: true, rel: true })))).toContain('rel');
+    expect(actProblem({ hands: [standby({ on: true }), standby({ on: false })], repeat: 2 } as ActInput)).toContain('repeat');
+  });
+  it('is written as a json line and reaches the body as the same hand (a plain hand of the short grammar is not offered)', () => {
+    const expanded = expandShortAct({ hands: ['json {"do":"bed_standby","on":true,"count":4}', 'wait 1'], accept: ['ender_dragon'] });
+    expect(expanded.errors).toEqual([]);
+    expect((expanded.input as ActInput).hands[0]).toEqual({ do: 'bed_standby', on: true, count: 4 });
+    expect(llmcInputProblem('mc.act', expanded.input)).toBeNull();
+    expect(handToLine(standby({ on: true }))).toMatch(/^json /u);
+  });
+  it('is explained before the old hand in the definition of act, with the reason and without the old jargon alone carrying it', () => {
+    expect(ACT_DESCRIPTION.indexOf(BED_STANDBY_DESCRIPTION)).toBeLessThan(ACT_DESCRIPTION.indexOf(BED_BURST_DESCRIPTION));
+    expect(BED_STANDBY_DESCRIPTION).toContain('11 秒かかった');
+    expect(BED_STANDBY_DESCRIPTION).toContain('撃った');
+    expect(BED_STANDBY_DESCRIPTION).toContain('見送った');
+    expect(BED_BURST_DESCRIPTION).toContain('予約が使えない時の旧の手');
+    expect(SHORT_ACT_DESCRIPTION).toContain('{"do":"bed_standby","on":true}');
+    expect(actMilliseconds(act(standby({ on: true })))).toBeLessThanOrEqual(5_000);
   });
 });

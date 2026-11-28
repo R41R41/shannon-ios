@@ -72,8 +72,8 @@ export function readProbeResult(text: string | undefined): ProbeResult | { text:
 }
 /** The definition text of `mc.probe` (fixed: part of the cached prefix). */
 export const PROBE_DESCRIPTION = [
-  'bedsite(target:#竜ID): 竜が止まり木へ降りてくる途中（phase 2）に、すぐ読む。現在のphase 2の進入に対するベッド配置候補を読む（座ってからは current_phase2_required）。立場・支持と施工順・足側/枕側・必要黒曜石と実在庫を返す。ready:true に付く not_ready_to_fire は「撃つ前に体が毎回もう一度確かめる」印で、ready:true なら進んでよい。'
-    + '体は動かず施工しない。初回は観測不足を返す場合がある。候補は同じ接続・生命・進入だけの観測で、安全の保証ではない。選択と施工は頭が行い、bed_burstで起爆前に再確認する。',
+  'bedsite(target:#竜ID): 竜が止まり木へ降りてくる途中（phase 2）に、すぐ読む。現在のphase 2の進入に対するベッド配置候補を読む（座ってからは current_phase2_required）。撃つ時に立つマス（stand）、足場と遮蔽の黒曜石の施工順、ベッドの足側と枕側、必要な黒曜石の数と今の持ち数を返す。ready:true に付く not_ready_to_fire は「撃つ前に体が毎回もう一度確かめる」印で、ready:true なら進んでよい。'
+    + '体は動かず施工しない。初回は観測不足を返す場合がある。候補は同じ接続・生命・進入だけの観測で、安全の保証ではない。通常は予約の手（bed_standby）を使うので、この probe は予約が使えない時の旧の手（bed_burst）のためにある。旧の手では、置き場所の選択と施工は頭が行い、bed_burst が撃つ前に体がもう一度確かめる。',
   'route(to, from, range: 掘る・置くを混ぜた最短の道の見積り。歩く・掘る・置く数と秒、道の点。水源・溶岩は避ける。着けない時は行ける所まで。見積りだけで動かない): 長い道は go の前にこれで数を読む。',
   '体の周りを調べる（読むだけ・速い・体は動かない）。詰まった時・驚いた時に、手を変える前に事実を確かめる。答えは危ない事実が先。',
   'kind と引数: path(to, from: 掘らず置かずに歩いて行けるか。行けない時は、行けない所とその理由（落差 n・壁・水深 n・溶岩・すき間）と、'

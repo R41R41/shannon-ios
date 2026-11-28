@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ACT_INPUT_SCHEMA, HAND_KINDS } from '../src/contracts/minecraftActContract.js';
 import type { MinecraftSkillDefinition } from '../src/contracts/minecraftControlContract.js';
+import { bodyKindsWithHeadAhead } from './support/headAheadOfBody.js';
 import { skillSchema, validControlPoll, validSkillInput, validSkills } from '../src/surfaces/minecraft/minecraftControlValidation.js';
 
 /**
@@ -85,7 +86,7 @@ describe('the body\'s act catalog of the continue version (produced): the hands 
   });
   it('is the head\'s hand, kind for kind and field for field (a drift between the two is the way rel55 was refused)', () => {
     const theirs = ACT_INPUT_SCHEMA.properties.hands.items.properties as Record<string, any>;
-    expect([...hands.do.enum].sort()).toEqual([...HAND_KINDS].sort());
+    expect(bodyKindsWithHeadAhead(hands.do.enum).sort()).toEqual([...HAND_KINDS].sort());
     expect(Object.keys(hands).sort()).toEqual(Object.keys(theirs).sort());
     // The body may be looser than the head (the head checks first) but never tighter: what the head sends the body must take.
     for (const field of Object.keys(theirs)) {

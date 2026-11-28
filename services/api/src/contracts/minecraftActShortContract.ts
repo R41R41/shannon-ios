@@ -2,7 +2,7 @@ import { ACT_MAX_HANDS, ACT_THOUGHT_DESCRIPTION, ACT_THOUGHT_MAX, KEEP_FORM, KEE
 import { LIMITS_MANUAL_LINE } from './minecraftActLimits.js';
 import { SHIELD_RUSH_DESCRIPTION } from './minecraftShieldRushContract.js';
 import { FILL_DESCRIPTION } from './minecraftFillContract.js';
-import { BED_BURST_DESCRIPTION } from './minecraftBedBurstContract.js';
+import { BED_BURST_DESCRIPTION, BED_STANDBY_DESCRIPTION } from './minecraftBedBurstContract.js';
 import { handToLine, lineToHand, pos, readPos, unquoted, withSlotWord } from './minecraftActShortHands.js';
 import { conditionText, parseCondition } from './minecraftActCondition.js';
 import { VERTICAL_DEFAULTS, VERTICAL_SECONDS_RANGE } from './minecraftActTime.js';
@@ -33,11 +33,14 @@ const manualPage = (id: string, title: string, lines: readonly string[]): ShortA
 // Default fragments stay inline, so a newly added ordinary/emergency hand is never silently deferred.
 const SHORT_LINES: readonly (string | ShortActManualPage)[] = [
   // 11/27 (run 16): the full bed_burst text sat behind skill_read, Haiku never read it and built place+use by hand. The use and one example stay in the body.
-  '- 竜のベッド（エンド）: 竜が止まり木へ降りてくる途中（live の竜の行が phase 2）が見えたら、座るのを待たずにすぐ mc_probe kind=bedsite target=#竜id を読み、'
+  '- 竜のベッド（エンド）: 竜を倒す段に入り、結晶が 0 本で、ベッドを持っているなら、まず json {"do":"bed_standby","on":true} の 1 手で、体へ予約する（座標は書かない。体が降りてくる窓を見張り、立つ場所へ歩き、黒曜石を置き、撃ち、離れるまでを自分で行う。頭の返事は 4〜11 秒かかり、数秒で閉じる窓に間に合わないので、体に任せる。取り消すのは {"do":"bed_standby","on":false}）。体の「撃った」「見送った」の知らせを読んで次を決める。'
+    + '予約が使えない時と、予約が残っていない時だけ、以下の旧の手を使う。竜が止まり木へ降りてくる途中（live の竜の行が phase 2）が見えたら、座るのを待たずにすぐ mc_probe kind=bedsite target=#竜id を読み、'
     + '返った stand・黒曜石のマス・足側/枕側で 1 つの act を組む: go（stand に range=0.5。体は stand から 1m 以内でないと始めない）→ place（黒曜石）→ bed_burst → 退避 go（分けると間に合わない。ベッドは体が置いて使うので、頭が place するのは黒曜石だけ）。座ってからは bedsite が読めない（current_phase2_required）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続ける（seconds は 50）。'
     + 'bed_burst は短い書式の行では書けない（「知らない手」で断られる）。必ず json の行で書く。例: json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":50}。詳しい書き方は契約目次の bed_burst。',
   manualPage('special', 'bed_burst（エンドのベッド連爆）・fill（指定範囲の充填）・shield_rush（ブレイズ用の盾突進）', [
+  BED_STANDBY_DESCRIPTION,
   BED_BURST_DESCRIPTION,
+  'bed_standby は json {"do":"bed_standby","on":true} の行で書く（取り消しは "on":false）。',
   'bed_burst は json {"do":"bed_burst","at":[{"x":0,"y":67,"z":2},{"x":0,"y":67,"z":3}],"target":"#12","count":5,"seconds":50} の行で書く。',
   FILL_DESCRIPTION,
   SHIELD_RUSH_DESCRIPTION
