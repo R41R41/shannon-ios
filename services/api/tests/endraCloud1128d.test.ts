@@ -77,7 +77,7 @@ describe('19th run: a breath cloud she stands in is said with its cost, its way 
   it('says, in the End stage text, the 19th run as recorded: about 22 s in one place, 10 to 13 s inside the ring, one fireball cloud', () => {
     const end = V2_STAGES.end;
     expect(end).toContain('約 22 秒立ち止まり');
-    expect(end).toContain('約 10〜13 秒を囲いの中で過ごして死亡し、火の玉の雲は 1 回だった（19 回目の記録）');
+    expect(end).toContain('約 10〜13 秒を囲いの中で過ごして死亡した（19 回目の記録）');
     expect(end).not.toContain('塞いだと見ている');
     expect(end).not.toContain('1 面を空けておくと');
   });
