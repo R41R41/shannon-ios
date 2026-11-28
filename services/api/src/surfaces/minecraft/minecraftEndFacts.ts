@@ -468,26 +468,38 @@ function cloudWords(cloud: EndCloud): string {
 }
 
 /**
- * 19th run (11/28): she stood 6 s in a breath cloud inside a ring of cobblestone the head had set round her feet; the cloud lies on the floor and passes through walls, the
- * ring only closed the way the floor reflex walks out, and her health went 18 to 0. A cloud she stands in is said as that: how far to its edge when the body read the cloud's radius,
+ * 19th run (11/28): she took a breath cloud inside a ring of cobblestone the head had set round her feet (the ring was set about 10 to 13 s before she died, the cloud's wounds lasted about 5 s); the cloud lies on the floor and passes through walls, so the
+ * ring did not keep it off, and her health went 18 to 0. A cloud she stands in is said as that: how far to its edge when the body read the cloud's radius,
  * what it costs each second, and that a wall does not stop it. A fact and its reason, not an order.
  * The cost is not one number: the 19th run's cloud took 4 a second, the lab's cloud on a pillar 6 (the stage text), and a magic wound is cut by protection armour (a reading, not measured),
  * so the line says 4 to 6 and does not claim a fixed rate. The input carries no wound value the body took, so none is quoted.
  */
 export const CLOUD_DAMAGE_WORDS = '1 秒ごとに 4〜6（19 回目は 4、ラボは 6。装備で変わると見ている）の傷を受け続け、体力 20 から 0 まで 3〜5 秒ほど';
 /**
- * The cloud whose plate she stands on: her feet within its radius now, or, when the body gives no radius (`read` false), within the radius the body avoids
- * (7 or more; the real cloud grows from 3 to 7 in 30 s, so she may be outside it). The plate is flat, so a cloud 3 m or more off her height is not under her.
+ * A breath cloud never starts smaller than 3: a dragon fireball's cloud is made with radius 3 and a duration of 600 ticks (30 s) and grows by (7 - 3) / 600 a tick to 7
+ * (vanilla DragonFireball.onHit: setRadius(3.0F), setDuration(600), setRadiusPerTick((7.0F - radius) / duration); the body's BREATH_RADIUS_MIN 7 is the same top).
+ * So feet within 3 m of its centre are inside it for certain even when the body gave no radius.
  */
-function cloudUnder(end: EndView | null): { cloud: EndCloud; away: number; radius: number; read: boolean } | null {
+const CLOUD_START_RADIUS = 3;
+/**
+ * The cloud whose plate she stands on, with how sure that is (`sure`) and the radius it is measured by (`radius`):
+ * the body's radius when it read one (sure, feet within it); else, when it gave none, feet within 3 m of the centre (sure, CLOUD_START_RADIUS; `radius` is then the greatest the cloud
+ * can reach, the radius the body avoids or 7); else feet within the radius the body avoids, which she may still be outside of (the cloud grows from 3 to 7 in 30 s: not sure).
+ * The plate is flat, so a cloud 3 m or more off her height is not under her.
+ */
+function cloudUnder(end: EndView | null): { cloud: EndCloud; away: number; radius: number; read: boolean; sure: boolean } | null {
   const feet = end?.feet;
   if (!feet) return null;
-  let found: { cloud: EndCloud; away: number; radius: number; read: boolean } | null = null;
+  let found: { cloud: EndCloud; away: number; radius: number; read: boolean; sure: boolean } | null = null;
   for (const cloud of end?.breath ?? []) {
-    const radius = cloud.radius ?? cloud.dangerRadius;
-    if (radius === null || (cloud.y !== null && Math.abs(feet.y - cloud.y) > 3)) continue;
+    if (cloud.y !== null && Math.abs(feet.y - cloud.y) > 3) continue;
     const away = Math.hypot(feet.x - cloud.x, feet.z - cloud.z);
-    if (away < radius && (!found || radius - away > found.radius - found.away)) found = { cloud, away, radius, read: cloud.radius !== null };
+    const read = cloud.radius !== null;
+    const radius = cloud.radius ?? cloud.dangerRadius ?? 7;
+    const sure = read || away <= CLOUD_START_RADIUS;
+    if (read ? away >= radius : away >= radius && !sure) continue;
+    if (!read && !sure && cloud.dangerRadius === null) continue;
+    if (!found || radius - away > found.radius - found.away) found = { cloud, away, radius, read, sure };
   }
   return found;
 }
@@ -500,11 +512,14 @@ export function breathLine(end: EndView | null): string | null {
   if (!clouds.length) return null;
   const under = cloudUnder(end);
   if (!under) return `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）`;
-  const walls = '雲は床に広がって壁を通るので、周りにブロックを積んでも傷は止まらない。19 回目は足元の四方を丸石で囲った中で 6 秒立ち続けて体力 18 から 0（囲いが、体が歩いて雲から出る道を塞いだと見ている）。雲から出る手は、雲の外のマスへの go';
-  if (!under.read) {
+  const walls = '雲は床に広がって壁を通るので、周りにブロックを積んでも傷は止まらない。19 回目は足元の四方を丸石で囲った中で雲を受け続けて体力 18 から 0（記録: 囲いを置いてから死ぬまで約 10〜13 秒、雲の被害は約 5 秒）。雲から出る手は、雲の外のマスへの go';
+  if (!under.sure) {
     return `竜の息の雲: ${clouds.join('・')}。今いる所は体が避ける半径 ${round(under.radius)} の内（雲の半径の読み値が無い。実際の雲は 3 から 30 秒で 7 まで広がるので、まだ雲の外かもしれない）: 雲の中なら ${CLOUD_DAMAGE_WORDS}。${walls}`;
   }
   const edge = Math.max(1, Math.ceil(under.radius - under.away + 1));
+  if (!under.read) {
+    return `竜の息の雲: ${clouds.join('・')}。今いる所はこの雲の中（中心から ${round(under.away)}m。雲の半径の読み値は無いが、火の玉の雲は半径 3 から始まるので 3m 以内は必ず中。縁まで歩いて最大で約 ${edge}m）: ${CLOUD_DAMAGE_WORDS}。${walls}`;
+  }
   return `竜の息の雲: ${clouds.join('・')}。今いる所はこの雲の中（中心から ${round(under.away)}m、縁まで歩いて約 ${edge}m）: ${CLOUD_DAMAGE_WORDS}。${walls}`;
 }
 

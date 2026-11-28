@@ -15,7 +15,7 @@ describe('19th run: a breath cloud she stands in is said with its cost, its way 
     expect(inBreathCloud(end)).toBe(true);
     const line = breathLine(end)!;
     expect(line.startsWith('竜の息の雲:')).toBe(true);
-    for (const part of ['今いる所はこの雲の中', '1 秒ごとに 4〜6', '壁を通る', '囲った中で 6 秒', '雲の外のマスへの go']) expect(line).toContain(part);
+    for (const part of ['今いる所はこの雲の中', '1 秒ごとに 4〜6', '壁を通る', '囲った中で雲を受け続けて', '雲の外のマスへの go']) expect(line).toContain(part);
     expect(line).not.toContain('（中で立ち止まらない）');
     // The rate is not one fixed number (19th run 4, the lab 6), and the input carries no wound value, so none is quoted as a fixed fact.
     expect(line).not.toContain('毎秒 4');
@@ -24,17 +24,34 @@ describe('19th run: a breath cloud she stands in is said with its cost, its way 
     expect(line).toContain('縁まで歩いて約');
   });
 
-  it('does not say "in the cloud" or a distance to its edge when the body gave no radius for the cloud', () => {
+  it('says "in the cloud" for certain within 3 m of the centre even when the body gave no radius (a fireball cloud starts at radius 3)', () => {
     const noRadius = { ...cloud, radius: null };
     const end = endViewOf(frame({ position: { x: -11.3, y: 66, z: 0.3 }, dragonBreath: [noRadius], dragonFireballs: 0 }));
     expect(inBreathCloud(end)).toBe(true);
     const line = breathLine(end)!;
+    expect(line).toContain('今いる所はこの雲の中（中心から 0m');
+    expect(line).toContain('3m 以内は必ず中');
+    expect(line).toContain('縁まで歩いて最大で約');
+    expect(line).not.toContain('かもしれない');
+    expect(line).toContain('雲の外のマスへの go');
+    expect(endFightLines(end)[0]).toContain('今いる所はこの雲の中');
+  });
+
+  it('keeps the hedged "may be outside" words when the radius is unread and she is 3 to 7 m from the centre', () => {
+    const noRadius = { ...cloud, radius: null };
+    const end = endViewOf(frame({ position: { x: -11.45 + 5, y: 66, z: 0.45 }, dragonBreath: [noRadius], dragonFireballs: 0 }));
+    expect(inBreathCloud(end)).toBe(true);
+    const line = breathLine(end)!;
     expect(line).toContain('避ける半径 7 の内');
     expect(line).toContain('実際の雲は 3 から 30 秒で 7 まで広がる');
-    expect(line).toContain('雲の中なら');
+    expect(line).toContain('まだ雲の外かもしれない');
     expect(line).not.toContain('この雲の中（');
     expect(line).not.toContain('縁まで');
-    expect(line).toContain('雲の外のマスへの go');
+    // Past 7 m, or at 3.1 m with no avoid radius either, it is not under her.
+    expect(inBreathCloud(endViewOf(frame({ position: { x: -11.45 + 8, y: 66, z: 0.45 }, dragonBreath: [noRadius], dragonFireballs: 0 })))).toBe(false);
+    const noDanger = { ...cloud, radius: null, dangerRadius: null };
+    expect(inBreathCloud(endViewOf(frame({ position: { x: -11.45 + 2.5, y: 66, z: 0.45 }, dragonBreath: [noDanger], dragonFireballs: 0 })))).toBe(true);
+    expect(inBreathCloud(endViewOf(frame({ position: { x: -11.45 + 3.5, y: 66, z: 0.45 }, dragonBreath: [noDanger], dragonFireballs: 0 })))).toBe(false);
   });
 
   it('keeps the old line when she is outside the cloud, off its height, or her place is unknown', () => {
@@ -52,13 +69,16 @@ describe('19th run: a breath cloud she stands in is said with its cost, its way 
 
   it('tells the head, in the instructions, that enclosing is not for a breath cloud and why', () => {
     expect(V2_ALWAYS).toContain('not against a dragon\'s breath cloud');
-    expect(V2_ALWAYS).toContain('a ring round the feet blocks the body\'s walk-out');
+    expect(V2_ALWAYS).toContain('a ring did not stop it');
+    expect(V2_ALWAYS).not.toContain('walk-out');
     expect(V2_ALWAYS).toContain('not inside a breath cloud: leave it first');
   });
 
-  it('says, in the End stage text, that a ring held her 22 s while the dragon flew and one side can be left open', () => {
+  it('says, in the End stage text, the 19th run as recorded: about 22 s in one place, 10 to 13 s inside the ring, one fireball cloud', () => {
     const end = V2_STAGES.end;
-    expect(end).toContain('22 秒止まり、火の玉を 1 回受けた');
-    expect(end).toContain('1 面を空けておくと');
+    expect(end).toContain('約 22 秒立ち止まり');
+    expect(end).toContain('約 10〜13 秒を囲いの中で過ごして死亡し、火の玉の雲は 1 回だった（19 回目の記録）');
+    expect(end).not.toContain('塞いだと見ている');
+    expect(end).not.toContain('1 面を空けておくと');
   });
 });

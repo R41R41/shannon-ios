@@ -58,7 +58,7 @@ const URGENT = [
   '## Urgent decisions (「急ぎの時」)',
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
     + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
-    + 'The block goes against a melee enemy, not against a dragon\'s breath cloud (it passes through walls, and a ring round the feet blocks the body\'s walk-out): the cloud line says the way out. '
+    + 'The block goes against a melee enemy, not against a dragon\'s breath cloud (it lies on the floor and passes through walls; a ring did not stop it): the cloud line says the way out. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
   // try1124b (the owner's test 11/24: 15 of 38 acts were replaced by the next decision before they arrived; in a replay the moves were 1 to 6 m in 14 of 15 answers).
   // Run of 11/26 (4th): the fixed urgent line said 「attack untilDead を先頭」 for a hoglin (40 health) with a wooden sword.
@@ -641,7 +641,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '水で止められなかった時（水を置けない・外れ。実績は実走・ラボとも 0 回）は、20 ブロックで被害 17、それ以上で死ぬ（ラボ。防具は落下を減らさない）。'
       + '計画的に降りる手は 3 つで、費用は live の「高所:」の行が並べる: (a) go に maxDrop を付けて飛び降りる（水バケツで着水。約 3 秒）、(b) vertical で掘って降りる（段数×1 段の秒数。黒曜石はダイヤのつるはしの使用 1 段 1 回）、(c) 待つ（その場で受けた被害の実績）。'
       + '飛び降りを最後の手とも、避ける手とも決めつけず、費用と今の危険（竜の位置・火の玉・息の雲・体力）で選ぶ。go の目録の maxDrop に「11 以上はエンドだけ」の書きが無く 10 までなら体は旧版で、飛び降りは使えない（(b)(c) だけ）。11 以上は体が条件を判定し、水バケツ・体力 18 以上・竜の火の玉や息の雲が届いていない、のどれかが欠けると降りずに欠けた条件を返す。'
-      + '落ちないことを第一に、足元と両脇を積める物で囲い、柱の上に居る時間を短くする。囲いは落下と近接の敵への手で、息の雲は壁を通るので囲っても止まらない（19 回目: 足元の四方を囲った中で雲に 6 秒立ち、体力 18 から 0。囲いが体の歩いて出る道を塞いだと見ている）。雲の中では囲わず、雲の外へ go する。竜が周回している間の囲いも同じで、19 回目は足元の四方の 1 段の輪の中で竜が飛んでいる間 22 秒止まり、火の玉を 1 回受けた（実測）。火の玉の雲は足元にも出る。囲うなら 1 面を空けておくと、歩いて出る道が残る。',
+      + '落ちないことを第一に、足元と両脇を積める物で囲い、柱の上に居る時間を短くする。囲いは落下と近接の敵への手で、息の雲は床に広がって壁を越えて当たるので囲っても防げない（19 回目の記録: 足元の四方を丸石で囲った中で雲を受け、体力 18 から 0）。雲の中では囲わず、雲の外へ go する。竜が周回している間の囲いも同じで、19 回目は同じ所に約 22 秒立ち止まり、囲いを置いた後の約 10〜13 秒を囲いの中で過ごして死亡し、火の玉の雲は 1 回だった（19 回目の記録）。火の玉の雲は足元にも出る。',
     '- 柱の上は歩いて離れる道が無い。ラボ: 幅 1・30 ブロックの柱の上に、積める物も水バケツも持たずに居た体は 144 秒で死んだ（玉が 8 つ線を通り、最後の雲が柱の上に載って 1 秒ごとに 6 を 3 回）。'
       + 'ブロック 12 個と水バケツを持つ体は、玉を 3 つ落とされても 3 回積んで上がり（96→99）被害 0、2 × 153 秒の待ちも被害 0（積む度に 1 個減る）。'
       + '登る時は、積める物を 3 個以上残し、柱の上に居る時間を短くする（地面の約 2 倍、玉が来る）。島の地面でじっと立つ体は 2 × 150 秒で被害 0 だった。'
