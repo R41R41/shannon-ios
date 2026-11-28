@@ -21,7 +21,7 @@ import { fcaTransientHistory,isFcaTransientTask,shouldForceFcaEpoch } from './fc
 import { isTransientUnsupported,legacyToolState } from './fcaTransientFallback.js';
 import { FCA_WAIT_WITHOUT_COUNTERPART,fcaWaitGate } from './fcaWaitGate.js';
 import { runToolRound,type RoundContext,type RoundOutcome } from './fcaToolRound.js';
-import { settleNews,startHistoryAhead,waitForQueue } from './fcaStretch.js';
+import { fitHistoryInStretch,settleNews,waitForQueue } from './fcaStretch.js';
 import { closeFcaMonitors,investigateFcaBody } from './fcaBodyInvestigation.js';
 import { FCA_COMPLETION_MISTAKES_STOP,sayCompletionMistake } from './fcaCompletionMistake.js';
 import { reflexCutCheckpoint,reflexCutRunOf,repeatedFailureReason,settleReflexStep } from './fcaReflexCuts.js';
@@ -452,7 +452,17 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
 // step's own were the first decision's).
     await checked('fresh');
     // Flow 1113: the stored history is looked at before each decision of the stretch, not only at the step's start (`fcaStretch.ts`).
-    if (historyPorts && historyAhead) startHistoryAhead({ step, ports: historyPorts, policy: transient?.policy ?? ports.history!.policy ?? {}, ahead: historyAhead });
+    // 11/28: and the replay is kept within the hard bounds beside the summary (`fitFcaStretchHistory`): when the stored part is replaced (a summary installed, or
+    // cut to a floor) the epoch's anchor follows it, so that the next step, which replays the same, continues this epoch (`continuesFcaEpoch`).
+    if (historyPorts && historyAhead) {
+      const fitted = await fitHistoryInStretch({ step, ports: historyPorts, policy: transient?.policy ?? ports.history!.policy ?? {}, ahead: historyAhead,
+        stored: input.history, inStep: history, decisions: rounds, signal });
+      if (fitted) {
+        input.history = fitted;
+        if (selection?.core) selection.core = withCoreAnchor(selection.core, input.history, history);
+        await checked('fresh');
+      }
+    }
     if (bodyTask && await investigateFcaBody(ports, step.taskId, metrics, signal)) await checked('fresh');
     const { recall: _recall, waiting: _waiting, ...rest } = request;
     asked = await freshen({ ...rest, messages: [], history: [...input.history, ...history] });

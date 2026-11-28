@@ -66,7 +66,7 @@ const fixture = (parts: Partial<LlmcWiring> = {}): LlmcWiring => ({
   names: { main: DEFAULT_HAIKU_MODEL, plan: DEFAULT_HAIKU_MODEL, escalate: null },
   models: { main: { async decide() { return { decision: { kind: 'complete', summary: 'done' }, history: [] }; }, toolResults: value => value },
     escalate: null },
-  summarizer: null, policy: {}, historyAhead: { get: () => undefined, set() {}, clear() {} }, ...parts,
+  summarizer: null, policy: {}, historyAhead: { get: () => undefined, set() {}, clear() {}, floor: () => undefined, setFloor() {} }, ...parts,
 });
 
 describe('isolated rig paid work shutdown', () => {

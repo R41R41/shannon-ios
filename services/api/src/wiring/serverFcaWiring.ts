@@ -41,7 +41,6 @@ import { installDecisionRecorder } from '../infra/decisionRecords/decisionRecord
 import { anthropicFcaHistoryCodec } from '../infra/models/anthropic/anthropicFcaHistory.js';
 import { createAnthropicFcaSummarizer } from '../infra/models/anthropic/anthropicFcaSummary.js';
 import { configuredFcaSummaries } from './fcaSummaryWiring.js';
-import { createFcaHistoryAhead, FCA_HISTORY_POLICY } from '../mind/action/fca/fcaHistory.js';
 import { createFcaReadSources, type FcaReadSourcesOptions } from './fcaReadSources.js';
 import type { CompanionStateStore } from '@shannon/cognition';
 import type { ConversationStore } from '../mind/memory/memoryPorts.js';
@@ -160,8 +159,9 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
       minecraftOwnPrompt: true });
     // SHANNON_FCA_SUMMARY_MODEL=haiku (P4): a body task's summaries by Haiku, rare; absent, every task is as it was.
     const summaries = configuredFcaSummaries(values, createAnthropicFcaSummarizer({ ...provider, recordUsage }), recordUsage);
-    // 11/28: a decision task's history summary is made beside its steps and never waited for (`prepareFcaHistory`); the rounds may reach twice the policy's before a step replays without its oldest.
-    const decisionAhead = { port: createFcaHistoryAhead(), hard: { maximumRounds: FCA_HISTORY_POLICY.maximumRounds * 2 } };
+    // A decision task (Discord, the app) makes its history summary in its step as before: a summary made beside a step borrows that step's lease and permit
+    // (`detachedModelCall`), and a decision task's step is one decision, over long before the summary comes back. Only a Minecraft task, whose steps last
+    // minutes, makes it beside the step (`minecraftLlmcWiring.ts`). 11/28: not verified for a decision task, so not wired.
     const actions = actionThreadsClient(client.call);
     const jev = configuredJevChooser(values, { trace: parts.trace ?? null, salt: parts.traceSalt });
     const selector: FcaToolSelector = jev ? new JevFcaToolSelector(jev) : { async select(request) { request.signal.throwIfAborted();
@@ -263,7 +263,7 @@ const { provider, sleepEnabled, borrowed, db } = configureTaskProvider();
         taskVisible: (id: string) => id === step.taskId ? sourcesVisible() : visible?.(step.scopeKey, id, undefined,
            'child') ?? _runtime.taskSources(step.scopeKey, id).length === 0,
         observeTasks: (ids: readonly string[]) => inheritObservedTaskSources(_runtime, step, ids),
-        history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision, ahead: decisionAhead }) },
+        history: { codec: anthropicFcaHistoryCodec, ...(keepBodyTools() ? summaries.body : { summarizer: summaries.decision }) },
         ...(parts.tools && parts.state && parts.conversations ? { tools: createFcaProgressTools(combineFcaTools(...(gameOnlyStep ? [] :
            [fcaResearchTools({ tools: parts.tools,
           state: parts.state, conversations: parts.conversations, ...(shared ? { observeMemory: (ids:

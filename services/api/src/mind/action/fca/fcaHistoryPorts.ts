@@ -78,6 +78,19 @@ export interface FcaHistoryAhead {
   get(taskId: string): FcaHistoryPrepared | undefined;
   set(taskId: string, prepared: FcaHistoryPrepared): void;
   clear(taskId: string): void;
+  /** The floor a task's replay was last dropped to (`FcaHistoryFloor`); in memory, like the summaries. */
+  floor(taskId: string): FcaHistoryFloor | undefined;
+  setFloor(taskId: string, floor: FcaHistoryFloor | null): void;
+}
+/**
+ * A replay past its hard bounds is cut once, to a floor, and stays cut until the next summary is installed (11/28, end run 18 replay: a
+ * cut that moved with every round changed the replay's first message every step, rewriting about 90,000 tokens of cache and ending the
+ * epoch each time). The first message is the same for as long as the floor stands: `bootstrap` is the public history of everything stored
+ * up to `frozenThrough`, the rounds up to `omitThrough` left out; the rounds after `frozenThrough` follow it native. `revision` is the
+ * summary revision it was cut from (another summary makes it stale).
+ */
+export interface FcaHistoryFloor {
+  revision: number; omitThrough: number; frozenThrough: number; bootstrap: readonly unknown[];
 }
 export interface FcaHistoryAheadOptions {
   port: FcaHistoryAhead;
