@@ -167,8 +167,8 @@ describe('(5) the tidy words mark the blocks that are the scaffold', () => {
   const lines = ['dirt×5', 'cobblestone×2', 'acacia_sapling×3', 'iron_ingot×1', ...Array.from({ length: 30 }, (_, i) => `item_${i}×1`)];
   it('says what counts, how many are short after a full throw and how to keep them', () => {
     const out = packLines(lines, { free: 1, blocks: { have: 7, need: 64, held: [['dirt', 5], ['cobblestone', 2]] } }).join('\n');
-    expect(out).toContain('足場に数える物（dirt×5・cobblestone×2）は今 7/64');
-    expect(out).toContain('捨てると足場があと 64 個要る（残すなら keep=dirt:5,cobblestone:2）');
+    expect(out).toContain('足場に数える物（dirt×5・cobblestone×2）は今 7 個。目標は 64 個');
+    expect(out).toContain('これを捨てると足場用にあと 64 個足りなくなる（残すなら keep=dirt:5,cobblestone:2）');
     expect(packLines(lines, { free: 1 }).join('\n')).not.toContain('足場に数える物');
   });
 });

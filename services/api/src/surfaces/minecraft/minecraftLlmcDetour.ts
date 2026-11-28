@@ -148,11 +148,11 @@ function endBridgeSentence(total: number, observation: BodyObservation | null, g
   const feet = posOf(world(observation).position);
   const metres = goal && feet ? Math.round(Math.hypot(goal.at.x - feet.x, goal.at.z - feet.z)) : null;
   if (metres === null) {
-    return `渡る橋の長さ M（行き先までの直線距離からの概算）の往復 2×M 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個が合計に収まる時だけ橋で渡る。go の maxPlace の上限は 合計 − M − ${SCAFFOLD_KEPT_AT_END}`;
+    return `渡る橋の片道の長さを M（行き先までの直線距離からの概算）とすると、往復で M の 2 倍の個数と、降りる用の ${SCAFFOLD_KEPT_AT_END} 個が、手持ちの合計に収まる時だけ橋で渡る。go の maxPlace の上限は、合計から M と ${SCAFFOLD_KEPT_AT_END} を引いた数`;
   }
   const need = 2 * metres + SCAFFOLD_KEPT_AT_END, room = Math.max(0, total - metres - SCAFFOLD_KEPT_AT_END);
-  return `橋 約 ${metres} m（直線距離からの概算で、引き直しで外れる）: 往復 2×${metres} 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個＝${need} 個が要る。`
-    + (total >= need ? `go の maxPlace の上限は ${room}（合計 − 戻る橋 ${metres} − 降りる用 ${SCAFFOLD_KEPT_AT_END}）` : `合計 ${total} 個では足りない: 宙・塔の上に居るなら橋で渡らず、降りて地面で材料を掘る（地面・出現の台から島へ渡る時は、戻らないなら片道 ${metres} 個＋降りる用 ${SCAFFOLD_KEPT_AT_END} 個の ${metres + SCAFFOLD_KEPT_AT_END} 個で足りる）`);
+  return `橋は片道約 ${metres} m（直線距離からの概算で、引き直しで外れる）。往復で ${2 * metres} 個、降りる用に ${SCAFFOLD_KEPT_AT_END} 個で、合わせて ${need} 個が要る。`
+    + (total >= need ? `go の maxPlace の上限は ${room}（今の合計から、戻る橋の ${metres} 個と降りる用の ${SCAFFOLD_KEPT_AT_END} 個を引いた数）` : `今の合計 ${total} 個では足りない。宙・塔の上に居るなら橋で渡らず、降りて地面で材料を掘る（地面・出現の台から島へ渡る時は、戻らないなら片道の ${metres} 個と降りる用の ${SCAFFOLD_KEPT_AT_END} 個、合わせて ${metres + SCAFFOLD_KEPT_AT_END} 個で足りる）`);
 }
 
 /**

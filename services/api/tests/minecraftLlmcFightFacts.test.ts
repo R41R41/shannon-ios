@@ -25,7 +25,7 @@ describe('the pack and the gear as facts (11/24)', () => {
   });
   it('says the gear and whether it reaches the skeleton rule, or that a body with no weapon does not cut', () => {
     const obs = frame({});
-    expect(gearLine(obs, worldOf(obs))).toBe('戦う装備: 剣 石（鉄の剣は今作れる）・防具 なし（0/4）・盾 なし・食べ物 0 点 → 射手へ詰める目安（剣と、盾か鉄の防具 3 部位・体力 10 以上）に届かない');
+    expect(gearLine(obs, worldOf(obs))).toBe('戦う装備: 剣 石（鉄の剣は今作れる）・防具 なし（4 部位のうち 0 部位）・盾 なし・食べ物 0 点 → 射手へ詰める目安（剣と、盾か鉄の防具 3 部位・体力 10 以上）に届かない');
     const bare = frame({}, [['dirt', 20]]);
     expect(gearLine(bare, worldOf(bare))).toContain('武器 なし');
     expect(gearLine(bare, worldOf(bare))).toContain('体は斬らない');
@@ -131,17 +131,17 @@ describe('the blows a fight takes and the shield left (11/26)', () => {
     expect(strikeLine(far, worldOf(far))).toBeNull();
   });
   it('says the shield when it is under a third, from the off hand first and from the pack otherwise', () => {
-    expect(shieldLine({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)' })).toBe('盾 残り 22/336（構えている盾。1/3 を切っている）');
+    expect(shieldLine({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)' })).toBe('盾の耐久は 336 のうち残り 22（構えている盾。3 分の 1 を下回っている）');
     expect(shieldLine({ worn: '左手: shield(残り120/336)' })).toBeNull();
-    expect(shieldLine({ worn: '左手: なし', inventory: [{ name: 'shield', count: 1, durability: { left: 50, max: 336 } }] })).toContain('盾 残り 50/336（持っている盾');
+    expect(shieldLine({ worn: '左手: なし', inventory: [{ name: 'shield', count: 1, durability: { left: 50, max: 336 } }] })).toContain('盾の耐久は 336 のうち残り 50（持っている盾');
     expect(shieldLine({ worn: '左手: shield' })).toBeNull();
     const obs = frame({ worn: '頭: なし、胴: なし、脚: なし、足: なし、左手: shield(残り22/336)', nearbyThreats: [] });
-    expect(fightLines(obs, false)).toEqual(['盾 残り 22/336（構えている盾。1/3 を切っている）']);
+    expect(fightLines(obs, false)).toEqual(['盾の耐久は 336 のうち残り 22（構えている盾。3 分の 1 を下回っている）']);
   });
   it('says a short diamond pickaxe as what obsidian takes, and that the body spends the cheapest tool, while no other pickaxe is carried', () => {
     const inventory = [{ name: 'diamond_pickaxe', count: 1, durability: { left: 10, max: 1561 } }, { name: 'obsidian', count: 7 }, { name: 'cobblestone', count: 5 }, { name: 'stick', count: 2 }];
     const lines = toolLines({ inventory });
-    expect(lines[0]).toBe('diamond_pickaxe 残り 10/1561（1/3 を切っている。持ち: ダイヤ 0・棒 2。作り直すなら ダイヤ 3・棒 2）');
+    expect(lines[0]).toBe('diamond_pickaxe の耐久は 1561 のうち残り 10（3 分の 1 を下回っている。持ち: ダイヤ 0・棒 2。作り直すなら ダイヤ 3・棒 2）');
     expect(lines[1]).toContain('体は一番安い道具から使う設計');
     expect(lines[1]).toContain('石のツルハシ: 持ち: 丸石 5・棒 2。作り直すなら 丸石 3・棒 2');
     expect(lines[1]).toContain('今は荷の石以上のツルハシがダイヤ 1 本のみ');

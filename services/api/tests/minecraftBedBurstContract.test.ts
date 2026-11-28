@@ -26,13 +26,13 @@ describe('the head is told when and how to use it (run 16: the text sat behind s
     expect(BED_BURST_DESCRIPTION.indexOf('phase 2')).toBeLessThan(BED_BURST_DESCRIPTION.indexOf('読んでいない置き場所'));
     expect(SHORT_ACT_DESCRIPTION).toContain('座るのを待たずにすぐ mc_probe kind=bedsite');
     expect(SHORT_ACT_DESCRIPTION).toContain('"do":"bed_burst"');
-    expect(SHORT_ACT_DESCRIPTION).toContain('go（stand に range=0.5。体は stand から 1m 以内でないと始めない）→ place（黒曜石）→ bed_burst → 退避 go');
+    expect(SHORT_ACT_DESCRIPTION).toContain('(1) go: stand へ range=0.5（体は stand から 1m 以内でないと始めない）。(2) place: 黒曜石。(3) bed_burst。(4) 退避の go。');
   });
   it('says range 0.5 for the stand, what landing_layout_unobserved means, and that phase 3 still accepts a ready read (11/28 run 18)', () => {
     expect(BED_BURST_DESCRIPTION).toContain('range は 0.5');
     expect(BED_BURST_DESCRIPTION).toContain('1m 以内');
     expect(BED_BURST_DESCRIPTION).toContain('「bedsite を読めていない」ではなく');
-    expect(BED_BURST_DESCRIPTION).toContain('足場と遮蔽の黒曜石のマスを全部');
+    expect(BED_BURST_DESCRIPTION).toContain('footing（足場）と screen（遮蔽）の黒曜石のマスを全部置く');
     expect(BED_BURST_DESCRIPTION).toContain('着陸中でも');
   });
   it('tells that the one call keeps firing at the seated dragon (not "unusable on a seated dragon") and recommends 50 s', () => {

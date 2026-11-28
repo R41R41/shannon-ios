@@ -24,10 +24,10 @@ const rangeWords = (range: [number, number]): string => range[0] === range[1] ? 
 function windowWords(dragon: EndDragon, short: boolean): string {
   const windows = dragon.windows;
   if (!windows) return '';
-  if (short) return windows.open === null ? '' : windows.open ? '窓は開いている' : '窓は閉じている';
-  const state = windows.open === true ? '窓は開いている' : windows.secondsUntil ? `窓まで ${rangeWords(windows.secondsUntil)} 秒`
-    : windows.open === false ? '窓は閉じている' : '';
-  const length = windows.lengthSeconds ? `窓は ${rangeWords(windows.lengthSeconds)} 秒` : '';
+  if (short) return windows.open === null ? '' : windows.open ? '剣で打てる窓は開いている' : '剣で打てる窓は閉じている（打てるのは竜が座っている間だけ）';
+  const state = windows.open === true ? '剣で打てる窓は開いている' : windows.secondsUntil ? `剣で打てる窓まで ${rangeWords(windows.secondsUntil)} 秒`
+    : windows.open === false ? '剣で打てる窓は閉じている（打てるのは竜が座っている間だけ）' : '';
+  const length = windows.lengthSeconds ? `その窓の長さは ${rangeWords(windows.lengthSeconds)} 秒` : '';
   const duration = length ? (state ? `（${length}）` : length) : '';
   return state || length ? `${state}${duration}（実測目安）` : '';
 }
@@ -198,7 +198,7 @@ export function crystalsBeforeNodeNote(left: number | null, nodeText: string, un
   return `。今の判断で出す手: 結晶の行の「今登れる」の手（待ちの手は出さない）。この節（ベッド・待ち）に結晶を壊す手は無いが、結晶が ${left} 本残る間はベッドの傷が次の座りまでに戻り（1 本でも竜は毎秒 2 回復する）、座りを待っても竜は倒せない。檻つきも同じ。結晶が 0 本になったらこの節へ戻る`;
 }
 
-/** 「エンドクリスタル: 残り 4/10（壊れた 6・檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
+/** 「エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 4 か所（壊れた 6・檻つき 1）。近い順: #12 (x,y,z) 21m・#15 (x,y,z) 34m 檻つき」 from the body's count, else the marks in view. */
 export function crystalLine(end: EndView | null, short = false): string | null {
   const crystals = end?.crystals;
   if (!crystals) return null;
@@ -215,7 +215,7 @@ export function crystalLine(end: EndView | null, short = false): string | null {
     .flatMap(([label, value]) => value !== null && value > 0 ? [`${label} ${value}`] : []);
   const list = crystals.list.slice(0, 3).map(crystalWords);
   const unseen = unseenWords(end);
-  return `エンドクリスタル: 残り ${crystals.remaining}/10${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
+  return `エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が ${crystals.remaining} か所${counts.length ? `（${counts.join('・')}）` : ''}${list.length ? `。近い順: ${list.join('・')}` : ''}`
     + `${unseen ? `。${unseen}` : ''}${searchWords ? `。${searchWords}` : ''}`;
 }
 
@@ -348,16 +348,16 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
   if (held) return held;
   if (standing !== null && standing >= 1) return `ベッドの手: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。実走で 173→200 を約 13 秒。ベッドは檻つきも含めて結晶を 0 本にしてから）`;
   const bed = bedItem ?? 'red_bed', foot = place(offer.foot);
-  const build = offer.build.length ? ` → place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く' : 'ベッドの下の支え。黒曜石が無ければ end_stone・cobblestone でもよい'}）` : '';
+  const build = offer.build.length ? `、次に黒曜石を置く: place block=obsidian at=[${offer.build.map(cell => place(cell)).join(',')}]（${offer.build.some(cell => cell.role === 'screen') ? '自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く' : 'ベッドの下の支え。黒曜石が無ければ end_stone・cobblestone でもよい'}）` : '';
   const estimate = [offer.dragonExpected === null ? '' : `竜の頭 −${round(offer.dragonExpected)}`, offer.selfExpected === null ? '' : `自分 −${tenth(offer.selfExpected)}`].filter(Boolean).join('・');
   const walk = offer.walkMeters === null ? '' : `、歩き ${round(offer.walkMeters)}m`;
   // The server names no one for a bed's blast, so a kill by the bed alone gives no end/kill_dragon, which the full run's gate and section T
   // want beside boss.verified: vanilla credits the kill to a player who hurt her within the last 5 s. When this bed may be the last one,
   // a short strike from the stand comes first (any part, any held item); out of reach it ends at once and the bed goes off as before.
   const last = dragon.health !== null && offer.dragonExpected !== null && dragon.health <= offer.dragonExpected + 10;
-  const credit = last ? ' → attack target=ender_dragon seconds=2 onFail="continue"' : '';
+  const credit = last ? '、use の前に竜を 1 回打つ: attack target=ender_dragon seconds=2 onFail="continue"' : '';
   const why = last ? `。竜の体力 ${round(dragon.health!)} はこのベッドで尽きる見込み: ベッドだけで倒すと手柄が付かず advancement end/kill_dragon が出ないので、use の前に 1 回打つ（届かなくてもそのまま use）` : '';
-  return `ベッドの手（体が測った候補）: go ${place(offer.stand)} range=0.5${build} → place block=${bed} at=[${foot}]${credit} → use at=[${foot}]`
+  return `ベッドの手（体が測った候補。次の順に 1 つの act へ並べる）: まず go ${place(offer.stand)} range=0.5（撃つ時に立つマスへ歩く）${build}、そのあと place block=${bed} at=[${foot}]（ベッドを置く）${credit}、最後に use at=[${foot}]（ベッドを使って爆発させる）`
     + `（枕は ${place(offer.head)}${estimate ? `、見込み ${estimate}` : ''}${walk}。use が傷になるのは竜の頭が枕から 3m 以内の時だけ（結果の「頭の箱まで」が 3 を大きく超えたら空振り）。同じ act に並べる。立つ所から動くと計算が変わる${last ? '' : '。use の後もこの行が出ていれば、すぐもう 1 個'}${why}）`;
 }
 
@@ -392,11 +392,11 @@ export function dragonBurstLine(end: EndView | null, bedItem: string | null = nu
   if (held) return held;
   if (standing !== null && standing >= 1) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。ベッドは檻つきも含めて結晶を 0 本にしてから。先に結晶を壊す）`;
   // 11/28 (run 18): the line went out in phase 2 only, so a ready read just before the landing (a history summary took 12-21 s) was never followed; the body takes phase 2 or 3.
-  if (dragon.phase === 3) return `ベッド連爆（竜 #${dragon.id} が着陸中 = phase 3）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、この降下の phase 2（降りてくる途中）で bedsite が ready を返していれば、bed_burst は今も呼べる（体は phase 2 か 3 を受ける）。`
-    + `返った stand へ go range=0.5 → footing・screen の黒曜石を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50} を 1 つの act に並べる（書くのは返った配置のまま）。`
-    + 'phase 3 になってからは bedsite を新しく読めない（current_phase2_required）。ready を読んでいない進入なら、待ち場へ戻って次の降りを待つ。';
-  return `ベッド連爆の機会（竜 #${dragon.id} が止まり木へ降りてくる途中 = phase 2）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、降りるのを待たず、いま先に mc_probe kind=bedsite target=#${dragon.id} を読む（待ち場にいるままでよい。理由: bedsite は phase 2 の間しか読めず、降りてくる途中は 18 回目の標本で 14〜49 秒続き、最短は分かっていない。降りてからでは読めない。packet_history_pending なら 1 秒後にもう一度）`
-    + ` → 返った stand へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）→ footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
+  if (dragon.phase === 3) return `ベッド連爆（竜 #${dragon.id} が止まり木に着陸している途中。phase 3）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、この降りの間（phase 2）に bedsite が「準備できた」（ready が true）と返していれば、bed_burst は今も呼べる（体は phase 2 か 3 を受ける）。`
+    + `次の順に 1 つの act へ並べる。(1) 返った stand（撃つ時に立つマス）へ go range=0.5、(2) 返った footing（足場）と screen（遮蔽）の黒曜石のマスに place、(3) json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}。書くのは返った配置のまま。`
+    + '着陸の途中（phase 3）になってからは bedsite を新しく読めない（返事は current_phase2_required。意味は「読めるのは降りる途中の間だけ」）。この降りで ready を読んでいなければ、待ち場へ戻って次の降りを待つ。';
+  return `ベッド連爆の機会（竜 #${dragon.id} が止まり木へ降りてくる途中。phase 2）: 予約が体に残っていれば体が自分で撃つので、頭は何も足さない。予約が無い時の旧の手は、降りるのを待たず、いま先に mc_probe kind=bedsite target=#${dragon.id} を読む（待ち場にいるままでよい。理由: bedsite は phase 2 の間しか読めず、降りてくる途中は 18 回目の標本で 14〜49 秒続き、最短は分かっていない。降りてからでは読めない。packet_history_pending は「竜の動きの記録がまだ足りない」の意味なので、1 秒後にもう一度読む）`
+    + `。そのあと次の順に 1 つの act へ並べる。(1) 返った stand（撃つ時に立つマス）へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）、(2) 返った footing（足場）・screen（遮蔽）と、選んだ options の supports（支え）の黒曜石のマスに place、(3) json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない）、(4) 退避の go。ベッドは体が置いて使うので、place するのは黒曜石だけ。`
     + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は 18 回目の標本で 14〜49 秒続いた（最短は分かっていない）。待ち場（止まり木から 10〜14m）は probe を読む場所で、起爆に立つのは返った stand。体は stand で起爆の前に息の雲・火・竜の頭と首・翼の下を確かめ、危なければ断る（断られたら待ち場へ戻る）。`;
 }
 
@@ -412,8 +412,8 @@ export function dragonBurstShortLine(end: EndView | null, bedItem: string | null
   if (!full || !end?.dragon || full.startsWith('ベッド連爆:') || full.includes('今は出さない')) return null;
   const id = end.dragon.id;
   return end.dragon.phase === 3
-    ? `ベッド連爆（急ぎ）: この進入で bedsite が ready なら go（stand へ range=0.5）→ place（footing と screen の黒曜石）→ bed_burst（json 行、target=#${id}、count=5、seconds=50）の 3 手を 1 つの act に並べる`
-    : `ベッド連爆（急ぎ）: mc_probe kind=bedsite target=#${id} を、降りるのを待たず先に読み、ready なら go（stand へ range=0.5）→ place（返った footing と screen の黒曜石）→ bed_burst（json 行、count=5、seconds=50）の 3 手を 1 つの act に並べる`;
+    ? `ベッド連爆（急ぎ・予約が使えない時の旧の手）: この降りで bedsite が「準備できた」（ready が true）と返していれば、次の 3 手を 1 つの act に並べる。(1) 返った撃つ時に立つマス（stand）へ go（range=0.5）、(2) 返った足場と遮蔽の黒曜石のマス（footing と screen）に place、(3) bed_burst（json 行、target=#${id}、count=5、seconds=50）。最後に退避の go も並べる`
+    : `ベッド連爆（急ぎ・予約が使えない時の旧の手）: 降りるのを待たず、先に mc_probe kind=bedsite target=#${id} を読む。「準備できた」（ready が true）と返ったら、次の 3 手を 1 つの act に並べる。(1) 返った撃つ時に立つマス（stand）へ go（range=0.5）、(2) 返った足場と遮蔽の黒曜石のマス（footing と screen）に place、(3) bed_burst（json 行、count=5、seconds=50）。最後に退避の go も並べる`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
@@ -767,16 +767,19 @@ export function descentLine(end: EndView | null, view: Pick<HeightView, 'basis' 
  * After 8 acts or 120 s of waits and nothing else (11/28, run 17: waits for 10 minutes with the crystals' count, the dragon and the phase all as they were): a line of facts, no hand.
  * What changed across the run (the crystal count and the spikes unread, the dragon's distance, its phase and how long it has held) or that nothing did.
  */
+/** A phase as a name with its number, for a sentence that compares two phases (a bare number says nothing to a reader without the table). */
+const phaseName = (phase: number | null): string => phase === null ? '不明' : `${PHASE_WORDS[phase] ?? '不明'}（phase ${phase}）`;
+
 export function waitSpanLine(view: Pick<HeightView, 'waits' | 'waitSeconds' | 'waitFrom'> | null, end: EndView | null): string | null {
   if (!view || view.waits < 1 || (view.waits < WAIT_SPAN_ACTS && (view.waitSeconds ?? 0) < WAIT_SPAN_SECONDS)) return null;
   const now = snapOf(end), from = view.waitFrom ?? null;
   const span = `待つ手だけが ${view.waits} 手${view.waitSeconds !== null && view.waitSeconds !== undefined ? `・${view.waitSeconds} 秒` : ''}続いている`;
   if (!from) return `${span}（始めの様子は記録が無く、比べられない）`;
   const parts: string[] = [];
-  if (from.remaining !== now.remaining || from.unseen !== now.unseen) parts.push(`結晶の残り ${from.remaining ?? '?'}→${now.remaining ?? '?'}（確かめていない台座 ${from.unseen ?? '?'}→${now.unseen ?? '?'}）`);
-  if (from.distance !== null && now.distance !== null && Math.abs(from.distance - now.distance) >= 5) parts.push(`竜との距離 ${round(from.distance)}→${round(now.distance)}m`);
-  if (from.phase !== now.phase) parts.push(`竜の phase ${from.phase ?? '?'}→${now.phase ?? '?'}`);
-  else if (from.phaseFor !== null && now.phaseFor !== null) parts.push(`phase ${now.phase ?? '?'} が ${round(from.phaseFor)}→${round(now.phaseFor)} 秒目`);
+  if (from.remaining !== now.remaining || from.unseen !== now.unseen) parts.push(`壊れたと確かめていない台座が ${from.remaining ?? '不明'} か所から ${now.remaining ?? '不明'} か所へ（まだ見ていない台座は ${from.unseen ?? '不明'} か所から ${now.unseen ?? '不明'} か所へ）`);
+  if (from.distance !== null && now.distance !== null && Math.abs(from.distance - now.distance) >= 5) parts.push(`竜との距離が ${round(from.distance)}m から ${round(now.distance)}m に変わった`);
+  if (from.phase !== now.phase) parts.push(`竜の状態が ${phaseName(from.phase)} から ${phaseName(now.phase)} に変わった`);
+  else if (from.phaseFor !== null && now.phaseFor !== null) parts.push(`${phaseName(now.phase)}が ${round(from.phaseFor)} 秒目から ${round(now.phaseFor)} 秒目まで続いている`);
   return `${span}。この間に変わった物: ${parts.length ? parts.join('・') : '無い'}`;
 }
 

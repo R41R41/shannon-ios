@@ -47,14 +47,14 @@ function campGo(world: Record<string, unknown>): string | null {
  * blazes hovering 4-8 m up came back 届かない. end1108h23 (11/8): told that a blaze that does not see her flies to her, she held attack
  * behind the room's bricks 51 times for 8 s (10 minutes) and swung 0 times: a blaze behind a wall stays there (it loses her within a
  * second of losing sight, and its straight flight stops at the wall). The kills of h22 (14 in 195 s) were all chases of one seen and reachable. */
-const SWORD_FACT = 'ブレイズは剣で倒す: 体力 14 以上の時に、見えている 8m 内の 1 体へ attack target=#id（実測 end1108h16: 追って斬った 2 回は 3 秒以内に倒し傷 0、動かず待つ hold は約 25 回で 1 体）'
-  + '。ロッドは倒れた所に落ちる: 幅 1 の橋や足場の外で倒すと下へ落ちて失う（end1108h21: 13 体で 3 本）。湧き場の部屋の床の上で斬り、落ちた棒は pickup target=blaze_rod'
+const SWORD_FACT = 'ブレイズは剣で倒す: 体力 14 以上の時に、見えている 8m 内の 1 体へ attack target=#id（ある実走: 追って斬った 2 回は 3 秒以内に倒し傷 0、動かず待つ hold は約 25 回で 1 体）'
+  + '。ロッドは倒れた所に落ちる: 幅 1 の橋や足場の外で倒すと下へ落ちて失う（ある実走: 13 体で 3 本）。湧き場の部屋の床の上で斬り、落ちた棒は pickup target=blaze_rod'
   + '。pickup が「掘らない道が無い」「そこまで着けない」と返した棒は、同じ pickup を出し直さず、pickup target=blaze_rod に canDig=[nether_bricks,netherrack] maxDig 6 を付けて出す（煉瓦・ネザーラックは既定では掘らない）'
-  + '（end1108h27: 同じ pickup 3 回・3 分の間に棒が消えた）'
+  + '（ある実走: 同じ pickup 3 回・3 分の間に棒が消えた）'
   + '。上に浮いて、または壁の向こうで attack が「届かない」と返った相手へ、同じ id の attack を出し直さない（h27: 届かない 7 回）。壁越しで届かない相手が 2 回続いたら、同じ act の中で壁の 1 マスを dig at=[壁のマス] exposeOk=true（collect=false・accept に blaze）してから attack を出す。壁の陰で attack hold して寄るのを待つのは効かない: 壁の向こうのブレイズは壁で止まって来ない'
-  + '（end1108h23: 煉瓦の陰で hold 8 秒を 51 回・10 分、振れたのは 0 回。h22 の 14 体は全部、見えている届く 1 体を追った attack）'
-  + '。attack は体が 2m まで追って斬る: 見えている 8m 内の 1 体は、3m まで来るのを待たずにすぐ attack target=#id（end1109f03: 湧き場から 12〜14m で「3m まで来たら斬る」と wait を 10 分続け、撃破 0。ブレイズは上下に動き、多くは剣の高さへ下りてくる）'
-  + '。見えている 8m 内の 1 体がいない時は、体力 18 以上なら野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go で入り、そこで見えた 1 体を待たずに斬り続ける（S7 を通った end1108h23・h25 は湧き場から 1〜3m で 11・14 体を斬った。h13 は同じ所で 10 秒待って死んだ＝危ないのは近さではなく待つこと。f07 は 5〜7m の床の縁へ出て数体に撃たれ死んだ）。ただし 8m 内に壁の向こうも含めて 3 体以上いる時は入らない（end1109f16・f17: 3〜6 体の脇へ入り 20 秒で死亡）: 今の陰から壁の 1 マスだけを開けて 1 体ずつ';
+  + '（ある実走: 煉瓦の陰で hold 8 秒を 51 回・10 分、振れたのは 0 回。別の実走の 14 体は全部、見えている届く 1 体を追った attack）'
+  + '。attack は体が 2m まで追って斬る: 見えている 8m 内の 1 体は、3m まで来るのを待たずにすぐ attack target=#id（ある実走: 湧き場から 12〜14m で「3m まで来たら斬る」と wait を 10 分続け、撃破 0。ブレイズは上下に動き、多くは剣の高さへ下りてくる）'
+  + '。見えている 8m 内の 1 体がいない時は、体力 18 以上なら野営マス（mc_probe kind=camp の行の、湧き場から 3m 以内で壁があり上が覆われた足場。覆いが無ければ先に頭上へ place 1 手）へ go で入り、そこで見えた 1 体を待たずに斬り続ける（ある実走は湧き場から 1〜3m で 11・14 体を斬った。h13 は同じ所で 10 秒待って死んだ＝危ないのは近さではなく待つこと。別の実走は 5〜7m の床の縁へ出て数体に撃たれ死んだ）。ただし 8m 内に壁の向こうも含めて 3 体以上いる時は入らない（ある実走: 3〜6 体の脇へ入り 20 秒で死亡）: 今の陰から壁の 1 マスだけを開けて 1 体ずつ';
 
 /** `camped`: blazes were near on this Nether visit. end1108h15 S7 (11/8): at 0 arrows she held attack 7 minutes about 20 m off the spawner;
  * three quiet minutes ended the watch, and with it the line that farther than 16 m nothing spawns. The spawner's lines stay until she leaves. */
@@ -118,7 +118,7 @@ export function spawnerReach(world: Record<string, unknown>): { line: string; al
   const inBox = Math.abs(mark.x + 0.5 - x) <= SPAWN_BOX_ACROSS && Math.abs(mark.z + 0.5 - z) <= SPAWN_BOX_ACROSS && Math.abs(mark.y - y) <= SPAWN_BOX_UPDOWN;
   if (inBox) {
     return { alarm: true, line: `ブレイズのスポナー ${place} まで ${meters}m: 湧く範囲（横 4 マス・上下 1）の中なので、体のすぐ隣に湧く`
-      + `（end1108h13: ここで 10 秒待って体力 18.9→9.4、16 秒後に死亡）。ここで hold・wait で待たない: 見えている 1 体へ attack target=#id を続ける（S7 を通った回はこの近さで 11〜17 体を斬った）。体力 12 以下で退く` };
+      + `（ある実走: ここで 10 秒待って体力 18.9→9.4、16 秒後に死亡）。ここで hold・wait で待たない: 見えている 1 体へ attack target=#id を続ける（S7 を通った回はこの近さで 11〜17 体を斬った）。体力 12 以下で退く` };
   }
   if (nearest.distance < WARN_FROM) return null;
   return nearest.distance > SPAWN_RANGE
@@ -216,10 +216,10 @@ export function retreatLine(health: unknown, near: number, hungerWithNoFood: num
     ? `着いても食べ物が無く満腹 ${Math.round(hungerWithNoFood * 10) / 10}＜18 なので、隠れ場所で待っても体力は戻らない: 退いたら recovery の「食料の当て」へ行き、食べてから戻る`
     : `着いてから食べ、体力 ${BACK_HP} 以上で野営マスへ戻る`;
   return `体力 ${Math.round(health * 10) / 10}（${RETREAT_HP} 未満）でブレイズ ${near} 体の近く: 今いる所で食べる・斬り返すと撃たれ続けて燃える`
-    + `（end1108h20: 体力 11.3 で 2 体から見えたまま食べて斬り返し、8 秒で 5.8、48 秒後に死亡）。先に湧き場から見えない隠れ場所へ go で退く`
+    + `（ある実走: 体力 11.3 で 2 体から見えたまま食べて斬り返し、8 秒で 5.8、48 秒後に死亡）。先に湧き場から見えない隠れ場所へ go で退く`
     + `（場所は手が止まった行の「隠れ場所」か probe kind=camp）。この act は hands が go 1 つだけで、act の accept に blaze を入れる`
     + `（ブレイズは system「敵と体力」で accept に入れないとされる近接敵ではない。accept が無いと燃えて見えている間の覆いの反射が go を 0m で止め、eat を前に置くとその間撃たれる:`
-    + ` end1109f23 は accept の無い退く go が 0m で止まり、食べてから退くを繰り返して 44 秒で体力 11.9→0）。${after}`;
+    + ` ある実走は accept の無い退く go が 0m で止まり、食べてから退くを繰り返して 44 秒で体力 11.9→0）。${after}`;
 }
 
 /** A blaze within this many metres that she sees is one the attack reaches by chasing (end1108h16, h22). */
@@ -260,7 +260,7 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
     && ((item as Record<string, unknown>).lineOfSight === false || (item as Record<string, unknown>).canSee === false)
     && finite((item as Record<string, unknown>).distance) && ((item as Record<string, unknown>).distance as number) <= STRIKE_BLOCKS).length;
   const retreat = '。attack の act の後ろに、今の陰へ戻る go を dependsOn: [] で足す（体力の stopIf で attack が止まった時に体がすぐ下がる。'
-    + 'end1109f17: 体力 11.9 で attack が止まり、次の判断までの 3 秒を 1〜2m の 2 体の前に立ったまま 0 に）';
+    + 'ある実走: 体力 11.9 で attack が止まり、次の判断までの 3 秒を 1〜2m の 2 体の前に立ったまま 0 に）';
   const at = world.position as { x?: unknown; y?: unknown; z?: unknown } | undefined;
   const feet = at && finite(at.x) && finite(at.y) && finite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
   const fence = wall && feet && Math.hypot(wall.x + 0.5 - feet.x, wall.y + 0.5 - feet.y, wall.z + 0.5 - feet.z) <= WALL_NEAR ? wall : null;
@@ -274,9 +274,9 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
       const hands = fence ? `hands: ["dig ${cell} exposeOk=true collect=false", "attack target=${tag(target)}"]（attack が「間に ${fence.name} (${cell})」と返したマス）` : `attack target=${tag(target)}`;
       return `ブレイズとの距離: 8m 内に${count}（最寄りの見える ${tag(near[0]!)} は ${meters(near[0]!)}m）→ 見えるのは ${near.length} 体で ${CLOSE_BLOCKS}m より遠い: `
         + `今の陰が「見えるのが 1〜2 体の所」。陰から部屋へ出ず、ここから ${hands}、accept に blaze`
-        + `（end1109f25: この形で陰の wait 4 を 約 60 回・5 分続け、撃破 0。壁の向こうの ${hiddenNear} 体は壁で撃てない）。2 体以上が 3m 内に来たら下がる${retreat}`;
+        + `（ある実走: この形で陰の wait 4 を 約 60 回・5 分続け、撃破 0。壁の向こうの ${hiddenNear} 体は壁で撃てない）。2 体以上が 3m 内に来たら下がる${retreat}`;
     }
-    return `ブレイズとの距離: 8m 内に${count}（最寄りの見える ${tag(near[0]!)} は ${meters(near[0]!)}m）→ ここで斬り合わない（end1109f16・f17: 湧き場の脇へ入り、1〜4m の 3〜6 体に 20 秒で体力 20→0）。`
+    return `ブレイズとの距離: 8m 内に${count}（最寄りの見える ${tag(near[0]!)} は ${meters(near[0]!)}m）→ ここで斬り合わない（ある実走: 湧き場の脇へ入り、1〜4m の 3〜6 体に 20 秒で体力 20→0）。`
       + `来た穴か岩の陰へ go で下がり（accept に blaze）、見える線を netherrack で塞ぐか壁の 1 マスだけを開け、見えるのが 1〜2 体の所で寄って来た 1 体を attack target=#id で斬る${retreat}`;
   }
   if (low.length > 0) {
@@ -284,7 +284,7 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
   }
   // end1109f07: at health 20 she stepped onto the spawner room's edge in sight of 3-4 blazes 4 m up at 7.5-8 m, burned, and died in 24 s.
   const shooters = seen.filter(entry => (entry.distance as number) <= CROWD_METERS).length;
-  const crowd = shooters >= CROWD ? `。見えている射手が ${shooters} 体: 覆いの無い床へ出ない（end1109f07: 体力 20 で 3〜4 体の前へ出て 24 秒で死亡）。`
+  const crowd = shooters >= CROWD ? `。見えている射手が ${shooters} 体: 覆いの無い床へ出ない（ある実走: 体力 20 で 3〜4 体の前へ出て 24 秒で死亡）。`
     + `今の陰から、見える線を netherrack で塞ぐか壁の 1 マスだけを開け、見えるのが 1〜2 体の所から 1 体ずつ斬る` : '';
   if (near.length > 0) {
     const dy = near[0]!.dy as number;
@@ -298,7 +298,7 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
     const eyes = Math.hypot(fence.x + 0.5 - feet!.x, fence.y + 0.5 - (feet!.y + 1.62), fence.z + 0.5 - feet!.z);
     const walk = eyes > 4.5 ? `"go ${cell} range=3", ` : '';
     return `ブレイズとの距離: 剣の届く 1 体がいない。attack が「間に ${fence.name} (${cell})：掘るか回り込めば近づける」と返した: 柵・壁の向こうのブレイズは待っても寄って来ない`
-      + `（end1109f07: 柵の手前で「8m 内に来たら斬る」と下がり続け、4 分で撃破 0）→ 1 つの act で hands: [${walk}"dig ${cell} exposeOk=true collect=false", "attack target=${target ? tag(target) : '#id（見えた 1 体）'}"]、`
+      + `（ある実走: 柵の手前で「8m 内に来たら斬る」と下がり続け、4 分で撃破 0）→ 1 つの act で hands: [${walk}"dig ${cell} exposeOk=true collect=false", "attack target=${target ? tag(target) : '#id（見えた 1 体）'}"]、`
       + `accept に blaze（入れないとブレイズに身をさらすマスを体が掘らない）。この 1 マスは「壁の向こうは attack の相手にしない」の例外: 掘れば届く${walk ? `（このマスは目から ${Math.round(eyes * 10) / 10}m: dig は歩かず 5m までしか届かないので、先の go で寄る）` : ''}`;
   }
   const skipped = missed.length ? `（${missed.slice(0, 3).map(tag).join('・')} は attack が「届かない」と返した相手: 同じ id を出し直さない）` : '';
@@ -313,7 +313,7 @@ export function strikeLine(world: Record<string, unknown>, unreached: ReadonlySe
       .sort((a, b) => a.distance - b.distance)[0] : undefined;
   if (crowd) return `${head}${crowd}`;
   if (!first && missed.length === 0 && hiddenNear >= CROWD) {
-    return `${head}。8m 内の ${hiddenNear} 体はどれも壁の向こう → 野営マスへ入らず、壁を広く掘らない（end1109f17: 湧き場の周りの 6 体の脇の野営マスへ入り、1〜3m の 3 体に体力 20→0）。`
+    return `${head}。8m 内の ${hiddenNear} 体はどれも壁の向こう → 野営マスへ入らず、壁を広く掘らない（ある実走: 湧き場の周りの 6 体の脇の野営マスへ入り、1〜3m の 3 体に体力 20→0）。`
       + `今の陰に立ったまま、湧き場の向きの壁を 1 マスだけ dig at=[壁のマス] exposeOk=true（collect=false、accept に blaze）し、同じ act でその穴から見えた 1 体へ attack。2 体以上が見えたら穴を cobblestone で塞ぐ${retreat}`;
   }
   if (!mark) return first ? `${head}。見えた 1 体へ 8m まで go で寄り、attack target=${tag(first)}` : `${head}。湧き場はまだ見つかっていない（mapLandmarks に blaze_spawner が無い）: ここは湧き場ではない。mc_probe kind=camp で湧き場を探し、無ければネザーレンガの続く向きへ 100m 進んで読み直す（要塞の端でうろついても湧かない）`;
@@ -375,8 +375,8 @@ export function footingLine(counts: ReadonlyMap<string, number>, dimension: stri
   for (const [name, count] of counts) if (BLOCKS.test(name.replace(/^minecraft:/u, '')) && Number.isFinite(count)) total += count;
   if (total >= FOOTING_LOW) return null;
   const head = `積める物 ${total} 個（丸石・ネザーラック・ネザーレンガなど）: go の橋・階段・覆いは 1 マスに 1 個使い、切れると橋の先端で止まる`
-    + `（end1109f05: 最初の 8 分で約 200 個を使い切り、0 個のまま湧き場へ go して幅 1 の足場の先に 15 分立ち往生。`
-    + `end1109f14: 13 個で要塞へ入り、湧き場の 40m 手前の橋でレンガを 1 判断 3 個ずつ掘っては置き 18 分、ロッド 0）`;
+    + `（ある実走: 最初の 8 分で約 200 個を使い切り、0 個のまま湧き場へ go して幅 1 の足場の先に 15 分立ち往生。`
+    + `ある実走: 13 個で要塞へ入り、湧き場の 40m 手前の橋でレンガを 1 判断 3 個ずつ掘っては置き 18 分、ロッド 0）`;
   const move = `→ 次の手: 進む前に mine netherrack <見えているネザーラックのマス> count=${FOOTING_AIM}（つながったものを体がたどって掘り拾う）で ${FOOTING_AIM} 個にする。`
     + `要塞の中・橋の上にはネザーラックが無いので、要塞へ入る前のネザーラックの陸で足す`;
   const stuck = total === 0 ? '。0 個で足場の先から動けない時は、立っていない横の固いブロック（要塞のレンガなど）を dig → pickup して置く物にする（wait では増えない）' : '';

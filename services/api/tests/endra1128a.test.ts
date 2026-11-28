@@ -29,7 +29,7 @@ describe('crystals the body has not been near enough to read', () => {
 
   it('says the crystal line as spikes to check, with where and how far, and the body reach as a range (finding 6)', () => {
     const line = crystalLine(endViewOf(observation(unseenWorld()))!)!;
-    expect(line).toContain('残り 2/10');
+    expect(line).toContain('台座 10 か所のうち、壊れたと確かめていない所が 2 か所');
     expect(line).toContain('いま見えている結晶は 0 本');
     expect(line).toContain('立っているとは限らない');
     expect(line).toContain('(13,-39) 自分から');
@@ -74,7 +74,7 @@ describe('crystals the body has not been near enough to read', () => {
     const done = endViewOf(observation({ dimension: 'the_end', position: { x: 0, y: 64, z: 0 }, crystals: { remaining: 0, gone: 10, caged: 0, list: [], unseen: [] },
       dragon: { id: 7, health: 200, phase: 6, phaseFor: 3, position: { x: 3, y: 66, z: 6 }, distance: 10 } }))!;
     const bed = dragonBedLine(sittingOf(done), 'red_bed')!;
-    expect(bed).toContain('ベッドの手（体が測った候補）');
+    expect(bed).toContain('ベッドの手（体が測った候補。');
     expect(bed).not.toContain('今は出さない');
     expect(bed).not.toContain('確かめていない台座');
   });
@@ -171,7 +171,7 @@ describe('a run of waits (finding 5)', () => {
     const line = waitSpanLine(eight.view, eight.last)!;
     expect(line).toContain('待つ手だけが 8 手');
     expect(line).toContain('この間に変わった物');
-    expect(line).toContain('phase 1 が 10→90 秒目');
+    expect(line).toContain('狙いを定めて火の玉（phase 1）が 10 秒目から 90 秒目まで続いている');
     const slow = run(3, 60);
     const long = waitSpanLine(slow.view, slow.last)!;
     expect(long).toContain('3 手・180 秒');
@@ -183,7 +183,7 @@ describe('a run of waits (finding 5)', () => {
     let view = watch.view(end(20, 10, 2), 20, 0);
     for (let i = 0; i < 8; i++) { watch.noteActs(['wait'], i * 1000); view = watch.view(end(20, 10 + i, 2), 20, i * 1000 + 500); }
     const line = waitSpanLine(view, end(20, 18, 1))!;
-    expect(line).toContain('結晶の残り 2→1');
+    expect(line).toContain('壊れたと確かめていない台座が 2 か所から 1 か所へ');
     expect(line).not.toMatch(/go で|近づく|出す/u);
   });
 

@@ -135,7 +135,7 @@ export function fallOf(view: MapView, x: number, y: number, z: number): { n: num
 /** The fall in the words of the live state: `落差 n、下は …`, or `落差 n 以上（地図は y=… まで）` where the map ends. */
 export function fallText(view: MapView, x: number, y: number, z: number): string {
   const fall = fallOf(view, x, y, z);
-  if (fall.open) return `落差 ${fall.n} 以上（地図は y=${y - fall.n + 1} まで。それより下は地図に無い）`;
+  if (fall.open) return `落差は ${fall.n} 以上（地図が y=${y - fall.n + 1} までしか無いので、底は分からない）`;
   return `落差 ${fall.n}、下は ${nameOf(fall.below)}`;
 }
 

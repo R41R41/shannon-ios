@@ -60,14 +60,14 @@ describe('the scaffold count in the End and in an urgent input', () => {
   it('counts the way back and the few kept for the far end as a sum, with the bridge as an estimate', () => {
     const line = scaffoldLine(end, { urgent: true, goal: { at: { x: 12, y: 100, z: 5 } } })!;
     expect(line).toContain('合計 26 個');
-    expect(line).toContain('橋 約 13 m（直線距離からの概算で、引き直しで外れる）: 往復 2×13 個＋降りる用 3 個＝29 個が要る');
-    expect(line).toContain('合計 26 個では足りない: 宙・塔の上に居るなら橋で渡らず、降りて地面で材料を掘る（地面・出現の台から島へ渡る時は、戻らないなら片道 13 個＋降りる用 3 個の 16 個で足りる）');
+    expect(line).toContain('橋は片道約 13 m（直線距離からの概算で、引き直しで外れる）。往復で 26 個、降りる用に 3 個で、合わせて 29 個が要る');
+    expect(line).toContain('今の合計 26 個では足りない。宙・塔の上に居るなら橋で渡らず、降りて地面で材料を掘る（地面・出現の台から島へ渡る時は、戻らないなら片道の 13 個と降りる用の 3 個、合わせて 16 個で足りる）');
     const enough = scaffoldLine(frame('the_end', [{ name: 'cobblestone', count: 64 }], { x: 0, y: 100, z: 0 }), { goal: { at: { x: 12, y: 100, z: 5 } } })!;
-    expect(enough).toContain('go の maxPlace の上限は 48（合計 − 戻る橋 13 − 降りる用 3）');
+    expect(enough).toContain('go の maxPlace の上限は 48（今の合計から、戻る橋の 13 個と降りる用の 3 個を引いた数）');
     // With no go or plan place to measure from, the sum is a formula; the Nether line is as it was.
-    expect(scaffoldLine(end)).toContain('渡る橋の長さ M（行き先までの直線距離からの概算）の往復 2×M 個＋降りる用 3 個が合計に収まる時だけ');
+    expect(scaffoldLine(end)).toContain('渡る橋の片道の長さを M（行き先までの直線距離からの概算）とすると、往復で M の 2 倍の個数と、降りる用の 3 個が、手持ちの合計に収まる時だけ');
     expect(scaffoldLine(frame('the_nether', [{ name: 'netherrack', count: 40 }]))).toContain('64 個の目安に足りない');
-    expect(inputFacts(end, { goal: { at: { x: 12, y: 100, z: 5 }, from: 'queue' } }, true).lines.find(item => item.startsWith('置ける足場'))).toContain('橋 約 13 m');
+    expect(inputFacts(end, { goal: { at: { x: 12, y: 100, z: 5 }, from: 'queue' } }, true).lines.find(item => item.startsWith('置ける足場'))).toContain('橋は片道約 13 m');
   });
 });
 

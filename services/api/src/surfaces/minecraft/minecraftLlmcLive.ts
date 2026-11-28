@@ -475,10 +475,16 @@ export function minecraftLlmcUrgentLive(parts: Pick<LlmcLiveParts, 'observation'
  * readers take (`ほか N 件（長いため略）`).
  */
 const WEAPON_OR_SHIELD = /^(?:shield|bow|crossbow|trident|mace|[a-z_]*(?:sword|axe|spear))$/u;
+/**
+ * Run 21 (11/28): the urgent pack line cut 13 stacks and the obsidian and the beds were among them; the head read 「黒曜石 0」 and let the first chance of the bed burst go.
+ * The things a dragon fight is built from are listed before the blocks (they are few: obsidian, the beds, the water bucket, arrows, pearls and eyes).
+ */
+const DRAGON_KIT = /^(?:obsidian|[a-z]+_bed|water_bucket|arrow|ender_pearl|ender_eye)$/u;
 export function urgentRank(stack: string): number {
   const name = /^[a-z_0-9]+/u.exec(stack)?.[0] ?? '';
   if (WEAPON_OR_SHIELD.test(name)) return 0;
   if (EDIBLE_FOOD.test(name) || name in FOOD_POINTS) return 1;
+  if (DRAGON_KIT.test(name)) return 1;
   if (BLOCKS.test(name)) return 2;
   return 3;
 }

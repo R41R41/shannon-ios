@@ -67,7 +67,7 @@ describe('boundary 10: the largest input keeps the facts of the table in the las
     expect(JSON.stringify(urgent!.live.body.mode)).toContain('急ぎの版');
     expect(normal!.live.body.mode).toBeUndefined();
     expect(compressed!.live.body.mode).toBeUndefined();
-    const pack = (live: Record<string, any>) => (live.body.facts as string[]).filter(line => line.startsWith('持ち物の空き') || line.startsWith('場所を取っている物') || line.startsWith('drop で空けられる物'));
+    const pack = (live: Record<string, any>) => (live.body.facts as string[]).filter(line => (line.startsWith('持ち物は 36 マスのうち') || line.startsWith('持ち物の空き')) || line.startsWith('場所を取っている物') || line.startsWith('drop で空けられる物'));
     // The pack: the normal and urgent versions say what takes the slots on a line of its own; the shortened version has one line.
     expect(pack(normal!.live)).toHaveLength(2);
     expect(pack(urgent!.live)).toHaveLength(2);
@@ -360,22 +360,22 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
   it('a full pack with a make ahead says 空き 0, the item the hand makes, and 満杯', () => {
     const lines = packLines(observation, make, false);
     for (const word of sample.expected.liveMustContain as string[]) expect(lines.join('\n')).toContain(word);
-    expect(lines).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
+    expect(lines).toEqual([`持ち物は 36 マスのうち空き 0（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
       'drop で空けられる物（約束に回していない分）: dirt×35（1 マス）']);
     expect(sample.expected.bodyDropsNothing).toBe(true);
   });
   it('shortened, it is one line; with room it says only the free slots', () => {
-    expect(packLines(observation, make, true)).toEqual([`持ち物の空き 0/36（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
+    expect(packLines(observation, make, true)).toEqual([`持ち物は 36 マスのうち空き 0（満杯）：${FULL_COST}・次の手で増える見込み（掘り抜く岩の分は数えない）: make diamond_pickaxe で +1 個`,
       'drop で空けられる物（約束に回していない分）: dirt×35（1 マス）']);
-    expect(packLines(frame({ inventory: stacks.slice(0, 10) }), [], false)).toEqual(['持ち物の空き 26/36']);
-    expect(packLines(frame({ inventory: stacks.slice(0, 34) }), [], false)[0]).toBe('持ち物の空き 2/36（もうすぐ満杯）');
+    expect(packLines(frame({ inventory: stacks.slice(0, 10) }), [], false)).toEqual(['持ち物は 36 マスのうち空き 26']);
+    expect(packLines(frame({ inventory: stacks.slice(0, 34) }), [], false)[0]).toBe('持ち物は 36 マスのうち空き 2（もうすぐ満杯）');
     expect(packLines(frame({}), make, false)).toEqual([]);
   });
   it('run 46: 36 of 36 with tuff 65, cobbled deepslate 230 and cobblestone 147 says what it costs in the first words and what can be dropped; the promised is not offered', () => {
     const run46 = frame({ inventory: [...[64, 64, 64, 38].map(count => ({ name: 'cobbled_deepslate', count })), ...[64, 64, 19].map(count => ({ name: 'cobblestone', count })),
       ...[64, 1].map(count => ({ name: 'tuff', count })), ...Array.from({ length: 27 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))] });
     const lines = packLines(run46, [], false);
-    expect(lines[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    expect(lines[0]).toBe(`持ち物は 36 マスのうち空き 0（満杯）：${FULL_COST}`);
     expect(lines[0]).toContain('黒曜石');
     // the most carried kind keeps one stack for pillars and bridges; the rest of every kind is offered
     expect(lines[1]).toBe('drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
@@ -385,19 +385,19 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     // nothing to spare: still said as an action
     expect(packLines(frame({ inventory: Array.from({ length: 36 }, (_, index) => ({ name: `junk_${index}`, count: 1 })) }), [], false)[1]).toBe('約束に回していない石・土の余りは無い（空けるのは drop）');
     // not full: as before
-    expect(packLines(frame({ inventory: [] }), [], false)).toEqual(['持ち物の空き 36/36']);
+    expect(packLines(frame({ inventory: [] }), [], false)).toEqual(['持ち物は 36 マスのうち空き 36']);
   });
   it('run 46 (d0171): the body writes one line a kind, so a line is not a slot; the free slots are the body\'s own number, and the estimate counts the stacks a line fills', () => {
     // 30 lines, as the body wrote them: the kinds merged (cobbled_deepslate×230 is four slots, cobblestone×147 three, tuff×65 two): the pack is full
     const merged = [{ name: 'cobbled_deepslate', count: 230 }, { name: 'cobblestone', count: 147 }, { name: 'tuff', count: 65 },
       ...Array.from({ length: 27 }, (_, index) => ({ name: `junk_${index}`, count: 1 }))];
     const lines = (world: Record<string, unknown>) => packLines(frame({ inventory: merged, ...world }), [], false);
-    expect(lines({})[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    expect(lines({})[0]).toBe(`持ち物は 36 マスのうち空き 0（満杯）：${FULL_COST}`);
     // the body's number wins over any count of lines: 6 free says 6; 0 free says full, whatever the lines add up to
-    expect(lines({ freeSlots: 6 })).toEqual(['持ち物の空き 6/36']);
-    expect(lines({ freeSlots: 0 })[0]).toBe(`持ち物の空き 0/36（満杯）：${FULL_COST}`);
+    expect(lines({ freeSlots: 6 })).toEqual(['持ち物は 36 マスのうち空き 6']);
+    expect(lines({ freeSlots: 0 })[0]).toBe(`持ち物は 36 マスのうち空き 0（満杯）：${FULL_COST}`);
     expect(packLines(frame({ inventory: [{ name: 'dirt', count: 3 }], freeSlots: 0 }), [], false)[0]).toContain('満杯');
-    expect(lines({ freeSlots: 2 })[0]).toBe('持ち物の空き 2/36（もうすぐ満杯）');
+    expect(lines({ freeSlots: 2 })[0]).toBe('持ち物は 36 マスのうち空き 2（もうすぐ満杯）');
     // a number that is not a count of the pack is not used
     expect(lines({ freeSlots: -1 })[0]).toContain('満杯');
     expect(lines({ freeSlots: 99 })[0]).toContain('満杯');
@@ -408,11 +408,11 @@ describe('inventory-full-facts.json: the free slots, what the next hands add, an
     const near = frame({ inventory: merged, freeSlots: 2 });
     const go = { do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone', 'cobbled_deepslate'], maxDig: 200 } as ActHand;
     const line = digPackLine(near, [go], [], 'run47-dig')!;
-    expect(line).toBe('空き 2/36：掘って出る石・深層岩・土は 2 マスより多くは拾えない。拾える見込みは約 262 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
+    expect(line).toBe('持ち物の空きは 2 マス（全部で 36 マス）。掘って出る石・深層岩・土は 2 マスより多くは拾えない。拾える見込みは約 262 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）。drop で空けられる物（約束に回していない分）: cobbled_deepslate×102（2 マス）・cobblestone×147（3 マス）・tuff×65（2 マス）');
     expect(line).not.toMatch(/しなさい|してください|すること|べき|しろ/u);
     // the same count is not said again; another count is
     expect(digPackLine(near, [go], [], 'run47-dig')).toBeNull();
-    expect(digPackLine(frame({ inventory: merged, freeSlots: 1 }), [go], [], 'run47-dig')).toContain('空き 1/36：掘って出る石・深層岩・土は 1 マスより多くは拾えない');
+    expect(digPackLine(frame({ inventory: merged, freeSlots: 1 }), [go], [], 'run47-dig')).toContain('持ち物の空きは 1 マス（全部で 36 マス）。掘って出る石・深層岩・土は 1 マスより多くは拾えない');
     expect(digPackLine(frame({ inventory: merged, freeSlots: 0 }), [{ do: 'mine', block: 'iron_ore' } as ActHand], [], 'run47-dig-0')).toContain('1 つも拾えない');
     // a hand that digs: vertical, mine, dig, a go that may dig; a go that may not (no canDig, or maxDig 0), a walk or a wait do not
     for (const hand of [{ do: 'vertical' }, { do: 'mine' }, { do: 'dig' }] as ActHand[]) expect(digPackLine(near, [hand], [], `run47-${hand.do}`)).not.toBeNull();

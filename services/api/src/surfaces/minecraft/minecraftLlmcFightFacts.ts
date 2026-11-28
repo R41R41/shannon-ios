@@ -98,7 +98,7 @@ export function gearLine(observation: BodyObservation | null, world: Record<stri
   const health = finite(world.health), fit = !!weapon && (held || iron >= 3) && (health === null || health >= FIGHT_HEALTH);
   const verdict = !weapon ? WORD_NO_WEAPON : fit ? WORD_FIT : WORD_SHORT;
   const exact = carriedFood(world, observation?.facts ?? {}).points, food = Math.round(exact);
-  return `戦う装備: ${weapon ?? '武器 なし'}${swordGap(counts, weapon)}・防具 ${pieces.join('・') || 'なし'}（${pieces.length}/4）・盾 ${shield}・食べ物 ${food} 点${cookedWords(counts, exact)} ${verdict}`;
+  return `戦う装備: ${weapon ?? '武器 なし'}${swordGap(counts, weapon)}・防具 ${pieces.join('・') || 'なし'}（4 部位のうち ${pieces.length} 部位）・盾 ${shield}・食べ物 ${food} 点${cookedWords(counts, exact)} ${verdict}`;
 }
 
 
@@ -150,7 +150,7 @@ export function shieldLine(world: Record<string, unknown>): string | null {
   })[0];
   const shield = worn ? { left: Number(worn[1]), max: Number(worn[2]), held: true } : packed ? { ...packed, held: false } : null;
   if (!shield || shield.max <= 0 || shield.left >= shield.max * SHIELD_LOW_FRACTION) return null;
-  return `盾 残り ${shield.left}/${shield.max}（${shield.held ? '構えている盾' : '持っている盾'}。1/3 を切っている）`;
+  return `盾の耐久は ${shield.max} のうち残り ${shield.left}（${shield.held ? '構えている盾' : '持っている盾'}。3 分の 1 を下回っている）`;
 }
 
 /**
@@ -229,7 +229,7 @@ export function toolLines(world: Record<string, unknown>): string[] {
     if (!item || !id || left === null || max === null || max <= 0 || left >= max * SHIELD_LOW_FRACTION) return [];
     const make = partLine(id, counts);
     if (id === 'diamond_pickaxe' && extra.length === 0) extra.push(...diamondLines(counts, left, max));
-    return [`${id} 残り ${left}/${max}（1/3 を切っている${make ? `。${make}` : ''}）`];
+    return [`${id} の耐久は ${max} のうち残り ${left}（3 分の 1 を下回っている${make ? `。${make}` : ''}）`];
   }).slice(0, 3);
   const noPick = noPickObsidianLine(counts, typeof world.dimension === 'string' ? world.dimension : null, false, true);
   return [...lines, ...extra, ...(noPick ? [noPick] : [])];

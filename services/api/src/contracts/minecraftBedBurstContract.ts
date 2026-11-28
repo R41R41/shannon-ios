@@ -18,7 +18,7 @@ export const BED_STANDBY_DESCRIPTION = 'bed_standby は、エンドで竜をベ�
 
 export const BED_BURST_DESCRIPTION = 'bed_burst は、エンドで頭が指定したベッドの置き場所を、竜の 1 回の降下だけ撃つ手（着地の前から、同じ呼び出しのまま座った竜へも撃ち続ける）。通常は先に bed_standby（予約）を使い、これは予約が使えない時の旧の手。'
   + '使う時: 竜が止まり木へ降りてくる途中（live の竜の行では phase 2）が見えたら、座るのを待たずにすぐ probe kind=bedsite,target=#id を読む。bedsite は降りてくる途中（phase 2）の間だけ候補を返し、座ってからは current_phase2_required で読めない。'
-  + '手順は 1 つの act に、go（bedsite が返した stand、つまり撃つ時に立つマスを to に書く。range は 0.5）→ place（返った footing と screen、つまり足場と遮蔽の黒曜石のマスを全部。supports が空でも screen は置く）→ bed_burst → 退避の go を並べる（分けて出すと、降りてくる途中のうちに間に合わない）。'
+  + '手順は次の 4 つを 1 つの act に並べる（分けて出すと、降りてくる途中のうちに間に合わない）。(1) go: bedsite が返した stand（撃つ時に立つマス）を to に書く。range は 0.5。(2) place: 返った footing（足場）と screen（遮蔽）の黒曜石のマスを全部置く。supports（支え）が空でも screen は置く。(3) bed_burst。(4) 退避の go。'
   + 'go の range は 0.5 にする。体は、立っている所が stand から 1m 以内でないと撃ち始めず landing_layout_unobserved で断る（range 3 だと 3m 手前で止まって断られた。11/28 の 18 回目）。landing_layout_unobserved は「bedsite を読めていない」ではなく、「stand から 1m より遠い（または別の置き場所）」の意味なので、読み直さず go をやり直す。'
   + 'ベッドを置いて使うのは体で、頭が place するのは黒曜石の足場と壁だけ（ベッドは count 個持っていればよい）。'
   + '待つ場所（止まり木から10〜14m）と起爆に立つ場所（stand）は別（stand は撃つ時に立つマス）。体は stand に着いてから、撃つ前に息の雲・火・竜の頭と首・翼の下・足場を確かめ、危なければ撃たずに断る（断られたら待つ場所へ戻る）。先に probe kind=bedsite,target=#id で今の候補を読み、その置き場所を頭が選んで施工する。読んでいない置き場所では撃たない。'

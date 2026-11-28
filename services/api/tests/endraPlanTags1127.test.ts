@@ -76,15 +76,15 @@ describe('(b) a tool under a third of its life is said as the shield is', () => 
   it('names the wear and what the recipe needs against what the pack holds; a whole tool has no line', () => {
     const lines = toolLines(world);
     expect(lines.slice(0, 2)).toEqual([
-      'diamond_pickaxe 残り 113/1561（1/3 を切っている。持ち: ダイヤ 1・棒 0。作り直すなら ダイヤ 3・棒 2）',
-      'stone_axe 残り 15/131（1/3 を切っている。持ち: 丸石 0・棒 0。作り直すなら 丸石 3・棒 2）',
+      'diamond_pickaxe の耐久は 1561 のうち残り 113（3 分の 1 を下回っている。持ち: ダイヤ 1・棒 0。作り直すなら ダイヤ 3・棒 2）',
+      'stone_axe の耐久は 131 のうち残り 15（3 分の 1 を下回っている。持ち: 丸石 0・棒 0。作り直すなら 丸石 3・棒 2）',
     ]);
     expect(lines).toHaveLength(4);
     expect(lines[3]).toContain('残り 113/1561 は黒曜石 113 個分');
     expect(lines.join('')).not.toContain('iron_sword');
   });
   it('is in the fight facts beside the shield line, and says nothing of a pack with a half-used pickaxe', () => {
-    expect(fightLines(frame(world), false).some(line => line.startsWith('diamond_pickaxe 残り 113/1561'))).toBe(true);
+    expect(fightLines(frame(world), false).some(line => line.startsWith('diamond_pickaxe の耐久は 1561 のうち残り 113'))).toBe(true);
     expect(toolLines({ inventory: [{ name: 'diamond_pickaxe', count: 1, durability: { left: 764, max: 1561 } }] })).toEqual([]);
   });
 });
@@ -94,7 +94,7 @@ describe('(c) a digging hand against a full pack says how many it can take and h
   const go = (maxDig: number) => ({ do: 'go', to: { x: 1, y: 2, z: 3 }, canDig: ['stone'], maxDig } as ActHand);
   it('d0085: free 0, the room is what the part-filled stacks hold; digging by go or vertical is said not to stop on a full pack, a collecting dig past it is', () => {
     const line = digPackLine(frame({ inventory, freeSlots: 0 }), [go(40)], [], 'plan1127-c1')!;
-    expect(line).toContain('空き 0/36：掘って出る石・深層岩・土は 1 つも拾えない。拾える見込みは約 40 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）');
+    expect(line).toContain('持ち物の空きは 0 マス（全部で 36 マス）。掘って出る石・深層岩・土は 1 つも拾えない。拾える見込みは約 40 個まで。go・vertical の掘りは満杯でも止まらない（掘った石は足元に落ちるだけ）');
     // a go's maxDig past the room is no stop on a full pack (the body's packStops names only the hands that take things into it)
     expect(digPackLine(frame({ inventory, freeSlots: 0 }), [go(100)], [], 'plan1127-c2')).not.toContain('途中で満杯になり止まる');
     const cells = Array.from({ length: 100 }, (_, index) => ({ x: index, y: 2, z: 3 }));

@@ -40,7 +40,7 @@ describe('optional End observations as facts', () => {
     expect(lines).toHaveLength(6);
     expect(lines.join('\n')).toContain('射点探索: 120 マス・格子 2m・打ち切り');
     expect(lines.join('\n')).not.toContain('19.4');
-    expect(lines.join('\n')).toContain('窓まで 3〜4 秒（窓は 2.45〜2.55 秒）（実測目安）');
+    expect(lines.join('\n')).toContain('剣で打てる窓まで 3〜4 秒（その窓の長さは 2.45〜2.55 秒）（実測目安）');
     expect(dragonApproachLine(end)).toBe('止まり木の位置: 頭の下 strike (18,70,12)・待つ所 stage (20,70,12)（strike まで 2 m）・退く所 retreat (26,70,12)');
     expect(lines.some(line => line.includes('竜の息の雲:') && line.includes('火の玉:'))).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('optional End observations as facts', () => {
   it('leaves missing fields unknown without inventing a point, a distance, a window length or a closed window', () => {
     const partial = view({ dragon: { phase: 6, windows: { open: true }, approach: { stage: [{ ...at(20), strikeIndex: 0 }] } },
       crystals: { openings: [{ id: 11, positions: [at(13)] }] } });
-    expect(dragonLine(partial)).toContain('窓は開いている');
+    expect(dragonLine(partial)).toContain('剣で打てる窓は開いている');
     expect(dragonLine(partial)).not.toContain('2.5');
     expect(crystalOpeningLine(partial)).toBe('クリスタルの射点: #11 撃てる位置 (13,70,12)');
     expect(dragonApproachLine(partial)).toBe('止まり木の位置: 待つ所 stage (20,70,12)');
@@ -104,7 +104,7 @@ describe('optional End observations as facts', () => {
     expect(end?.dragon?.approach?.bed).toHaveLength(1);
     expect(end?.dragon?.approach?.bed?.[0].build).toEqual([{ ...at(19, 64), role: 'screen' }]);
     const line = dragonBedLine(end, 'white_bed')!;
-    expect(line).toContain('go (20,64,12) range=0.5 → place block=obsidian at=[(19,64,12)]（自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く） → place block=white_bed at=[(17,64,12)] → use at=[(17,64,12)]');
+    expect(line).toContain('まず go (20,64,12) range=0.5（撃つ時に立つマスへ歩く）、次に黒曜石を置く: place block=obsidian at=[(19,64,12)]（自分を守る壁。黒曜石が無ければ end_stone・cobblestone など手持ちの固いブロックで置く: 爆発を 1 回は遮るが壊れるので、次のベッドの前にまた置く）、そのあと place block=white_bed at=[(17,64,12)]（ベッドを置く）、最後に use at=[(17,64,12)]（ベッドを使って爆発させる）');
     expect(line).toContain('枕は (16,64,12)、見込み 竜の頭 −45・自分 −3.1、歩き 4m');
     expect(endFightLines(end, 'white_bed')).toContain(line);
     expect(dragonBedLine(view({ ...raw, dragon: { ...raw.dragon, phase: 3, approach: { ...approach(), bed } } }))).toBeNull();
@@ -113,7 +113,7 @@ describe('optional End observations as facts', () => {
     expect(line).toContain('use の後もこの行が出ていれば、すぐもう 1 個');
     // The bed that may kill her: a strike first, so the kill is credited (a bed's blast names no one).
     const low = dragonBedLine(view({ ...raw, crystals: { ...raw.crystals, remaining: 0 }, dragon: { ...raw.dragon, health: 40, approach: { ...approach(), bed } } }), 'white_bed')!;
-    expect(low).toContain('place block=white_bed at=[(17,64,12)] → attack target=ender_dragon seconds=2 onFail="continue" → use at=[(17,64,12)]');
+    expect(low).toContain('place block=white_bed at=[(17,64,12)]（ベッドを置く）、use の前に竜を 1 回打つ: attack target=ender_dragon seconds=2 onFail="continue"、最後に use at=[(17,64,12)]');
     expect(low).toContain('advancement end/kill_dragon');
     expect(low).not.toContain('すぐもう 1 個');
     expect(dragonBedLine(view())).toBeNull();
@@ -205,10 +205,10 @@ describe('optional End observations as facts', () => {
       const facts = inputFacts(observation, context, urgent);
       for (const lines of [facts.lines, facts.compressed]) {
         const text = lines.join('\n');
-        expect(text).toContain('窓は開いている');
+        expect(text).toContain('剣で打てる窓は開いている');
         expect(text).toContain('頭の下 strike (18,70,12)');
         expect(text).toContain('待つ所 stage (20,70,12)（strike まで 2 m）');
-        expect(text.match(/窓は開いている/gu)).toHaveLength(1);
+        expect(text.match(/剣で打てる窓は開いている/gu)).toHaveLength(1);
         expect(text.match(/待つ所 stage/gu)).toHaveLength(1);
       }
       expect(facts.compressed.join('\n')).not.toMatch(/クリスタルの射点:|同じ射点:|退く所 retreat|射点探索:|2\.45/u);

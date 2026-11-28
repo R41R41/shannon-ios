@@ -205,7 +205,7 @@ export function hopsLine(hops: readonly (GoHop | number)[], decisionsMs: readonl
   const metres = median(recent.map(hopSize));
   if (metres >= SHORT_HOP_M) return null;
   const decision = decisionsMs.length ? Math.max(2, Math.round(median(decisionsMs.slice(-10)) / 1000)) : 3;
-  return `${HOPS_LINE_HEAD}${recent.map(reachWords).join('・')}（行き先の中央 ${Math.round(metres)} m で go 1 本は約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている`;
+  return `${HOPS_LINE_HEAD}${recent.map(reachWords).join('・')}（直近の go の距離は中央値で ${Math.round(metres)} m。go 1 本は約 ${Math.max(1, Math.round(metres / 3.7 * 10) / 10)} 秒）。判断 1 回に約 ${decision} 秒かかるので、この長さだと次の手が届くまで体は止まっている`;
 }
 
 /**

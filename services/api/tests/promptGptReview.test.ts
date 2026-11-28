@@ -216,7 +216,7 @@ describe('the urgent live state keeps what it lost', () => {
     const urgent = minecraftLlmcUrgentLive(parts);
     const rewritten = rewriteLlmcLive({ plan: {}, body: { state: { at: '(0,64,0)' }, ...urgent } }).live.body as Record<string, unknown>;
     // 24 lines; the cobblestone×89 fills two slots (the body writes one line a kind, run 46), so 25 of the pack
-    expect((rewritten.pack as string[])[0]).toMatch(/使用 25\/36/u);
+    expect((rewritten.pack as string[])[0]).toMatch(/使用 25、空き 11/u);
   });
   it('is known as an urgent live state by its mode, and by the answer line of a recorded live of the earlier form', () => {
     expect(isUrgentLive({ body: { mode: URGENT_NOTE } })).toBe(true);

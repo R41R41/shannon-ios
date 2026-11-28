@@ -39,7 +39,7 @@ describe('the live dictionary leaves out the fields whose live line says what it
   });
   it('pack: the line says the free and used slots and what a full pack does', () => {
     const line = packLines(['cobblestone×64'], { free: 20 })[0]!;
-    expect(line).toContain('持ち物の空き 20 マス（使用 16/36');
+    expect(line).toContain('持ち物は 36 マスのうち使用 16、空き 20');
     expect(line).toContain('満杯だと dig・pickup が「満杯」で止まる');
   });
   it('mode: the urgent mode says the rule is the instructions\' 「急ぎの時」, which is a section of them', () => {

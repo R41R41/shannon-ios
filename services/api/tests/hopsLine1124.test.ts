@@ -6,7 +6,7 @@ describe('the line of her recent moves (hopsLine)', () => {
   it('says the short moves beside the decision time when the last ones were short', () => {
     const line = hopsLine([5, 7, 5, 11, 8], [2800, 3100, 2500])!;
     expect(line).toContain('行き先 5 m に対し進んだ 5 m（着いた）・行き先 7 m に対し進んだ 7 m（着いた）');
-    expect(line).toContain('行き先の中央 7 m');
+    expect(line).toContain('直近の go の距離は中央値で 7 m');
     expect(line).toContain('判断 1 回に約 3 秒');
     expect(line).toContain('次の手が届くまで体は止まっている');
     // the facts only: no advice on a length, no "line up two or three" (the owner's run of 11/27)
@@ -20,7 +20,7 @@ describe('the line of her recent moves (hopsLine)', () => {
   });
   it('reads only the last five moves', () => {
     expect(hopsLine([2, 2, 2, 2, 40, 40, 40], [3000])).toBeNull();
-    expect(hopsLine([40, 40, 40, 4, 5, 6, 3, 4], [3000])).toContain('行き先の中央 4 m');
+    expect(hopsLine([40, 40, 40, 4, 5, 6, 3, 4], [3000])).toContain('直近の go の距離は中央値で 4 m');
   });
   it('takes the decision time as 2 s at least, and 3 s when none is known', () => {
     expect(hopsLine([4, 4, 4], [])).toContain('約 3 秒かかる');

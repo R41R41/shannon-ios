@@ -203,7 +203,7 @@ const tidySay = (keepWords?: string, blocks?: TidyContext['blocks'], archery?: b
  * tidy words say which of the pack count for that and what throwing them costs. Facts only: the count, the kinds, the number short after a full throw; keeping them is `keep=`.
  */
 const blocksWords = (blocks?: TidyContext['blocks']): string => blocks && blocks.held.length
-  ? `。足場に数える物（${blocks.held.map(([name, n]) => `${name}×${n}`).join('・')}）は今 ${blocks.have}/${blocks.need}。捨てると足場があと ${blocks.need - Math.max(0, blocks.have - blocks.held.reduce((sum, [, n]) => sum + n, 0))} 個要る（残すなら keep=${blocks.held.map(([name, n]) => `${name}:${n}`).join(',')}）` : '';
+  ? `。足場に数える物（${blocks.held.map(([name, n]) => `${name}×${n}`).join('・')}）は今 ${blocks.have} 個。目標は ${blocks.need} 個で、これを捨てると足場用にあと ${blocks.need - Math.max(0, blocks.have - blocks.held.reduce((sum, [, n]) => sum + n, 0))} 個足りなくなる（残すなら keep=${blocks.held.map(([name, n]) => `${name}:${n}`).join(',')}）` : '';
 /** What the plan needs and where she stands, for the tidy words (all optional; none given: no extra line is said). */
 export interface TidyContext {
   /** What the open promises and the plan's materials hold back of an item. */
@@ -251,8 +251,8 @@ export function packLines(lines: readonly string[], options: { forEnd?: boolean;
      options.free <= PACK_SLOTS ? Math.floor(options.free) : null;
   const used = reported === null ? counted : PACK_SLOTS - reported;
   const free = Math.max(0, PACK_SLOTS - used);
-  const out = [free === 0 ? `持ち物 満杯 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}（空き 0 マス）`
-    : `持ち物の空き ${free} マス（使用 ${Math.min(used, PACK_SLOTS)}/${PACK_SLOTS}。満杯だと dig・pickup が「満杯」で止まる）`];
+  const out = [free === 0 ? `持ち物は満杯（${PACK_SLOTS} マスのうち使用 ${Math.min(used, PACK_SLOTS)}、空き 0）`
+    : `持ち物は ${PACK_SLOTS} マスのうち使用 ${Math.min(used, PACK_SLOTS)}、空き ${free}（満杯だと dig・pickup が「満杯」で止まる）`];
   const before = fullSoon(free, filler, junk, options);
   if (before) out.push(before);
   out.push(...tidyExtras(lines, free, options));

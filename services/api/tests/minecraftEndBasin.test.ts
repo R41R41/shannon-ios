@@ -122,7 +122,7 @@ describe('the perched dragon basin as observed facts', () => {
     expect(basinOf(endFightLines(view()))).toContain(`go range=0.5 seconds=12 → 剣を持って ${sword}`);
     const bed = [{ stand: at(20), walkMeters: 4, foot: at(22), head: at(23), build: [], selfExpected: 3, dragonExpected: 40 }];
     const withBed = endFightLines(view({ ...approach(), bed }), 'white_bed');
-    expect(withBed.some(line => line.startsWith('ベッドの手（体が測った候補）'))).toBe(true);
+    expect(withBed.some(line => line.startsWith('ベッドの手（体が測った候補。'))).toBe(true);
     expect(basinOf(withBed)).toBe(dragonBasinLine(view()));
     const three = world();
     const standing = endViewOf(frame({ ...three, crystals: { ...three.crystals, remaining: 1 } }));
@@ -256,12 +256,12 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
     expect(line).toContain('"target":"#90"');
     expect(line).toContain('current_phase2_required');
     const shortThree = dragonBurstShortLine(view(approach(), 3), 'white_bed')!;
-    expect(shortThree).toContain('place（footing と screen の黒曜石）');
+    expect(shortThree).toContain('返った足場と遮蔽の黒曜石のマス（footing と screen）に place');
     expect(shortThree.indexOf('place')).toBeLessThan(shortThree.indexOf('bed_burst（'));
     expect(shortThree).not.toContain('2 手');
     const shortTwo = dragonBurstShortLine(view(approach(), 2), 'white_bed')!;
-    expect(shortTwo).toContain('place（返った footing と screen の黒曜石）');
-    expect(shortTwo).toContain('降りるのを待たず先に読み');
+    expect(shortTwo).toContain('返った足場と遮蔽の黒曜石のマス（footing と screen）に place');
+    expect(shortTwo).toContain('降りるのを待たず、先に mc_probe kind=bedsite');
     expect(dragonBurstShortLine(view(approach(), 2), 'white_bed')).toContain('kind=bedsite target=#90');
     expect(dragonBurstShortLine(view(approach(), 2), null)).toBeNull();
     const w = world(approach(), 3);
@@ -300,7 +300,7 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
   it('keeps the sitting bed line and tells that a use counts only within 3 m of the head', () => {
     const bed = [{ stand: at(20), walkMeters: 4, foot: at(22), head: at(23), build: [], selfExpected: 3, dragonExpected: 40 }];
     const lines = endFightLines(view({ ...approach(), bed }), 'white_bed');
-    const sit = lines.find(line => line.startsWith('ベッドの手（体が測った候補）'))!;
+    const sit = lines.find(line => line.startsWith('ベッドの手（体が測った候補。'))!;
     expect(sit).toContain('竜の頭が枕から 3m 以内の時だけ');
     expect(burstOf(lines)).toBeUndefined();
   });

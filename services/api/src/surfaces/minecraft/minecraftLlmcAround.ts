@@ -49,8 +49,8 @@ function stepLine(view: MapView, feet: P, dir: { name: string; dx: number; dz: n
   const how = best && best.kind !== 'level' ? `（${stepHow(best)}）` : '';
   if (best) return `${head}${bestWords(view, best)}${how}`;
   const level = options[0]!;
-  if (level.bad?.includes('床が無い')) return `${head}${triple(view, cell)} → ${level.dig.length ? '掘っても' : ''}床が無い（${fallText(view, tx, feet.y - 1, tz)}）`;
-  return `${head}${triple(view, cell)} → 歩けない: ${level.bad ?? '理由不明'}`;
+  if (level.bad?.includes('床が無い')) return `${head}${triple(view, cell)}: ${level.dig.length ? '掘っても' : ''}床が無い（${fallText(view, tx, feet.y - 1, tz)}）`;
+  return `${head}${triple(view, cell)}: 歩けない。理由は ${level.bad ?? '理由不明'}`;
 }
 /** The diagonals whose two corner columns are shut, in one line. */
 function diagonalLine(feet: P, shut: ReadonlyArray<{ name: string; dx: number; dz: number }>): string[] {

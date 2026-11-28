@@ -390,7 +390,7 @@ export function digPackLine(observation: BodyObservation | null, hands: readonly
   toldPack.set(taskId, free);
   if (toldPack.size > 32) toldPack.delete(toldPack.keys().next().value as string);
   const spare = dropAdvice(free === 0 ? packed : { ...packed, worn: [] }, item => heldBack(promises, item));
-  return `空き ${free}/${PACK_SLOTS}：掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
+  return `持ち物の空きは ${free} マス（全部で ${PACK_SLOTS} マス）。掘って出る石・深層岩・土は ${free === 0 ? '1 つも拾えない' : `${free} マスより多くは拾えない`}。`
     + digRoomWords(hands, packed.filler, free)
     + (spare ? `drop で空けられる物（約束に回していない分）: ${spare}` : '約束に回していない石・土の余りは無い（空けるのは drop）');
 }
@@ -424,7 +424,7 @@ export function packLines(observation: BodyObservation | null, ahead: readonly A
   const gains = nextGains(ahead);
   // Full (run 46): what it means comes in the line's first words, and what can be dropped is counted from the
 // plan's promises (what they hold back is not offered), in the short line too.
-  const head = `持ち物の空き ${free}/${PACK_SLOTS}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' :
+  const head = `持ち物は ${PACK_SLOTS} マスのうち空き ${free}${free === 0 ? `（満杯）：${FULL_COST}` : free <= NEAR_FULL ? '（もうすぐ満杯）' :
      ''}${gains.length ? `・次の手で増える見込み（掘り抜く岩の分は数えない）: ${gains.join('・')}` : ''}`;
   if (free === 0) {
     const spare = dropAdvice(packed, item => heldBack(promises, item));

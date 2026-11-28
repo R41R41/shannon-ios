@@ -25,14 +25,14 @@ describe('the way to the dragon in the live state', () => {
     const body = parts();
     const normal = inputFacts(fight, factsContext(body, fight, {}, undefined, {}), false).lines.join('\n');
     expect(normal).toContain('竜: 体力 188/200・島の上を周回（phase 0）');
-    expect(normal).toContain('エンドクリスタル: 残り 9/10（壊れた 1・檻つき 2）');
+    expect(normal).toContain('エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 9 か所（壊れた 1・檻つき 2）');
     expect(normal).toContain('最後の死: 2分前 the_end');
     expect(normal).toContain('控え（体の記憶、今いる次元）: ポータル 3000m 北 (1,2,3)');
     const urgent = inputFacts(fight, factsContext(body, fight, {}, undefined, {}), true);
     expect(urgent.lines.join('\n')).toContain('竜: 体力 188/200');
     expect(urgent.lines.join('\n')).toContain('最後の死:');
     expect(urgent.lines.join('\n')).not.toContain('控え（');
-    expect(urgent.compressed.join('\n')).toContain('エンドクリスタル: 残り 9');
+    expect(urgent.compressed.join('\n')).toContain('エンドクリスタル: 台座 10 か所のうち、壊れたと確かめていない所が 9 か所');
   });
 
   it('says beside a Nether death whose drops wait that the entry is not held for them, in the overworld only (G01, the review of 11/10)', () => {

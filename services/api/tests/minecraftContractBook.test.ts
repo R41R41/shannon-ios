@@ -67,7 +67,7 @@ const book = () => createMinecraftContractBook(pin);
 describe('the canonical Minecraft input-contract book', () => {
   it('pins the revised shoot manual and the schema while deriving all ten pages (the hunt page added 11/11)', () => {
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('412c6e7222caf117d2030639664985e2a12b73163b8a9594e6ae012fa319a06c');
+    expect(sha(SHORT_ACT_DESCRIPTION)).toBe('cc93deb5bebc64154ab630605d2aeedcb79357b7157b708d5bf0e84edd383a8f');
     expect(sha(JSON.stringify(SHORT_ACT_INPUT_SCHEMA))).toBe('848d8b9cc2cca9535e006ece66c959568186d367e48dca2dedebdcb82f4a96b2');
     const current = book();
     expect(current.pages).toHaveLength(10);
