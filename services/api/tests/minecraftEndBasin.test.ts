@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyObservation } from '../src/contracts/bodyControlContract.js';
 import { endViewOf } from '../src/surfaces/minecraft/minecraftEndView.js';
-import { climbNow, dragonBasinLine, dragonBurstLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
+import { climbNow, dragonBasinLine, dragonBurstLine, dragonBurstShortLine, dragonWaitLine, endFightLines, noBowLine } from '../src/surfaces/minecraft/minecraftEndFacts.js';
 import { createEndgame } from '../src/surfaces/minecraft/minecraftEndgame.js';
 import { factsContext, type LlmcBodyParts } from '../src/surfaces/minecraft/minecraftLlmcBodyFacts.js';
 import { inputFacts } from '../src/surfaces/minecraft/minecraftLlmcFacts.js';
@@ -233,9 +233,29 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
     expect(line).toContain('座ってからでは bedsite が読めない');
     expect(line).toContain('着地後も座った竜へ撃ち続け');
   });
+  it('names range=0.5 for the stand and the 1 m cut-off in phase 2 (11/28 run 18: range 3 stopped 3.7 m short and the body refused)', () => {
+    const line = burstOf(endFightLines(view(approach(), 2), 'white_bed'))!;
+    expect(line).toContain('go range=0.5');
+    expect(line).toContain('1m 以内');
+    expect(line).toContain('landing_layout_unobserved');
+  });
+  it('in phase 3 (landing) the burst is still offered after a ready bedsite, without a new bedsite read; held while a crystal stands', () => {
+    const line = dragonBurstLine(view(approach(), 3), 'white_bed')!;
+    expect(line).toContain('phase 3');
+    expect(line).toContain('go range=0.5');
+    expect(line).toContain('"target":"#90"');
+    expect(line).toContain('current_phase2_required');
+    expect(dragonBurstShortLine(view(approach(), 3), 'white_bed')).toContain('2 手');
+    expect(dragonBurstShortLine(view(approach(), 2), 'white_bed')).toContain('kind=bedsite target=#90');
+    expect(dragonBurstShortLine(view(approach(), 2), null)).toBeNull();
+    const w = world(approach(), 3);
+    const three = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 3 } }));
+    expect(dragonBurstLine(three, 'white_bed')).toContain('今は使わない');
+    expect(dragonBurstShortLine(three, 'white_bed')).toBeNull();
+  });
   it('shows nothing without a held bed, while sitting, in other phases and with no dragon id; says not now with three crystals standing', () => {
     expect(burstOf(endFightLines(view(approach(), 2), null))).toBeUndefined();
-    for (const phase of [0, 1, 3, 4, 5, 6, 7, 8]) expect(dragonBurstLine(view(approach(), phase), 'white_bed')).toBeNull();
+    for (const phase of [0, 1, 4, 5, 6, 7, 8]) expect(dragonBurstLine(view(approach(), phase), 'white_bed')).toBeNull();
     const w = world(approach(), 2);
     expect(dragonBurstLine(endViewOf(frame({ ...w, dragon: { ...w.dragon, id: null } })), 'white_bed')).toBeNull();
     const three = endViewOf(frame({ ...w, crystals: { ...w.crystals, remaining: 3 } }));

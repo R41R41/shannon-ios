@@ -86,7 +86,7 @@ describe('the End fallback alongside the main bed plan', () => {
     expect(CURRENT_PLAN_STRUCTURE).toContain('檻つきも含めて全部壊す');
     expect(CURRENT_PLAN_STRUCTURE).toContain('毎秒 2 回復し（本数に比例しない）');
     expect(CURRENT_PLAN_STRUCTURE).toContain('格子ごしにそのまま殴り');
-    expect(CURRENT_PLAN_STRUCTURE).toContain('竜の節（止まり木の脇 10〜14m で降りるのを待ち、ベッドで倒す）はその後ろ');
+    expect(CURRENT_PLAN_STRUCTURE).toContain('竜の節（竜が降りてくる途中は bedsite を読んで go→bed_burst で倒す。飛んでいる間と座りの間は止まり木の脇 10〜14m の足場で、次の降りを待つ）はその後ろ');
     expect(CURRENT_PLAN_STRUCTURE).not.toContain('最初の計画に入れない');
     expect(CURRENT_PLAN_STRUCTURE).not.toContain('最後の手');
   });

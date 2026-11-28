@@ -6,7 +6,7 @@ import { createBlazeWatch, footingLine } from './minecraftBlazeFacts.js';
 import { createDescentTrail } from './minecraftDescentTrail.js';
 import { createDeathWatch, deathReturnLine, givenUpBy, type DeathKnown } from './minecraftDeathReturn.js';
 import { createEnderHunt } from './minecraftEnderHunt.js';
-import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitSpanLine, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
+import { aloftBy, createClimbWatch, createHeightWatch, crystalLine, descentLine, heightCtxOf, waitSpanLine, waitStreakLine, type HeightView, deathLine, dragonApproachLine, dragonLine, dragonWaitUrgentLine, dragonBurstShortLine, enclosedLine, endFightLines, frameLine, pillarLine, placeLine } from './minecraftEndFacts.js';
 import { endViewOf, type EndView } from './minecraftEndView.js';
 import { FETCH_ENTRY_WORDS, fetchingNetherDrops } from './minecraftLlmcGateEntry.js';
 import { nightArmsLine, nightBedLine } from './minecraftNightArms.js';
@@ -49,7 +49,8 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   // 11/27: the height line and the wait streak lead the fight lines (and stay in the short set): from a top 10 m or more up, the ways down are the first thing the input says.
   const height = watched.height ?? null;
   const descent = some(descentLine(end, height, heightCtxOf(world, facts.counts))), streak = [...some(waitStreakLine(height, aloftBy(end) !== null)), ...some(waitSpanLine(height, end))];
-  const fight = endFightLines(end, [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null, shooting, facts.counts.size ? arrows : null,
+  const bedItem = [...facts.counts.keys()].find(item => item.endsWith('_bed') && (facts.counts.get(item) ?? 0) > 0) ?? null;
+  const fight = endFightLines(end, bedItem, shooting, facts.counts.size ? arrows : null,
     { lead: [...descent, ...streak], sit: height?.sit ?? null });
   const stall = some(watched.climb?.(shooting) ?? null);
   const supply = { pearls: carried(facts.counts, 'ender_pearl'), powder: carried(facts.counts, 'blaze_powder'), rods: carried(facts.counts, 'blaze_rod') };
@@ -66,7 +67,7 @@ function compose(world: Record<string, unknown>, end: EndView | null, facts: Don
   const pearls = [...some(pearlLine(facts.counts, facts.dimension)), ...some(deathLossLine(facts.counts, facts.dimension)), ...pearlSearchLines(world, facts.counts, facts.dimension, watched.search ?? { scans: 0, goes: 0 })];
   const urgent = [...descent, ...streak, ...some(dragonLine(end, true)), ...some(crystalLine(end, true)),
     ...fight.filter(line => HAZARD_HEADS.some(head => line.startsWith(head))), ...some(dragonApproachLine(end, true)),
-    ...some(dragonWaitUrgentLine(end))];
+    ...some(dragonWaitUrgentLine(end)), ...some(dragonBurstShortLine(end, bedItem))];
   return { lines: [...night, ...some(watched.wool ?? null), ...enclosed, ...fight, ...footing, ...stall, ...some(blaze), ...eyeLines, ...pearls, ...some(hunt), ...frames, ...death, ...places],
     short: [...night, ...enclosed, ...urgent, ...footing, ...stall, ...some(blaze), ...frames, ...death] };
 }

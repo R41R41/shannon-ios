@@ -367,14 +367,28 @@ export function dragonBedLine(end: EndView | null, bedItem: string | null = null
  */
 export function dragonBurstLine(end: EndView | null, bedItem: string | null = null): string | null {
   const dragon = end?.dragon;
-  if (!dragon || dragon.phase !== 2 || dragon.id === null || !bedItem) return null;
+  if (!dragon || (dragon.phase !== 2 && dragon.phase !== 3) || dragon.id === null || !bedItem) return null;
   const standing = standingOrListed(end);
   const held = unseenBedHold(end, 'ベッド連爆');
   if (held) return held;
   if (standing !== null && standing >= 1) return `ベッド連爆: 今は使わない（結晶が ${standing} 本残る間は、1 本でも竜は毎秒 2 回復し、削った分が戻る。ベッドは檻つきも含めて結晶を 0 本にしてから。先に結晶を壊す）`;
+  // 11/28 (run 18): the line went out in phase 2 only, so a ready read just before the landing (a history summary took 12-21 s) was never followed; the body takes phase 2 or 3.
+  if (dragon.phase === 3) return `ベッド連爆（竜 #${dragon.id} が着陸中 = phase 3）: この進入の phase 2 で bedsite が ready を返していれば、bed_burst は今も呼べる（体は phase 2 か 3 を受ける）。`
+    + `返った stand へ go range=0.5 → footing・screen の黒曜石を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50} を 1 つの act に並べる（書くのは返った配置のまま）。`
+    + 'phase 3 になってからは bedsite を新しく読めない（current_phase2_required）。ready を読んでいない進入なら、待ち場へ戻って次の降りを待つ。';
   return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中。座るのを待たない）: すぐ mc_probe kind=bedsite target=#${dragon.id}（packet_history_pending なら 1 秒後にもう一度）`
-    + ` → 返った stand へ go → footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
-    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。`;
+    + ` → 返った stand へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）→ footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
+    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は実測で 14〜30 秒以上続く（probe の判断・act の判断・歩きで 20 秒前後かかる）。`;
+}
+
+/** The short (urgent) set's bed burst line: the same hand in two moves, so a decision of three hands still has room for it. Null when the full line would be null or held. */
+export function dragonBurstShortLine(end: EndView | null, bedItem: string | null = null): string | null {
+  const full = dragonBurstLine(end, bedItem);
+  if (!full || !end?.dragon || full.startsWith('ベッド連爆:') || full.includes('今は出さない')) return null;
+  const id = end.dragon.id;
+  return end.dragon.phase === 3
+    ? `ベッド連爆（急ぎ）: この進入で bedsite が ready なら go（stand へ range=0.5）→ bed_burst（json 行、target=#${id}、count=5、seconds=50）の 2 手で足りる`
+    : `ベッド連爆（急ぎ）: mc_probe kind=bedsite target=#${id} を読み、ready なら go（stand へ range=0.5）→ bed_burst（json 行、count=5、seconds=50）の 2 手で足りる`;
 }
 
 /** The waiting cells, nearest by the body's walking time: beside the perch's facing (phases 3 to 7), or for the next sit while she flies (0, 1, 2, 8, 10). */
