@@ -1,8 +1,8 @@
 {
- "bodyRev": "78db26ebbf640beeb0bcdd73054a5f4bd979c1b9",
- "madeBy": "78db26ebbf640beeb0bcdd73054a5f4bd979c1b9",
- "note": "11/28 (w1128i): the body catalog made again from claude/endra-body-1128h (scripts/lab/continue-produce.ts, offline, WSL; no commit of the body holds it). Only the catalog is made again: the other files in ../produced need the isolated lab on the VM (bench B) and stay as they were until it is run at the final body; scripts/sync-body-produced.sh then writes the catalog back into ../produced and this directory goes.",
+ "bodyRev": "da9eb1e5524d32a8a496c0d0eafc9e5dc74f1ffc",
+ "madeBy": "da9eb1e5524d32a8a496c0d0eafc9e5dc74f1ffc",
+ "note": "11/28 (w1128j): the body catalog made again from claude/endra-body-1128h at da9eb1e5 (scripts/lab/continue-produce.ts, offline, WSL; no commit of the body holds it). Only the catalog is made again: the other files in ../produced need the isolated lab on the VM (bench B) and stay as they were until it is run at the final body; scripts/sync-body-produced.sh then writes the catalog back into ../produced and this directory goes.",
  "files": {
-  "catalog.json": "bb8f5af9c341af7e8d99a77cfff428c9cea01f33932b6651fff3a587e59ada63"
+  "catalog.json": "a0f66defef764ceb83586b86f4cfb632c203839fb32854f75260d5dc8a89da8c"
  }
 }
