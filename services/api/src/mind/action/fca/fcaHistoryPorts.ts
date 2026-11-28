@@ -82,21 +82,16 @@ export interface FcaHistoryAhead {
 export interface FcaHistoryAheadOptions {
   port: FcaHistoryAhead;
   /**
-   * The bounds the replay may reach while a summary is made beside the steps: within them a step never waits for one. Past them a step
-   * waits for the one asked (at most `waitMs`), else summarizes as before.
+   * The bounds the replay may reach while a summary is made beside the steps: within them the step replays the whole history. Past them
+   * it replays the history with its oldest rounds left out (`truncatedReplay`) until the summary asked is installed: a step never waits.
    */
   hard: Partial<FcaHistoryPolicy>;
-  waitMs?: number;
   /** Runs the summary call apart from the step (its own signal and model bookkeeping), so that the step need not wait for it. */
   detach<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T>;
   /** An urgent step: the conversation may reach the whole replay's bound before it waits for anything. */
   urgent?: boolean;
-  /** `FcaBodyLifecycle.deferSummary`: the step does not wait for a summary or make one while the bounds of `deferredBounds` hold, for at most `FCA_SUMMARY_DEFER_MS`. */
-  defer?: boolean;
-  /** The clock of that limit (tests). */
-  clock?(): number;
-  /** What happened (content-free): `started`, `installed`, `waited`. */
-  note?(what: 'started' | 'installed' | 'waited' | 'deferred'): void;
+  /** What happened (content-free): `started`, `installed`, `dropped` (the replay left its oldest rounds out). */
+  note?(what: 'started' | 'installed' | 'dropped'): void;
 }
 export interface FcaHistoryPorts {
   runtime: TaskRuntime; codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer;

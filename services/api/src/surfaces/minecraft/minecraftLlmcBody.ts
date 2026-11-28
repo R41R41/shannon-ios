@@ -28,7 +28,6 @@ threatSightMeters,threatSightTargets,walledOff,type NearThreat,type ThreatSight
 } from './minecraftLlmcThreat.js';
 import { queueLifecycle,type LlmcQueue } from './minecraftLlmcQueueBody.js';
 import { driftOf,madeInOf } from './minecraftMadeIn.js';
-import { endViewOf } from './minecraftEndView.js';
 import { MC_ACT_TOOL } from '../../contracts/minecraftActContract.js';
 import { actReaches } from './minecraftLlmcV2.js';
 import type { MadeIn } from '../../contracts/continueContract.js';
@@ -405,11 +404,6 @@ beginContextRead();
     // r5 (run 28: a plan row of run 27's task, in another world, was recalled with its coordinates): what was before
 // this task is marked.
     recallCues: () => ({ ...(body.recallCues?.() ?? { words: [], tags: [] }), since: parts.createdAt }),
-    // 11/28 (end run 18): the dragon's approach and landing (phases 2 and 3) are the window of the bed burst; a history summary must not take it.
-    deferSummary() {
-      const phase = endViewOf(observeNoted())?.dragon?.phase;
-      return phase === 2 || phase === 3;
-    },
     urgent() {
       const facts = urgentFacts(observeNoted(), events.cut(), sights, inSight, hitWatch.recent());
       reasons = facts.reasons;

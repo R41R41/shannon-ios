@@ -135,8 +135,7 @@ async function executeFcaStep(step: TaskStep, ports: FcaStepPorts, signal: Abort
   const cutLast = prior.fcaStateCut === true;
   const forceEpoch = transient && (transient.stale || cutLast) && ports.history?.summarizer
     ? (replay: readonly unknown[]) => shouldForceFcaEpoch(transient, replay, step.taskId, cutLast) : undefined;
-  const deferSummary = bodyTask && ports.body?.deferSummary?.() === true;
-  const historyAhead = ports.history?.ahead && ports.history.summarizer ? { ...ports.history.ahead, detach: detachedModelCall, urgent, defer: deferSummary,
+  const historyAhead = ports.history?.ahead && ports.history.summarizer ? { ...ports.history.ahead, detach: detachedModelCall, urgent,
     note: (what: string) => metrics.ahead(what) } : undefined;
   const historyPorts = ports.history ? { runtime, codec: ports.history.codec, summarizer: ports.history.summarizer,
     permit: async () => { await checked('fresh');

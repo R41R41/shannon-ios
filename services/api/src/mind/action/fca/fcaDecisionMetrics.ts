@@ -114,7 +114,7 @@ export function fcaDecisionMetrics(taskId: string, createdAt: string, prior: Rea
       urgent = true;
       thrown = whole(milliseconds);
     },
-    /** What the history's summary ahead did in this step: `started`, `installed`, `waited` (mb-llmc r3). Content-free. */
+    /** What the history's summary ahead did in this step: `started`, `installed`, `dropped` (mb-llmc r3). Content-free. */
     ahead(what: string): void { if (ahead.length < 4) ahead.push(/^[a-z_]{1,24}$/u.test(what) ? what : 'other'); },
     /** The body's investigation (mb-llmc r4): its surprises' closed codes and the probes sent and answered. Content-free. */
     investigated(found: { surprises: readonly string[]; probes: number; answered: number }): void {

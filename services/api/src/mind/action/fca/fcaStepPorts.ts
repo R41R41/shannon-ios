@@ -38,7 +38,7 @@ export interface FcaStepPorts {
     summarizer?: FcaHistorySummarizer;
     policy?: Partial<FcaHistoryPolicy>;
     /** mb-llmc r3: the summary is made beside the steps (`prepareFcaHistory`); absent: it is made in the step that needs it. */
-    ahead?: Pick<FcaHistoryAheadOptions, 'port' | 'hard' | 'waitMs' | 'clock'>;
+    ahead?: Pick<FcaHistoryAheadOptions, 'port' | 'hard'>;
   };
   /** Rechecks only the sources pinned to this admitted step, never newly pending inbox input. */
   sourcesVisible?(): boolean;
