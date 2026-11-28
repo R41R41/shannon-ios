@@ -7,7 +7,7 @@ import { SQLiteTaskRuntimeStore } from '../src/mind/action/taskRuntime/store/tas
 import { SQLiteActionStore } from '../src/mind/action/threads/store/actionStore.js';
 import { leaseOf } from '../src/contracts/actionThreadContract.js';
 import { runFcaStep, type FcaStepPorts } from '../src/mind/action/fca/fcaRunner.js';
-import { createFcaHistoryAhead, prepareFcaHistory } from '../src/mind/action/fca/fcaHistory.js';
+import { createFcaHistoryAhead, prepareFcaHistory, FCA_AHEAD_ROOM, FCA_HISTORY_POLICY } from '../src/mind/action/fca/fcaHistory.js';
 import { continuesFcaEpoch, pinFcaCoreTools, withCoreAnchor } from '../src/mind/action/fca/fcaCoreTools.js';
 import type { FcaHistoryPolicy } from '../src/mind/action/fca/fcaHistoryPorts.js';
 import type { FcaBodyLifecycle, FcaBodyQueue, FcaModelInput, FcaToolDefinition } from '../src/mind/action/fca/fcaPorts.js';
@@ -21,8 +21,8 @@ import { toolOk } from '../src/mind/tools/toolRegistryPorts.js';
  * the history is decided at the start of a step. The summary is asked there once the policy is passed, installed there when ready, and the replay is
  * cut there to a floor (the hard bound less the largest growth of a recent step) when the step would end past the bound; a floor keeps its first
  * message until the summary is installed. Nothing between the decisions of a stretch asks, installs or cuts, so a stretch never changes the first
- * message of its replay. No path waits for a model: a stale core's new epoch begins with a floor, and a floor that cannot fit falls back to the public
- * epoch.
+ * message of its replay. No path waits for a model: a stale core's new epoch begins with a floor, and a floor that cannot fit falls back to the summary and a count of the rounds left out (no round),
+ * or fails the step where even that passes the token bound.
  */
 const databases: DatabaseSync[] = [];
 const at = '2026-10-22T00:00:00.000Z';
@@ -108,7 +108,7 @@ function fixture(options: { summaryMs: number; fail?: () => boolean; hard?: Part
     return ms;
   };
   /** `prepareFcaHistory` alone, `times` times in one step, as the runner calls it with a stale core (`forceEpoch`). */
-  const prepare = async (forceEpoch: () => boolean, times = 1) => {
+  const prepare = async (forceEpoch: (replay: readonly unknown[]) => boolean, times = 1) => {
     const action = actions.claim(actions.enqueue({ scopeKey: 'owner', sourceId: `p-${inputs.length}-${Math.random()}`, kind: 'agentTask', origin: 'owner_request' }, at).id, 'worker', at)!;
     const step = runtime.beginStep('owner', task.id, leaseOf(action), runtime.get('owner', task.id)!.revision)!;
     const said = console.log, replays: Awaited<ReturnType<typeof prepareFcaHistory>>[] = [];
@@ -120,7 +120,7 @@ function fixture(options: { summaryMs: number; fail?: () => boolean; hard?: Part
     } finally { console.log = said; }
     return { replays, ms: performance.now() - began };
   };
-  return { runtime, task, inputs, lines, run, prepare, summaries: () => summaries, aheadState: () => port.get(task.id)?.state, refuseCommits: (count: number) => { refusing = count; }, refusedCommits: () => refused, summary: () => runtime.history('owner', task.id)?.summary ?? null };
+  return { runtime, task, inputs, lines, run, prepare, floor: () => port.floor(task.id), summaries: () => summaries, aheadState: () => port.get(task.id)?.state, refuseCommits: (count: number) => { refusing = count; }, refusedCommits: () => refused, summary: () => runtime.history('owner', task.id)?.summary ?? null };
 }
 const metrics = (lines: readonly string[]) => lines.filter(line => line.startsWith('{"event":"fca_decision_metrics"')).map(line => JSON.parse(line) as Record<string, unknown>);
 const notesOf = (lines: readonly string[]) => metrics(lines).flatMap(line => (line.summaryAhead as string[] | undefined) ?? []);
@@ -277,7 +277,8 @@ describe('no path of a step waits for a summary, or loses one', () => {
     const f = fixture({ summaryMs: Infinity });
     for (let index = 0; index < 2; index++) await f.run();
     const native = firstOf(f.inputs.at(-1)!);
-    const first = await f.prepare(() => true, 2);
+    // The force is asked as the runner asks it: only while the replay still starts with the message the core was pinned for.
+    const first = await f.prepare(replay => JSON.stringify(replay[0]) === native, 2);
     expect(first.ms).toBeLessThan(500);
     expect(f.summaries()).toBe(0);
     expect(JSON.stringify(first.replays[0]!.history[0])).toContain('fca_public_history');
@@ -287,13 +288,51 @@ describe('no path of a step waits for a summary, or loses one', () => {
     expect(f.lines.filter(line => /history summary dropped task=/u.test(line))).toHaveLength(1);
   });
 
-  it('does not wait when no floor fits (the smallest does not): the public epoch of the fallback is replayed and one summary is asked', async () => {
-    const f = fixture({ summaryMs: Infinity, hard: { maximumConversationTokens: 3_000, maximumReplayTokens: 50, maximumRounds: 1_000 } });
+  it('cuts a standing floor again when the core goes stale while it stands, so the model sees the new definitions in the next step', async () => {
+    const f = fixture({ summaryMs: Infinity });
+    // Steps go on until the history has been cut to a floor by the bounds, then two more under it (it stands; rounds follow it).
+    let floored = false;
+    for (let index = 0; index < 80 && !floored; index++) { await f.run(); floored = !!f.floor(); }
+    expect(floored).toBe(true);
+    await f.run();
+    await f.run();
+    const floorFirst = JSON.stringify(f.floor()!.bootstrap[0]);
+    expect(firstOf(f.inputs.at(-1)!)).toBe(floorFirst);
+    // The body's tool definitions change: the force is asked with the floor's replay (the one the core was pinned to) and is taken, though the floor stands.
+    const asked: string[] = [];
+    const before = f.summaries();
+    const recut = await f.prepare(replay => { asked.push(JSON.stringify(replay[0])); return JSON.stringify(replay[0]) === floorFirst; });
+    expect(asked).toEqual([floorFirst]);
+    expect(recut.ms).toBeLessThan(500);
+    expect(f.summaries()).toBe(before);
+    const newFirst = JSON.stringify(recut.replays[0]!.history[0]);
+    expect(newFirst).toContain('fca_public_history');
+    expect(newFirst).not.toBe(floorFirst);
+    expect(JSON.stringify(f.floor()!.bootstrap[0])).toBe(newFirst);
+  });
+
+  it('does not wait for the summary when cutting the floor fails (the newest round alone passes the characters): the summary and a count of the rounds left out are replayed within the tokens', async () => {
+    const f = fixture({ summaryMs: Infinity, hard: { maximumConversationTokens: 3_000, maximumNativeCharacters: 300, maximumRounds: 1_000 } });
     let slowest = 0;
-    for (let index = 0; index < 30; index++) slowest = Math.max(slowest, await f.run());
+    for (let index = 0; index < 30; index++) slowest = Math.max(slowest, await f.run(index % 3));
     expect(slowest).toBeLessThan(500);
     expect(f.summaries()).toBe(1);
-    expect(f.lines.some(line => /history summary dropped task=/u.test(line))).toBe(true);
+    const dropped = f.lines.filter(line => /history summary dropped task=.* omittedRounds=([1-9]d*) /u.test(line));
+    expect(dropped.length).toBeGreaterThan(0);
+    const last = f.inputs.at(-1)!;
+    expect(JSON.parse((last.history[0] as { content: string }).content)).toMatchObject({ kind: 'fca_public_history', rounds: [] });
+    expect(tokensOf(last)).toBeLessThanOrEqual(Math.ceil(FCA_HISTORY_POLICY.maximumReplayTokens * FCA_AHEAD_ROOM.tokens));
+  });
+
+  it('fails the step, not waiting for a summary, when even the replay with no round passes the token bound', async () => {
+    const f = fixture({ summaryMs: Infinity, hard: { maximumConversationTokens: 3_000, maximumNativeCharacters: 300, maximumReplayTokens: 1, maximumRounds: 1_000 } });
+    const began = performance.now();
+    let failure = '';
+    for (let index = 0; index < 30 && !failure; index++) {
+      try { await f.run(); } catch (error) { failure = error instanceof Error ? error.message : String(error); }
+    }
+    expect(failure).toContain('FCA_HISTORY_RECENT_LIMIT');
+    expect(performance.now() - began).toBeLessThan(5_000);
   });
 
   it('keeps a summary whose commit was fenced and installs it at the next step, without asking another', async () => {

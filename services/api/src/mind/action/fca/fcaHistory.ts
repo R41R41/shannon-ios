@@ -474,14 +474,15 @@ function askAhead(taskId: string, plan: Extract<FcaHistoryPlan, { kind: 'compact
 /**
  * The replay of a step, which never waits for a model (11/28: waits for a 15-29 s Haiku summary were 339 s of 18 runs' 1,400 s and closed the
  * dragon's phase 2 window three times in four). Past the policy (`maximumConversationTokens`) the summary is asked beside the step (`askAhead`);
- * a core forced to a new epoch (`forceEpoch`) is a new epoch by a floor, not by a summary made in the step. The replay is then:
+ * a core forced to a new epoch (`forceEpoch`, also while a floor stands, which is then cut again) is a new epoch by a floor, not by a summary made in the step. The replay is then:
  * 1. a standing floor while it, with `FCA_FLOOR.headroomTokens` for what the step adds, is within the hard bounds (the first message stays the
  *    same, so the epoch continues: only the summary's installation, or a recut, changes it);
  * 2. the whole history while it leaves that headroom, else
  * 3. a new floor (`cutFloor`): the oldest rounds left out, counted and logged, the rest public and clipped to fit, held to the hard bound less the
  *    largest growth of a recent step.
  * While a summary cut at the output cap is cooling down and the whole history does not leave the headroom, the step goes on to `truncatedCommit`
- * (no model call). Where even the smallest floor does not fit, the public epoch of `fallbackFcaHistory` is replayed for this step.
+ * (no model call). Where even the smallest floor does not fit, the summary and a count of the rounds left out are replayed for this step
+ * (`emptiestReplay`), and where that does not fit either the step fails: no path of this function waits for a model or calls one.
  * The rounds stay whole in the store and the summary, when ready, is installed by the next step with every round since it was asked kept after it.
  */
 function aheadHead(parts: { step: TaskStep; ports: FcaHistoryPorts; window: TaskHistoryWindow; policy: FcaHistoryPolicy; ahead: FcaHistoryAheadOptions;
@@ -490,11 +491,14 @@ function aheadHead(parts: { step: TaskStep; ports: FcaHistoryPorts; window: Task
   const bounds = hardBounds(policy, ahead), room = withHeadroom(bounds), previous = window.summary?.template ?? null;
   const ready = (history: readonly unknown[]): { plan: FcaHistoryPlan } => ({ plan: { kind: 'ready',
     replay: { history, summary: previous, summaryText: previous ? renderedCompaction(previous, 'text') : '' } } });
-  const standing = flooredHistory(window, ahead.port.floor(taskId));
-  // A standing floor already began the epoch a stale core waits for: only a floor that is not standing forces one.
+  const floored = flooredHistory(window, ahead.port.floor(taskId));
+  // A stale core asks for a new epoch (`forceEpoch`) with the replay the model last saw: a standing floor's, else the history's own. A standing
+  // floor that is asked about is not kept: the cut below starts the new epoch (its first message is new, so the core is pinned again there).
   let forced = false;
-  const forceEpoch = !standing && parts.forceEpoch ? (replay: readonly unknown[]) => { const asked = parts.forceEpoch!(replay); forced = forced || asked; return asked; } : undefined;
-  const plan = planFcaHistory(window, ports.codec, policy, parts.settling, forceEpoch);
+  const forceEpoch = parts.forceEpoch ? (replay: readonly unknown[]) => { const asked = parts.forceEpoch!(replay); forced = forced || asked; return asked; } : undefined;
+  if (floored) forceEpoch?.(floored);
+  const standing = forced ? null : floored;
+  const plan = planFcaHistory(window, ports.codec, policy, parts.settling, floored ? undefined : forceEpoch);
   const past = forced ? planFcaHistory(window, ports.codec, policy, false) : plan;
   if (past.kind === 'compact') askAhead(taskId, past, window, ahead, ports.summarizer!);
   if (standing && tokensFit(standing, ports.codec, room)) {
@@ -515,13 +519,23 @@ function aheadHead(parts: { step: TaskStep; ports: FcaHistoryPorts; window: Task
     ahead.note?.('dropped');
     return ready(cut.floor.bootstrap);
   }
-  // Even the smallest floor does not fit: this step replays the public epoch of the fallback (no model call, nothing stored, no floor).
-  try {
-    const { omittedRounds, ...replay } = fallbackFcaHistory(window, ports.codec, bounds);
-    logDropped(taskId, ahead, { omittedRounds, clippedMessages: replay.clippedMessages });
-    ahead.note?.('dropped');
-    return { plan: { kind: 'ready', replay } };
-  } catch { return { plan }; }
+  // Not even the smallest floor fits (the newest round alone is past the bounds, by characters or by tokens): this step replays the summary and a count
+  // of the rounds left out, no round. It calls no model and waits for none, stores nothing and holds no floor; where even that passes the bounds
+  // (the summary itself is too long) the step fails visibly (`FCA_HISTORY_RECENT_LIMIT`) instead of waiting for a summary of rounds it does not hold.
+  const emptiest = emptiestReplay(window, ports.codec, bounds);
+  if (!emptiest) throw new Error('FCA_HISTORY_RECENT_LIMIT');
+  const { omittedRounds, ...replay } = emptiest;
+  logDropped(taskId, ahead, { omittedRounds, clippedMessages: replay.clippedMessages });
+  ahead.note?.('dropped');
+  return { plan: { kind: 'ready', replay } };
+}
+
+/** The replay with no round (`aheadHead`'s last resort): the existing summary and every round counted as left out; null where the codec's estimate passes the bounds. */
+function emptiestReplay(window: TaskHistoryWindow, codec: FcaHistoryCodec, bounds: FcaHistoryPolicy): (FcaHistoryReplay & { omittedRounds: number }) | null {
+  const previous = window.summary?.template ?? null, omittedRounds = projectedRounds(window, codec).length;
+  const history = codec.bootstrap(JSON.stringify({ kind: 'fca_public_history', summary: previous, ...(omittedRounds ? { omittedRounds } : {}), rounds: [] }));
+  if (!tokensFit(history, codec, bounds)) return null;
+  return { history, summary: previous, summaryText: previous ? renderedCompaction(previous, 'text') : '', clippedMessages: 0, omittedRounds };
 }
 
 /** The bounds a step may reach while a summary is made beside the steps: the policy with room, the owner's hard bounds, and an urgent step's conversation. */
