@@ -467,10 +467,37 @@ function cloudWords(cloud: EndCloud): string {
   return cloud.dangerRadius === null ? `半径 ${now}` : `避ける半径 ${round(cloud.dangerRadius)}（雲の今の半径 ${now}）`;
 }
 
-/** The breath clouds the body lists (`dragonBreath`: x, y, z, radius and the radius it counts as dangerous), at most three. */
+/**
+ * 19th run (11/28): she stood 6 s in a breath cloud inside a ring of cobblestone the head had set round her feet; the cloud lies on the floor and passes through walls, the
+ * ring only closed the way the floor reflex walks out, and her health went 18 to 0 (4 a second, each second, measured). A cloud she stands in is said as that: how far to its
+ * edge, what it costs each second, and that a wall does not stop it. A fact and its reason, not an order.
+ */
+export const CLOUD_DAMAGE_PER_SECOND = 4;
+/** The cloud whose plate she stands on (her feet within its radius now, or the radius the body avoids when it says no radius; the plate is flat, so a cloud 3 m or more off her height is not under her). */
+function cloudUnder(end: EndView | null): { cloud: EndCloud; away: number; radius: number } | null {
+  const feet = end?.feet;
+  if (!feet) return null;
+  let found: { cloud: EndCloud; away: number; radius: number } | null = null;
+  for (const cloud of end?.breath ?? []) {
+    const radius = cloud.radius ?? cloud.dangerRadius;
+    if (radius === null || (cloud.y !== null && Math.abs(feet.y - cloud.y) > 3)) continue;
+    const away = Math.hypot(feet.x - cloud.x, feet.z - cloud.z);
+    if (away < radius && (!found || radius - away > found.radius - found.away)) found = { cloud, away, radius };
+  }
+  return found;
+}
+/** Whether her feet are in a breath cloud now (the line leads the fight lines then). */
+export const inBreathCloud = (end: EndView | null): boolean => cloudUnder(end) !== null;
+
+/** The breath clouds the body lists (`dragonBreath`: x, y, z, radius and the radius it counts as dangerous), at most three; when she stands in one, what that costs and the way out. */
 export function breathLine(end: EndView | null): string | null {
   const clouds = (end?.breath ?? []).slice(0, 3).map(cloud => `(${Math.floor(cloud.x)},${Math.floor(cloud.z)}) ${cloudWords(cloud)}`);
-  return clouds.length ? `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）` : null;
+  if (!clouds.length) return null;
+  const under = cloudUnder(end);
+  if (!under) return `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）`;
+  const edge = Math.max(1, Math.ceil(under.radius - under.away + 1));
+  return `竜の息の雲: ${clouds.join('・')}。今いる所はこの雲の中（中心から ${round(under.away)}m、縁まで歩いて約 ${edge}m）: 毎秒 ${CLOUD_DAMAGE_PER_SECOND} の傷を受け続ける（約 5 秒で 20 から 0。19 回目の実測）。`
+    + '雲は床に広がって壁を通るので、周りにブロックを積んでも傷は止まらない。19 回目は足元の四方を丸石で囲った中で 6 秒立ち続けて体力 18 から 0（囲いが、体が歩いて雲から出る道を塞いだと見ている）。雲から出る手は、雲の外のマスへの go';
 }
 
 /** The fireballs in flight (the body's count; where they go is its floor reflex's to read). */
@@ -881,6 +908,9 @@ export function endFightLines(end: EndView | null, bedItem: string | null = null
   const lines = [...(height?.lead ?? []), dragonLine(end), crystalLine(end), arrowBudgetLine(end, arrows), ...shots, ...cagedOnly].filter((line): line is string => line !== null);
   const positions = dragonApproachLine(end) ?? perchLine(end);
   const hazards = [breathLine(end), fireballLine(end)].filter((line): line is string => line !== null);
+  // In a cloud now: its line leads the fight lines (19th run: it stood 14th of about 20 facts and the answer never mentioned it).
+  const inCloud = inBreathCloud(end) ? hazards.shift() : undefined;
+  if (inCloud) lines.unshift(inCloud);
   if (lines.length + hazards.length + (positions ? 1 : 0) > 6) lines.push(hazards.join('・'));
   else lines.push(...hazards);
   if (positions) lines.push(positions);

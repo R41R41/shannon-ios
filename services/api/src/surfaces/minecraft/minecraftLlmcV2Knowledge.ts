@@ -58,6 +58,7 @@ const URGENT = [
   '## Urgent decisions (「急ぎの時」)',
   '- In a decision where live\'s mode is 「急ぎの版」: think in 2 to 3 sentences, send one mc_act with at most 3 hands in total, and keep the why to 20 characters or fewer (「[急ぎ] …」). '
     + 'Move away, put a block between you and the enemy, eat: before any mining or crafting. If the footing says 「押されたら落ちる」, moving away from the gap comes first. '
+    + 'The block goes against a melee enemy, not against a dragon\'s breath cloud (it passes through walls, and a ring round the feet blocks the body\'s walk-out): the cloud line says the way out. '
     + 'If 「今いる所は … から見える」 appears, get out of sight before enclosing or eating. If an urgent line says 「詰めて斬れる」, its fight comes first.',
   // try1124b (the owner's test 11/24: 15 of 38 acts were replaced by the next decision before they arrived; in a replay the moves were 1 to 6 m in 14 of 15 answers).
   // Run of 11/26 (4th): the fixed urgent line said 「attack untilDead を先頭」 for a hoglin (40 health) with a wooden sword.
@@ -152,7 +153,7 @@ const DANGER = [
     + 'Put in accept only the enemies you decided to fight, and for an act that should stop on the other enemies use hostileWithin (what accept means: mc_act\'s 「止める・守る」). '
     // end1109f12b: a go with accept [wither_skeleton] dug through the wall to it; struck from 20 to 10 on the way, then lost the trade at 12. Run 4 (11/10): a go with accept [zombie] and no fighting hand, 4 hits, 10 health.
     + 'Never put a melee enemy in a go\'s accept (the go does not stop, walks beside the enemy and keeps digging through walls, and you are hit with no hand heading for the enemy). For an enemy that is hitting you, first attack target=#id untilDead (fight if you have a sword or axe).',
-  '- At health 8 or below, do not fight when the enemies are over the counts, shoot from far away, or you are exposed at night. Instead: sprint away → enclose (the 4 sides around the feet and above the head) → eat → wait at fullness 18 or more. Beds are for sleeping at night (a bed in the Nether or the End explodes: do not sleep there).',
+  '- At health 8 or below, do not fight when the enemies are over the counts, shoot from far away, or you are exposed at night. Instead: sprint away → enclose (the 4 sides around the feet and above the head) → eat → wait at fullness 18 or more (not inside a breath cloud: leave it first). Beds are for sleeping at night (a bed in the Nether or the End explodes: do not sleep there).',
   // 11/15c n: health 6.7 at fullness 17 with no food, the gate back 196 m off in recovery's food lead; she waited 1,600 s ("196 meters is too far"),
   // held by the far-travel rule above and by "wait to recover". Waiting brings nothing back below 18, so the far trip for food is the exception.
   '- Below fullness 18 (recovery appears) health does not come back and waiting brings nothing: eat before going down or fighting; with no food go now to recovery\'s food lead, far or through the gate back (allowed without food). '
@@ -640,7 +641,7 @@ export const V2_STAGES: Readonly<Record<StageId, string>> = Object.freeze({
       + '水で止められなかった時（水を置けない・外れ。実績は実走・ラボとも 0 回）は、20 ブロックで被害 17、それ以上で死ぬ（ラボ。防具は落下を減らさない）。'
       + '計画的に降りる手は 3 つで、費用は live の「高所:」の行が並べる: (a) go に maxDrop を付けて飛び降りる（水バケツで着水。約 3 秒）、(b) vertical で掘って降りる（段数×1 段の秒数。黒曜石はダイヤのつるはしの使用 1 段 1 回）、(c) 待つ（その場で受けた被害の実績）。'
       + '飛び降りを最後の手とも、避ける手とも決めつけず、費用と今の危険（竜の位置・火の玉・息の雲・体力）で選ぶ。go の目録の maxDrop に「11 以上はエンドだけ」の書きが無く 10 までなら体は旧版で、飛び降りは使えない（(b)(c) だけ）。11 以上は体が条件を判定し、水バケツ・体力 18 以上・竜の火の玉や息の雲が届いていない、のどれかが欠けると降りずに欠けた条件を返す。'
-      + '落ちないことを第一に、足元と両脇を積める物で囲い、柱の上に居る時間を短くする。',
+      + '落ちないことを第一に、足元と両脇を積める物で囲い、柱の上に居る時間を短くする。囲いは落下と近接の敵への手で、息の雲は壁を通るので囲っても止まらない（19 回目: 足元の四方を囲った中で雲に 6 秒立ち、体力 18 から 0。囲いが体の歩いて出る道を塞いだと見ている）。雲の中では囲わず、雲の外へ go する。',
     '- 柱の上は歩いて離れる道が無い。ラボ: 幅 1・30 ブロックの柱の上に、積める物も水バケツも持たずに居た体は 144 秒で死んだ（玉が 8 つ線を通り、最後の雲が柱の上に載って 1 秒ごとに 6 を 3 回）。'
       + 'ブロック 12 個と水バケツを持つ体は、玉を 3 つ落とされても 3 回積んで上がり（96→99）被害 0、2 × 153 秒の待ちも被害 0（積む度に 1 個減る）。'
       + '登る時は、積める物を 3 個以上残し、柱の上に居る時間を短くする（地面の約 2 倍、玉が来る）。島の地面でじっと立つ体は 2 × 150 秒で被害 0 だった。'

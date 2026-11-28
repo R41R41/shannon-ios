@@ -29,5 +29,8 @@
  *   allow another node's hand (about 330 llmc). The text measures 11,163, the cap is 11,180.
  * - 11/27 (merge): the tools fix added about 29 (a short diamond pickaxe is kept for obsidian) and the stronghold line dropped its protective exception, which cancelled it. The text measures 11,171, the cap stays 11,180.
  * - 11/27 (armour made before the walk, from near material): the stronghold line says again that armour, food and tools lacking may be made before leaving, and the End-prep words carry the range. The text measures 11,188, the cap 11,190.
+ * - 11/28 (the 19th end-dragon run: she stood 6 s in the dragon's breath cloud inside a ring of cobblestone the urgent answer had put round her feet, health 18 to 0): the urgent rule says the block goes
+ *   against a melee enemy and not against a breath cloud (it passes through walls, and a ring blocks the body's walk-out), and the low-health chain says not to enclose inside a cloud (about 116 llmc, about 58
+ *   real). The text measures 11,306, the cap 11,310.
  */
-export const ALWAYS_TEXT_CAP_LLMC = 11_190;
+export const ALWAYS_TEXT_CAP_LLMC = 11_310;
