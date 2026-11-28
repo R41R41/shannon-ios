@@ -88,10 +88,11 @@ export const LLMC_HISTORY_POLICY: Readonly<Partial<FcaHistoryPolicy>> = Object.f
 });
 
 /**
- * r3 (run 27: eight summaries waited for in their steps, 169 s, up to 36 s): at `LLMC_HISTORY_POLICY` (a little before it,
- * `FCA_EARLY_SUMMARY`) the summary is asked beside the steps and installed when ready. No step waits for it (11/28): within these bounds
- * a step replays the whole history, between the decisions of a stretch too (`fitFcaStretchHistory`), and past them it replays the history
- * cut once to a floor that keeps its first message until the summary is installed.
+ * r3 (run 27: eight summaries waited for in their steps, 169 s, up to 36 s): past `LLMC_HISTORY_POLICY`, at the start of a step, the
+ * summary is asked beside the steps and installed (at the start of a step) when ready. No step waits for it (11/28): a step whose history
+ * and the headroom for its growth (`FCA_FLOOR`) are within these bounds replays the whole history; otherwise it replays the history cut
+ * once to a floor that keeps its first message until the summary is installed. The conversation may pass these bounds inside one stretch
+ * (nothing is cut in the middle of one): with the instructions a decision adds (about 58,000-60,000 tokens) a request reaches about 115,000.
  */
 export const LLMC_HISTORY_HARD: Readonly<Partial<FcaHistoryPolicy>> = Object.freeze({
   maximumRounds: 70,

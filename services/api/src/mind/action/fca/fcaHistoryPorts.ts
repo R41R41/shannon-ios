@@ -83,9 +83,10 @@ export interface FcaHistoryAhead {
   setFloor(taskId: string, floor: FcaHistoryFloor | null): void;
 }
 /**
- * A replay past its hard bounds is cut once, to a floor, and stays cut until the next summary is installed (11/28, end run 18 replay: a
- * cut that moved with every round changed the replay's first message every step, rewriting about 90,000 tokens of cache and ending the
- * epoch each time). The first message is the same for as long as the floor stands: `bootstrap` is the public history of everything stored
+ * A replay that would pass its hard bounds during the next step is cut once, at the start of a step, to a floor, and stays cut until the next
+ * summary is installed (11/28, end run 18 replay: a cut that moved with every round changed the replay's first message every step, rewriting about
+ * 90,000 tokens of cache and ending the epoch each time; `FCA_FLOOR` says how far down it is cut). It is never cut in the middle of a stretch. The
+ * first message is the same for as long as the floor stands: `bootstrap` is the public history of everything stored
  * up to `frozenThrough`, the rounds up to `omitThrough` left out; the rounds after `frozenThrough` follow it native. `revision` is the
  * summary revision it was cut from (another summary makes it stale).
  */
@@ -95,8 +96,9 @@ export interface FcaHistoryFloor {
 export interface FcaHistoryAheadOptions {
   port: FcaHistoryAhead;
   /**
-   * The bounds the replay may reach while a summary is made beside the steps: within them the step replays the whole history. Past them
-   * it replays the history with its oldest rounds left out (`truncatedReplay`) until the summary asked is installed: a step never waits.
+   * The bounds the replay may reach while a summary is made beside the steps: a step starts within them (less `FCA_FLOOR.headroomTokens`) and
+   * replays the whole history. Otherwise it replays the history with its oldest rounds left out (a floor) until the summary asked is
+   * installed: a step never waits. A stretch may pass them (nothing is cut in the middle of one).
    */
   hard: Partial<FcaHistoryPolicy>;
   /** Runs the summary call apart from the step (its own signal and model bookkeeping), so that the step need not wait for it. */

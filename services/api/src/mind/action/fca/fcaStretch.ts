@@ -2,8 +2,6 @@ import type { TaskRuntime, TaskStep } from '../taskRuntime/taskRuntimePorts.js';
 import type { FcaBodyQueue, FcaQueueNews, FcaQueueWake } from './fcaPorts.js';
 import { failureRefreshes } from './fcaToolState.js';
 import type { FcaStepPorts } from './fcaRunner.js';
-import { fitFcaStretchHistory } from './fcaHistory.js';
-import type { FcaHistoryAheadOptions, FcaHistoryPolicy, FcaHistoryPorts } from './fcaHistoryPorts.js';
 import { resultSummary, type RoundContext, type RoundOutcome } from './fcaToolRound.js';
 
 /**
@@ -80,20 +78,4 @@ export function settleNews(ctx: RoundContext, news: readonly FcaQueueNews[]): { 
     lines.push(`${entry.label}: ${text}`);
   }
   return { text: lines.length ? `${NEWS_HEAD}\n${lines.join('\n')}` : '', outcomes };
-}
-
-/**
- * Before each further decision of a stretch (flow 1113: `prepareFcaHistory` runs once, at the step's start, so a summary that was due, or a replay
- * that the step's own rounds had grown past its bounds, waited for the next step): the summary is asked early beside the step, installed when it
- * is ready, and the replay (the stored part and the step's rounds after it) kept within the hard bounds (`fitFcaStretchHistory`). Returns the
- * stored part to replay from now on, null when it stays. Never fails a step and never waits: the step's own checks follow.
- */
-export async function fitHistoryInStretch(parts: { step: TaskStep; ports: FcaHistoryPorts; policy: Partial<FcaHistoryPolicy>; ahead: FcaHistoryAheadOptions;
-  stored: readonly unknown[]; inStep: readonly unknown[]; decisions: number; signal: AbortSignal }): Promise<readonly unknown[] | null> {
-  try { return await fitFcaStretchHistory(parts); } catch (error) {
-    // Content-free: the task's opaque id and the closed code.
-    const code = error instanceof Error && /^[A-Z0-9_]{1,64}$/u.test(error.message) ? error.message : 'other';
-    console.warn(`Shannon FCA history stretch fit failed task=${parts.step.taskId} code=${code}`);
-    return null;
-  }
 }

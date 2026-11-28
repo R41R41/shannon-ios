@@ -7,7 +7,7 @@ import type { FcaExternalTools, FcaToolDefinition } from '../src/mind/action/fca
 import type { FcaToolSelector } from '../src/mind/selectors/fcaToolSelection.js';
 import { providerToolName, toolOk } from '../src/mind/tools/shannonTools.js';
 import { createTaskRuntimeWiring } from '../src/wiring/taskRuntimeWiring.js';
-import { FCA_HISTORY_POLICY, createFcaHistoryAhead, startFcaHistoryAhead } from '../src/mind/action/fca/fcaHistory.js';
+import { FCA_HISTORY_POLICY, createFcaHistoryAhead } from '../src/mind/action/fca/fcaHistory.js';
 import { LLMC_HISTORY_POLICY } from '../src/wiring/minecraftLlmcConfiguration.js';
 import { actionHarness } from './support/actionThreadHarness.js';
 import { message, scriptedAnthropic, type AnthropicMessage } from './support/anthropicFixtures.js';
@@ -192,22 +192,5 @@ describe('a summary cut at the output cap is not asked for again (flow 1113, F1)
 describe('the summary is asked beside the steps and sized (flow 1113, F1)', () => {
   it('a body summary is brought down to 4,000 tokens', () => {
     expect(LLMC_HISTORY_POLICY.compactedConversationTokens).toBe(4_000);
-  });
-
-  it('startFcaHistoryAhead, called between the decisions of a stretch, asks one summary when the stored history is past its policy, and not a second while it is pending', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    const r = run(() => summaryCall('{"目的": ["原木を集める"'));
-    await r.settle(() => r.decisionBodies().length >= 3);
-    const ahead = createFcaHistoryAhead();
-    const options = { port: ahead, hard: {}, detach: <T,>(work: (signal: AbortSignal) => Promise<T>) => work(new AbortController().signal) };
-    const step = { scopeKey: 'owner', taskId: r.task.id, messageIds: [] } as never;
-    const ports = { runtime: r.driver.runtime, codec: anthropicFcaHistoryCodec, summarizer: r.summarizer, permit: async () => true, sourcesVisible: () => true };
-    // Within the policy: nothing is asked.
-    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 1_000_000, maximumReplayCharacters: 1_000_000, maximumReplayTokens: 1_000_000 }, options)).toBe(false);
-    // Past it (a small native bound): one is asked, and it is pending until it ends.
-    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 20_000 }, options)).toBe(true);
-    expect(ahead.get(r.task.id)?.state).toBe('pending');
-    expect(startFcaHistoryAhead(step, ports, { maximumNativeCharacters: 20_000 }, options)).toBe(false);
   });
 });
