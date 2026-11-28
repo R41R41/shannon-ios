@@ -186,6 +186,12 @@ export interface FcaBodyLifecycle {
    */
   urgent?(): boolean;
   /**
+   * 11/28 (end run 18: a history summary of 15–29 s came right after a bedsite read and ate the dragon's phase 2): true while a decision
+   * must not wait for the history summary (the dragon's approach and landing). The replay may then grow past the hard bounds, as far as
+   * the price step allows and for at most `FCA_SUMMARY_DEFER_MS`; the summary is still asked beside the step. Absent: never.
+   */
+  deferSummary?(): boolean;
+  /**
    * mb-llmc r4 (owner 2026-10-22): before the decision, the body's own check for a surprise since the last one
  * (health, a fall, the same
    * stop twice…) and its fixed probes, bounded in time; what they found goes into this decision's live state

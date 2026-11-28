@@ -91,8 +91,12 @@ export interface FcaHistoryAheadOptions {
   detach<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T>;
   /** An urgent step: the conversation may reach the whole replay's bound before it waits for anything. */
   urgent?: boolean;
+  /** `FcaBodyLifecycle.deferSummary`: the step does not wait for a summary or make one while the bounds of `deferredBounds` hold, for at most `FCA_SUMMARY_DEFER_MS`. */
+  defer?: boolean;
+  /** The clock of that limit (tests). */
+  clock?(): number;
   /** What happened (content-free): `started`, `installed`, `waited`. */
-  note?(what: 'started' | 'installed' | 'waited'): void;
+  note?(what: 'started' | 'installed' | 'waited' | 'deferred'): void;
 }
 export interface FcaHistoryPorts {
   runtime: TaskRuntime; codec: FcaHistoryCodec; summarizer?: FcaHistorySummarizer;

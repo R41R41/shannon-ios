@@ -317,6 +317,7 @@ export async function prepareFcaHistory(step: TaskStep, ports: FcaHistoryPorts, 
   overrides: Partial<FcaHistoryPolicy> = {},
   options: { forceEpoch?: (replay: readonly unknown[]) => boolean; ahead?: FcaHistoryAheadOptions; patient?: boolean } = {}): Promise<FcaHistoryReplay> {
   const policy = policyOf(overrides);
+  if (!options.ahead?.defer) deferredSince.delete(step.taskId);
   const checked = async () => {
     signal.throwIfAborted();
     if (!ports.sourcesVisible() || !await ports.permit()) throw new Error('FCA_HISTORY_HELD');
@@ -439,6 +440,34 @@ function aheadRoom(policy: FcaHistoryPolicy): Partial<FcaHistoryPolicy> {
     maximumToolDefinitionCharacters: Math.ceil(policy.maximumToolDefinitionCharacters * FCA_AHEAD_ROOM.characters),
     maximumReplayTokens: Math.ceil(policy.maximumReplayTokens * FCA_AHEAD_ROOM.tokens) };
 }
+/**
+ * 11/28 (end run 18: a Haiku summary of 15–29 s began right after a bedsite read and cost the dragon's phase 2 three times in four): while
+ * the body says so (`FcaBodyLifecycle.deferSummary`: the dragon's approach and landing) a step past the hard bounds does not wait for a
+ * summary or make one. The summary is still asked beside it; the replay may grow to the rounds, characters and tokens below. It is a
+ * delay only: after `FCA_SUMMARY_DEFER_MS` from the first deferred step (counted again for the next approach), or past these bounds,
+ * the step summarizes as before. The tokens stay under the replay's own bound with a fifth added (`FCA_AHEAD_ROOM`, 90,000 of the 100,000
+ * price step, the instructions and the decision on top): the estimate is conservative and a decision that still passes the step is shortened
+ * (`anthropicFcaCompaction.ts`), so the cost does not grow.
+ */
+export const FCA_SUMMARY_DEFER_MS = 60_000;
+const deferredSince = new Map<string, number>();
+function deferredBounds(policy: FcaHistoryPolicy, hard: Partial<FcaHistoryPolicy>): Partial<FcaHistoryPolicy> {
+  const room = aheadRoom(policy);
+  return { maximumRounds: Math.max(policy.maximumRounds, hard.maximumRounds ?? 0) * 2,
+    maximumConversationTokens: room.maximumReplayTokens!, maximumNativeCharacters: policy.maximumNativeCharacters * 2,
+    maximumReplayCharacters: policy.maximumReplayCharacters * 2, maximumReplayTokens: room.maximumReplayTokens! };
+}
+/** Whether this step is within the deferral: the body asks, and the first deferred step of this approach is under the limit. */
+function deferring(taskId: string, ahead: FcaHistoryAheadOptions): boolean {
+  if (!ahead.defer) { deferredSince.delete(taskId); return false; }
+  const now = (ahead.clock ?? Date.now)();
+  if (!deferredSince.has(taskId)) {
+    deferredSince.set(taskId, now);
+    if (deferredSince.size > 32) deferredSince.delete(deferredSince.keys().next().value as string);
+  }
+  return now - deferredSince.get(taskId)! < FCA_SUMMARY_DEFER_MS;
+}
+
 /** After a summary asked beside the steps came back unusable, the rounds that must follow before another is asked. */
 const AHEAD_RETRY_ROUNDS = 3;
 
@@ -470,14 +499,19 @@ async function aheadTurn(parts: { step: TaskStep; ports: FcaHistoryPorts; window
 async function aheadStep(taskId: string, window: TaskHistoryWindow, plan: Extract<FcaHistoryPlan, { kind: 'compact' }>, policy: FcaHistoryPolicy,
   ahead: FcaHistoryAheadOptions, ports: FcaHistoryPorts, waited: boolean): Promise<{ replay?: FcaHistoryReplay; waited?: boolean }> {
   const conversation = ahead.urgent ? { maximumConversationTokens: Math.max(policy.maximumReplayTokens, ahead.hard.maximumConversationTokens ?? 0) } : {};
-  const hard = planFcaHistory(window, ports.codec, { ...policy, ...aheadRoom(policy), ...ahead.hard, ...conversation }, false);
+  const bounds = { ...policy, ...aheadRoom(policy), ...ahead.hard, ...conversation };
+  const hard = planFcaHistory(window, ports.codec, bounds, false);
   const prepared = ahead.port.get(taskId);
-  if (hard.kind === 'ready') {
+  // The deferral: the same plan with the wider bounds, only when the ordinary hard bounds would have made the step wait or summarize.
+  const deferred = hard.kind === 'ready' || !deferring(taskId, ahead) ? hard
+    : planFcaHistory(window, ports.codec, { ...bounds, ...deferredBounds(policy, ahead.hard) }, false);
+  if (deferred.kind === 'ready') {
     if (!prepared || (prepared.state === 'failed' && window.tailSequence - prepared.tail >= AHEAD_RETRY_ROUNDS)) {
       startAhead(taskId, plan, window, ahead, ports.summarizer!);
       ahead.note?.('started');
     }
-    return { replay: hard.replay };
+    if (deferred !== hard) ahead.note?.('deferred');
+    return { replay: deferred.replay };
   }
   if (prepared?.state !== 'pending' || waited) return {};
   ahead.note?.('waited');

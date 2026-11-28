@@ -378,7 +378,7 @@ export function dragonBurstLine(end: EndView | null, bedItem: string | null = nu
     + 'phase 3 になってからは bedsite を新しく読めない（current_phase2_required）。ready を読んでいない進入なら、待ち場へ戻って次の降りを待つ。';
   return `ベッド連爆の機会（竜 #${dragon.id} が降りてくる途中。座るのを待たない）: すぐ mc_probe kind=bedsite target=#${dragon.id}（packet_history_pending なら 1 秒後にもう一度）`
     + ` → 返った stand へ go range=0.5（体は stand から 1m 以内でないと起爆を始めず landing_layout_unobserved で断る。range を大きく書くと手前で止まる）→ footing・screen と選んだ options の supports（黒曜石）を place → json 行 {"do":"bed_burst","at":[足側のマス,枕側のマス],"target":"#${dragon.id}","count":5,"seconds":50}（短い書式の行では書けない） → 退避 go を、1 つの act に並べる（ベッドは体が置いて使う。place するのは黒曜石だけ）。`
-    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は実測で 14〜30 秒以上続く（probe の判断・act の判断・歩きで 20 秒前後かかる）。`;
+    + `座ってからでは bedsite が読めない（新しく呼べない）が、降りる途中に呼んだ bed_burst は着地後も座った竜へ撃ち続け、座りの被害が 50 を超えて竜が飛び立つ所で終わる（seconds は 50 を書く）。座りの手動の place+use は歩く間に飛び立たれやすく、竜の頭が枕から 3m 以内の時だけ傷になる。phase 2 は 18 回目の標本で 14〜49 秒続いた（最短は分かっていない）。probe と act を別の判断に分けると、その間も phase 2 は進む。待つのは待ち場（止まり木から 10〜14m）、起爆に立つのは stand で、体は stand で起爆の前に息の雲・火・竜の頭と首・翼の下を確かめ、危なければ断る。`;
 }
 
 /** The short (urgent) set's bed burst line: the same hand in two moves, so a decision of three hands still has room for it. Null when the full line would be null or held. */
