@@ -233,6 +233,16 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
     expect(line).toContain('座ってからでは bedsite が読めない');
     expect(line).toContain('着地後も座った竜へ撃ち続け');
   });
+  it('puts the entry first in phase 2: read bedsite now, not after the landing, with the reason; waiting is only where the probe is read (11/28 M bench: "[p3] wait for the landing" read as a wait)', () => {
+    const line = burstOf(endFightLines(view(approach(), 2), 'white_bed'))!;
+    expect(line.indexOf('降りるのを待たず、いま先に mc_probe kind=bedsite')).toBeGreaterThan(-1);
+    expect(line.indexOf('いま先に mc_probe')).toBeLessThan(line.indexOf('range=0.5'));
+    expect(line).toContain('待ち場にいるままでよい');
+    expect(line).toContain('bedsite は phase 2 の間しか読めず');
+    expect(line).toContain('14〜49 秒');
+    expect(line).not.toContain('probe と act を別の判断');
+    expect(line).not.toContain('待つのは待ち場');
+  });
   it('names range=0.5 for the stand and the 1 m cut-off in phase 2 (11/28 run 18: range 3 stopped 3.7 m short and the body refused)', () => {
     const line = burstOf(endFightLines(view(approach(), 2), 'white_bed'))!;
     expect(line).toContain('go range=0.5');
@@ -245,7 +255,13 @@ describe('the bed burst line while she comes down to the perch (phase 2, run 16)
     expect(line).toContain('go range=0.5');
     expect(line).toContain('"target":"#90"');
     expect(line).toContain('current_phase2_required');
-    expect(dragonBurstShortLine(view(approach(), 3), 'white_bed')).toContain('2 手');
+    const shortThree = dragonBurstShortLine(view(approach(), 3), 'white_bed')!;
+    expect(shortThree).toContain('place（footing と screen の黒曜石）');
+    expect(shortThree.indexOf('place')).toBeLessThan(shortThree.indexOf('bed_burst（'));
+    expect(shortThree).not.toContain('2 手');
+    const shortTwo = dragonBurstShortLine(view(approach(), 2), 'white_bed')!;
+    expect(shortTwo).toContain('place（返った footing と screen の黒曜石）');
+    expect(shortTwo).toContain('降りるのを待たず先に読み');
     expect(dragonBurstShortLine(view(approach(), 2), 'white_bed')).toContain('kind=bedsite target=#90');
     expect(dragonBurstShortLine(view(approach(), 2), null)).toBeNull();
     const w = world(approach(), 3);
