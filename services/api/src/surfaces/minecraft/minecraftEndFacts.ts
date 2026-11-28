@@ -469,20 +469,25 @@ function cloudWords(cloud: EndCloud): string {
 
 /**
  * 19th run (11/28): she stood 6 s in a breath cloud inside a ring of cobblestone the head had set round her feet; the cloud lies on the floor and passes through walls, the
- * ring only closed the way the floor reflex walks out, and her health went 18 to 0 (4 a second, each second, measured). A cloud she stands in is said as that: how far to its
- * edge, what it costs each second, and that a wall does not stop it. A fact and its reason, not an order.
+ * ring only closed the way the floor reflex walks out, and her health went 18 to 0. A cloud she stands in is said as that: how far to its edge when the body read the cloud's radius,
+ * what it costs each second, and that a wall does not stop it. A fact and its reason, not an order.
+ * The cost is not one number: the 19th run's cloud took 4 a second, the lab's cloud on a pillar 6 (the stage text), and a magic wound is cut by protection armour (a reading, not measured),
+ * so the line says 4 to 6 and does not claim a fixed rate. The input carries no wound value the body took, so none is quoted.
  */
-export const CLOUD_DAMAGE_PER_SECOND = 4;
-/** The cloud whose plate she stands on (her feet within its radius now, or the radius the body avoids when it says no radius; the plate is flat, so a cloud 3 m or more off her height is not under her). */
-function cloudUnder(end: EndView | null): { cloud: EndCloud; away: number; radius: number } | null {
+export const CLOUD_DAMAGE_WORDS = '1 秒ごとに 4〜6（19 回目は 4、ラボは 6。装備で変わると見ている）の傷を受け続け、体力 20 から 0 まで 3〜5 秒ほど';
+/**
+ * The cloud whose plate she stands on: her feet within its radius now, or, when the body gives no radius (`read` false), within the radius the body avoids
+ * (7 or more; the real cloud grows from 3 to 7 in 30 s, so she may be outside it). The plate is flat, so a cloud 3 m or more off her height is not under her.
+ */
+function cloudUnder(end: EndView | null): { cloud: EndCloud; away: number; radius: number; read: boolean } | null {
   const feet = end?.feet;
   if (!feet) return null;
-  let found: { cloud: EndCloud; away: number; radius: number } | null = null;
+  let found: { cloud: EndCloud; away: number; radius: number; read: boolean } | null = null;
   for (const cloud of end?.breath ?? []) {
     const radius = cloud.radius ?? cloud.dangerRadius;
     if (radius === null || (cloud.y !== null && Math.abs(feet.y - cloud.y) > 3)) continue;
     const away = Math.hypot(feet.x - cloud.x, feet.z - cloud.z);
-    if (away < radius && (!found || radius - away > found.radius - found.away)) found = { cloud, away, radius };
+    if (away < radius && (!found || radius - away > found.radius - found.away)) found = { cloud, away, radius, read: cloud.radius !== null };
   }
   return found;
 }
@@ -495,9 +500,12 @@ export function breathLine(end: EndView | null): string | null {
   if (!clouds.length) return null;
   const under = cloudUnder(end);
   if (!under) return `竜の息の雲: ${clouds.join('・')}（中で立ち止まらない）`;
+  const walls = '雲は床に広がって壁を通るので、周りにブロックを積んでも傷は止まらない。19 回目は足元の四方を丸石で囲った中で 6 秒立ち続けて体力 18 から 0（囲いが、体が歩いて雲から出る道を塞いだと見ている）。雲から出る手は、雲の外のマスへの go';
+  if (!under.read) {
+    return `竜の息の雲: ${clouds.join('・')}。今いる所は体が避ける半径 ${round(under.radius)} の内（雲の半径の読み値が無い。実際の雲は 3 から 30 秒で 7 まで広がるので、まだ雲の外かもしれない）: 雲の中なら ${CLOUD_DAMAGE_WORDS}。${walls}`;
+  }
   const edge = Math.max(1, Math.ceil(under.radius - under.away + 1));
-  return `竜の息の雲: ${clouds.join('・')}。今いる所はこの雲の中（中心から ${round(under.away)}m、縁まで歩いて約 ${edge}m）: 毎秒 ${CLOUD_DAMAGE_PER_SECOND} の傷を受け続ける（約 5 秒で 20 から 0。19 回目の実測）。`
-    + '雲は床に広がって壁を通るので、周りにブロックを積んでも傷は止まらない。19 回目は足元の四方を丸石で囲った中で 6 秒立ち続けて体力 18 から 0（囲いが、体が歩いて雲から出る道を塞いだと見ている）。雲から出る手は、雲の外のマスへの go';
+  return `竜の息の雲: ${clouds.join('・')}。今いる所はこの雲の中（中心から ${round(under.away)}m、縁まで歩いて約 ${edge}m）: ${CLOUD_DAMAGE_WORDS}。${walls}`;
 }
 
 /** The fireballs in flight (the body's count; where they go is its floor reflex's to read). */
